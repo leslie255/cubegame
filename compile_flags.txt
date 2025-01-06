@@ -1,0 +1,3 @@
+--std=gnu23
+-Wall
+-Wextra
