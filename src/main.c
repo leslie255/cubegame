@@ -66,9 +66,9 @@ static inline void handle_events(Window *window, Camera *camera) {
   }
 
   static f32 camera_pitch = 0.f;
-  static f32 camera_yaw = -90.f;
+  static f32 camera_yaw = 0.f;
 
-  f32 sensitivity = 0.001f;
+  f32 sensitivity = 0.1f;
   f32 dx = (f32)(window->cursor_x - previous_cursor_x);
   f32 dy = (f32)(window->cursor_y - previous_cursor_y);
   previous_cursor_x = window->cursor_x;
@@ -76,16 +76,12 @@ static inline void handle_events(Window *window, Camera *camera) {
 
   camera_pitch -= dy * sensitivity;
   camera_yaw += dx * sensitivity;
-  if (camera_pitch > 89.f)
-    camera_pitch = 89.f;
-  if (camera_pitch < -89.f)
-    camera_pitch = -89.f;
+  if (camera_pitch > 89.9f)
+    camera_pitch = 89.9f;
+  if (camera_pitch < -89.9f)
+    camera_pitch = -89.9f;
 
-  camera->direction[0] = 1.f;
-  camera->direction[1] = 0.f;
-  camera->direction[2] = 0.f;
-  camera_rotate_pitch(camera, camera_pitch);
-  camera_rotate_yaw(camera, camera_yaw);
+  camera_set_direction(camera, camera_yaw, camera_pitch);
 }
 
 i32 main() {

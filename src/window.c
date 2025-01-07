@@ -80,6 +80,7 @@ void window_update_fps(Window *window) {
 
 void window_disable_cursor(Window *window) {
   glfwSetInputMode(window->glfw_handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+  glfwSetInputMode(window->glfw_handle, GLFW_RAW_MOUSE_MOTION, true);
 }
 
 void window_restore_cursor(Window *window) {

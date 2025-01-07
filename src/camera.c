@@ -8,33 +8,11 @@ void camera_proj_mat(Camera camera, f32 aspect_ratio, mat4 dest) {
   glm_perspective(camera.fov, aspect_ratio, camera.near_plane_dist, camera.far_plane_dist, dest);
 }
 
-void camera_rotate_pitch(Camera *camera, f32 d) {
-  vec3 right;
-  glm_vec3_cross(camera->direction, camera->up, right);
-  glm_vec3_normalize(right);
-
-  mat4 rotation;
-  glm_rotate_make(rotation, d, right);
-  glm_mat4_mulv3(rotation, camera->direction, 1.f, camera->direction);
-  glm_vec3_normalize(camera->direction);
-
-  glm_vec3_cross(right, camera->direction, camera->up);
-  glm_vec3_normalize(camera->up);
-}
-
-void camera_rotate_yaw(Camera *camera, f32 d) {
-  // Rotate the camera direction around the absolute up axis (Y axis)
-  vec3 absolute_up = {0.0f, 1.0f, 0.0f};
-  mat4 rotation;
-  glm_rotate_make(rotation, d, absolute_up);
-  glm_mat4_mulv3(rotation, camera->direction, 1.0f, camera->direction);
-  glm_vec3_normalize(camera->direction);
-
-  // Ensure the up vector remains orthogonal to the direction
-  vec3 right;
-  glm_vec3_cross(camera->direction, absolute_up, right);
-  glm_vec3_cross(right, camera->direction, camera->up);
-  glm_vec3_normalize(camera->up);
+void camera_set_direction(Camera *camera, float pitch, float yaw) {
+  camera->direction[0] = cosf(glm_rad(pitch)) * cosf(glm_rad(yaw));
+  camera->direction[1] = sinf(glm_rad(yaw));
+  camera->direction[2] = sinf(glm_rad(pitch)) * cosf(glm_rad(yaw));
+  glm_normalize(camera->direction);
 }
 
 void camera_move(Camera *camera, vec3 v) {
