@@ -27,6 +27,7 @@ Window *window_init(u32 width, u32 height, const char *name) {
   ASSERT(glfw_window != nullptr);
   glfwMakeContextCurrent(glfw_window);
   glfwSetFramebufferSizeCallback(glfw_window, window_glfw_resize_callback);
+  glfwSetCursorPosCallback(glfw_window, cursor_position_callback);
   ASSERT(gladLoadGLLoader((GLADloadproc)glfwGetProcAddress) != 0);
   THE_ONLY_WINDOW = (Window){
       .glfw_handle = glfw_window,
@@ -46,10 +47,19 @@ void window_cleanup(Window **window_) {
   xfree(window->real_title);
 }
 
-void window_glfw_resize_callback(GLFWwindow *, int width, int height) {
+void window_glfw_resize_callback(GLFWwindow *window, int width, int height) {
+  if (window != THE_ONLY_WINDOW.glfw_handle)
+    return;
   glViewport(0, 0, width, height);
   THE_ONLY_WINDOW.width = (u32)width;
   THE_ONLY_WINDOW.height = (u32)height;
+}
+
+void cursor_position_callback(GLFWwindow *window, f64 xpos, f64 ypos) {
+  if (window != THE_ONLY_WINDOW.glfw_handle)
+    return;
+  THE_ONLY_WINDOW.cursor_x = xpos;
+  THE_ONLY_WINDOW.cursor_y = ypos;
 }
 
 void window_glfw_error_callback(i32 error, const char *description) {
@@ -68,11 +78,10 @@ void window_update_fps(Window *window) {
   }
 }
 
-void window_raw_mouse_mode(Window *window) {
+void window_disable_cursor(Window *window) {
   glfwSetInputMode(window->glfw_handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-  glfwSetInputMode(window->glfw_handle, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
 }
 
-void window_restore_mouse_mode(Window *window) {
+void window_restore_cursor(Window *window) {
   glfwSetInputMode(window->glfw_handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 }

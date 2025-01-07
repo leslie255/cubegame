@@ -11,6 +11,8 @@ typedef struct window {
   u32 width;
   u32 height;
   f64 fps;
+  f64 cursor_x;
+  f64 cursor_y;
 
   /// PRIVATE
   /// Used in FPS calculation.
@@ -27,12 +29,14 @@ Window *window_init(u32 width, u32 height, const char *title);
 
 void window_glfw_resize_callback(GLFWwindow *, int width, int height);
 
+void cursor_position_callback(GLFWwindow *window, f64 xpos, f64 ypos);
+
 void window_glfw_error_callback(i32 error, const char *description);
 
 void window_update_fps(Window *window);
 
 void window_cleanup(Window **window);
 
-void window_raw_mouse_mode(Window *window);
+void window_disable_cursor(Window *window);
 
-void window_restore_mouse_mode(Window *window);
+void window_restore_cursor(Window *window);

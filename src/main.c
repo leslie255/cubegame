@@ -30,41 +30,7 @@ static const char FRAGMENT_SHADER[] = //
     "  frag_color = vec4(color, 1.f);\n"
     "}\n";
 
-static f32 camera_pitch = 0.f;
-static f32 camera_yaw = -90.f;
-
-void cursor_position_callback(GLFWwindow *window, f64 xpos, f64 ypos) {
-  static f64 prev_x = 0.;
-  static f64 prev_y = 0.;
-  static bool is_first_frame = true;
-
-  if (is_first_frame) {
-    prev_x = xpos;
-    prev_y = ypos;
-    is_first_frame = false;
-    return;
-  }
-
-  f32 sensitivity = 0.001f;
-  f32 dx = (f32)(xpos - prev_x);
-  f32 dy = (f32)(ypos - prev_y);
-  prev_x = xpos;
-  prev_y = ypos;
-
-  camera_pitch -= dy * sensitivity;
-  camera_yaw += dx * sensitivity;
-  if (camera_pitch > 89.f)
-    camera_pitch = 89.f;
-  if (camera_pitch < -89.f)
-    camera_pitch = -89.f;
-}
-
 static inline void handle_events(Window *window, Camera *camera) {
-  camera->direction[0] = 1.f;
-  camera->direction[1] = 0.f;
-  camera->direction[2] = 0.f;
-  camera_rotate_pitch(camera, camera_pitch);
-  camera_rotate_yaw(camera, camera_yaw);
 
   if (glfwGetKey(window->glfw_handle, GLFW_KEY_F3) == GLFW_PRESS)
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -87,6 +53,39 @@ static inline void handle_events(Window *window, Camera *camera) {
 
   if (camera_movement[0] != 0 || camera_movement[1] != 0 || camera_movement[2] != 0)
     camera_move(camera, camera_movement);
+
+  static f64 previous_cursor_x = 0.;
+  static f64 previous_cursor_y = 0.;
+  static bool is_first_frame = true;
+
+  if (is_first_frame) {
+    previous_cursor_x = window->cursor_x;
+    previous_cursor_y = window->cursor_y;
+    is_first_frame = false;
+    return;
+  }
+
+  static f32 camera_pitch = 0.f;
+  static f32 camera_yaw = -90.f;
+
+  f32 sensitivity = 0.001f;
+  f32 dx = (f32)(window->cursor_x - previous_cursor_x);
+  f32 dy = (f32)(window->cursor_y - previous_cursor_y);
+  previous_cursor_x = window->cursor_x;
+  previous_cursor_y = window->cursor_y;
+
+  camera_pitch -= dy * sensitivity;
+  camera_yaw += dx * sensitivity;
+  if (camera_pitch > 89.f)
+    camera_pitch = 89.f;
+  if (camera_pitch < -89.f)
+    camera_pitch = -89.f;
+
+  camera->direction[0] = 1.f;
+  camera->direction[1] = 0.f;
+  camera->direction[2] = 0.f;
+  camera_rotate_pitch(camera, camera_pitch);
+  camera_rotate_yaw(camera, camera_yaw);
 }
 
 i32 main() {
@@ -162,8 +161,7 @@ i32 main() {
   glm_normalize(camera.direction);
   glm_normalize(camera.up);
 
-  window_raw_mouse_mode(window);
-  glfwSetCursorPosCallback(window->glfw_handle, cursor_position_callback);
+  window_disable_cursor(window);
 
   while (!glfwWindowShouldClose(window->glfw_handle)) {
     glfwSwapBuffers(window->glfw_handle);
