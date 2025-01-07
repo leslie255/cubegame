@@ -6,11 +6,9 @@ static Window THE_ONLY_WINDOW = {};
 constexpr usize TITLE_BUFFER_SIZE = 256;
 static inline void update_title_with_fps(Window window) {
   if (isnan(window.fps))
-    snprintf(window.real_title, TITLE_BUFFER_SIZE, "%s (FPS: ---.--)",
-             window.name);
+    snprintf(window.real_title, TITLE_BUFFER_SIZE, "%s (FPS: ---.--)", window.name);
   else
-    snprintf(window.real_title, TITLE_BUFFER_SIZE, "%s (FPS: %.2lf)",
-             window.name, window.fps);
+    snprintf(window.real_title, TITLE_BUFFER_SIZE, "%s (FPS: %.2lf)", window.name, window.fps);
   glfwSetWindowTitle(window.glfw_handle, window.real_title);
 }
 
@@ -25,8 +23,7 @@ Window *window_init(u32 width, u32 height, const char *name) {
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
   glfwSetErrorCallback(window_glfw_error_callback);
-  GLFWwindow *glfw_window =
-      glfwCreateWindow((int)width, (int)height, name, nullptr, nullptr);
+  GLFWwindow *glfw_window = glfwCreateWindow((int)width, (int)height, name, nullptr, nullptr);
   ASSERT(glfw_window != nullptr);
   glfwMakeContextCurrent(glfw_window);
   glfwSetFramebufferSizeCallback(glfw_window, window_glfw_resize_callback);
@@ -56,7 +53,7 @@ void window_glfw_resize_callback(GLFWwindow *, int width, int height) {
 }
 
 void window_glfw_error_callback(i32 error, const char *description) {
-  fprintf(stderr, "GLFW error %d: %s", error, description);
+  fprintf(stderr, "GLFW error %d: %s\n", error, description);
 }
 
 void window_update_fps(Window *window) {
@@ -69,4 +66,13 @@ void window_update_fps(Window *window) {
     window->frame_count = 0;
     update_title_with_fps(*window);
   }
+}
+
+void window_raw_mouse_mode(Window *window) {
+  glfwSetInputMode(window->glfw_handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+  glfwSetInputMode(window->glfw_handle, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+}
+
+void window_restore_mouse_mode(Window *window) {
+  glfwSetInputMode(window->glfw_handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 }

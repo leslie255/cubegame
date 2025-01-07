@@ -32,3 +32,7 @@ void window_glfw_error_callback(i32 error, const char *description);
 void window_update_fps(Window *window);
 
 void window_cleanup(Window **window);
+
+void window_raw_mouse_mode(Window *window);
+
+void window_restore_mouse_mode(Window *window);
