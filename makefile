@@ -12,9 +12,19 @@ else
 	CFLAGS += $(DEBUG_FLAGS)
 endif
 
-libs:
+CFLAGS += -Ilibs/glad/include/ -Ilibs/glfw/include/ -Ilibs/cglm/include/
+LDFLAGS += libs/glad/src/glad.o libs/glfw/src/libglfw3.a libs/cglm/libcglm.a
 
-cleanlibs:
+UNAME := $(shell uname)
+ifeq ($(UNAME), Darwin)
+	LDFLAGS += -framework opengl -framework Cocoa -framework IOKit -framework QuartzCore
+endif
+# TODO: link with graphics API for Linux
+
+libs:
+	cd libs/glfw && cmake . && make
+	cd libs/cglm && cmake . -DCGLM_STATIC=ON && make
+	cd libs/glad && $(CC) -o src/glad.o -Iinclude -c src/glad.c
 
 all: bin/game
 
@@ -27,5 +37,5 @@ bin/%.o: src/%.c src/%.h $(UTIL_HEADERS)
 bin/main.o: src/main.c $(UTIL_HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-bin/game: bin/main.o bin/lib.o
-	$(CC) $^ -o $@
+bin/game: bin/main.o bin/window.o bin/shader.o
+	$(CC) $(LDFLAGS) $^ -o $@

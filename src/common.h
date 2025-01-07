@@ -23,9 +23,13 @@ typedef double f64;
 typedef size_t usize;
 typedef ssize_t isize;
 
+#define USE_VARIABLE(X) ({ [[maybe_unused]] auto _ = (X); })
+
 #define PUT_ON_HEAP(X) memcpy(malloc(sizeof(X)), &X, sizeof(X))
 
 #define ARR_LEN(X) ((usize)(sizeof(X) / sizeof((X)[0])))
+
+#define REF(X) ((const typeof(X) *restrict)&(struct { typeof(X) _; }){X})
 
 static inline void print_stacktrace() {
   void *callstack[128];
@@ -97,11 +101,13 @@ constexpr bool IS_DEBUG_MODE = false;
 
 /// Return `0` to the caller if value is `0`
 #define TRY_NULL(X)                                                            \
-  {                                                                            \
-    if ((X) == 0) {                                                            \
+  ({                                                                           \
+    auto x = (X);                                                              \
+    if (x == 0) {                                                              \
       return 0;                                                                \
     }                                                                          \
-  }
+    x;                                                                         \
+  })
 
 #define PTR_CAST(TY, X) (*(TY *)&(X))
 

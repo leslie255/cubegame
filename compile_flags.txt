@@ -1,3 +1,7 @@
 --std=gnu23
 -Wall
 -Wextra
+-Wconversion
+-Ilibs/glfw/include/
+-Ilibs/glad/include/
+-Ilibs/cglm/include/
