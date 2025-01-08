@@ -23,6 +23,10 @@ typedef double f64;
 typedef size_t usize;
 typedef ssize_t isize;
 
+static inline f32 absf(f32 f) {
+  return (f >= 0.f) ? (f) : (-f);
+}
+
 #define USE_VARIABLE(X) ({ [[maybe_unused]] auto _ = (X); })
 
 #define PUT_ON_HEAP(X) ((typeof(X) *restrict)memcpy(malloc(sizeof(X)), &X, sizeof(X)))

@@ -9,31 +9,29 @@
 #include "shader.h"
 #include "window.h"
 
+constexpr f32 CAMERA_INIT_PITCH = 0.f;
+constexpr f32 CAMERA_INIT_YAW = -90.f;
+
 static const char VERTEX_SHADER[] = //
     "#version 330 core\n"
     "layout (location = 0) in vec3 the_pos;\n"
-    "layout (location = 1) in vec3 the_color;\n"
-    "layout (location = 2) in vec2 the_tex_coord;\n"
-    "out vec3 color;\n"
+    "layout (location = 1) in vec2 the_tex_coord;\n"
     "out vec2 tex_coord;\n"
     "uniform mat4 model;\n"
     "uniform mat4 view;\n"
     "uniform mat4 proj;\n"
     "void main() {\n"
     "  gl_Position = proj * view * model * vec4(the_pos, 1.f);\n"
-    "  color = the_color;\n"
     "  tex_coord = the_tex_coord;\n"
     "}\n";
 
 static const char FRAGMENT_SHADER[] = //
     "#version 330 core\n"
-    "in vec3 color;\n"
     "in vec2 tex_coord;\n"
     "out vec4 frag_color;\n"
     "uniform sampler2D the_texture;\n"
     "void main() {\n"
-    "  frag_color = mix(texture(the_texture, tex_coord), vec4(color, 1.f), 0.1);\n"
-    // "  frag_color = vec4(color, 1.f);\n"
+    "  frag_color = texture(the_texture, tex_coord);\n"
     "}\n";
 
 static inline void handle_events(Window *window, Camera *camera) {
@@ -64,34 +62,34 @@ static inline void handle_events(Window *window, Camera *camera) {
   if (camera_movement[0] != 0 || camera_movement[1] != 0 || camera_movement[2] != 0)
     camera_move(camera, camera_movement);
 
+  // TODO: These are ugly, and shouldn't be here.
+  static f32 camera_pitch = CAMERA_INIT_PITCH;
+  static f32 camera_yaw = CAMERA_INIT_YAW;
+
   static f64 previous_cursor_x = 0.;
   static f64 previous_cursor_y = 0.;
-  static bool is_first_frame = true;
-
-  if (is_first_frame) {
-    previous_cursor_x = window->cursor_x;
-    previous_cursor_y = window->cursor_y;
-    is_first_frame = false;
-    return;
-  }
-
-  static f32 camera_pitch = 0.f;
-  static f32 camera_yaw = -90.f;
+  static bool is_first_time = true;
 
   f32 sensitivity = 0.1f;
   f32 dx = (f32)(window->cursor_x - previous_cursor_x);
   f32 dy = (f32)(window->cursor_y - previous_cursor_y);
   previous_cursor_x = window->cursor_x;
   previous_cursor_y = window->cursor_y;
-
-  camera_pitch -= dy * sensitivity;
-  camera_yaw += dx * sensitivity;
-  if (camera_pitch > 89.9f)
-    camera_pitch = 89.9f;
-  if (camera_pitch < -89.9f)
-    camera_pitch = -89.9f;
-
-  camera_set_direction(camera, camera_yaw, camera_pitch);
+  if (absf(dx) > 0.f || absf(dy) > 0.f) {
+    if (is_first_time) {
+      previous_cursor_x = window->cursor_x;
+      previous_cursor_y = window->cursor_y;
+      is_first_time = false;
+      return;
+    }
+    camera_pitch -= dy * sensitivity;
+    camera_yaw += dx * sensitivity;
+    if (camera_pitch > 89.9f)
+      camera_pitch = 89.9f;
+    if (camera_pitch < -89.9f)
+      camera_pitch = -89.9f;
+    camera_set_direction(camera, camera_yaw, camera_pitch);
+  }
 }
 
 i32 main() {
@@ -107,11 +105,11 @@ i32 main() {
   assert(uniform_proj != -1);
 
   const f32 vertices[] = {
-      //                 Coords                Colors              Texture
-      /* Top right    */ +.5f, +.5f, 0.f, /**/ 0.f, 0.f, 1.f, /**/ 1.f, 0.f,
-      /* Bottom right */ +.5f, -.5f, 0.f, /**/ 0.f, .5f, 1.f, /**/ 1.f, 1.f,
-      /* Top left     */ -.5f, -.5f, 0.f, /**/ 0.f, 0.f, 0.f, /**/ 0.f, 1.f,
-      /* Bottom left  */ -.5f, +.5f, 0.f, /**/ 0.f, 0.f, 0.f, /**/ 0.f, 0.f,
+      //                 Coords              Texture
+      /* Top right    */ 1.f, 1.f, 0.f, /**/ 1.f, 0.f,
+      /* Bottom right */ 1.f, 0.f, 0.f, /**/ 1.f, 1.f,
+      /* Top left     */ 0.f, 0.f, 0.f, /**/ 0.f, 1.f,
+      /* Bottom left  */ 0.f, 1.f, 0.f, /**/ 0.f, 0.f,
   };
 
   const u32 indices[] = {
@@ -136,25 +134,17 @@ i32 main() {
       /* size (vec3) */ 3,
       /* type        */ GL_FLOAT,
       /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(float[8]),
+      /* stride      */ sizeof(float[5]),
       /* offset      */ nullptr);
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(
       /* location    */ 1,
-      /* size (vec3) */ 3,
-      /* type        */ GL_FLOAT,
-      /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(float[8]),
-      /* offset      */ (void *)sizeof(float[3]));
-  glEnableVertexAttribArray(1);
-  glVertexAttribPointer(
-      /* location    */ 2,
       /* size (vec3) */ 2,
       /* type        */ GL_FLOAT,
       /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(float[8]),
-      /* offset      */ (void *)sizeof(float[6]));
-  glEnableVertexAttribArray(2);
+      /* stride      */ sizeof(float[5]),
+      /* offset      */ (void *)sizeof(float[3]));
+  glEnableVertexAttribArray(1);
 
   GLuint texture = ({
     i32 width;
@@ -198,19 +188,18 @@ i32 main() {
 
   Camera camera = {
       .position = {0.f, 0.f, 5.f},
-      .direction = {0.f, 0.f, 0.f},
+      .direction = {0.f, 0.f, -1.f},
       .up = {0.f, 1.f, 0.f},
       .fov = glm_rad(90.f),
       .near_plane_dist = 0.1f,
       .far_plane_dist = 100.f,
   };
-  glm_normalize(camera.direction);
   glm_normalize(camera.up);
+  glm_normalize(camera.direction);
 
   window_disable_cursor(window);
 
   while (!glfwWindowShouldClose(window->glfw_handle)) {
-    glfwSwapBuffers(window->glfw_handle);
     glClearColor(.1f, .1f, .1f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -218,13 +207,12 @@ i32 main() {
 
     mat4 view_mat = {};
     camera_view_mat(camera, view_mat);
+
     mat4 proj_mat = {};
     camera_proj_mat(camera, (f32)window->width / (f32)window->height, proj_mat);
 
     ({
       mat4 model_mat = GLM_MAT4_IDENTITY;
-      glm_translate(model_mat, (vec3){0.f, 0.1f, 0.f});
-      // glm_rotate_z(model_mat, (f32)glfwGetTime(), model_mat);
       glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
       glUniformMatrix4fv(uniform_view, 1, false, (f32 *)view_mat);
       glUniformMatrix4fv(uniform_proj, 1, false, (f32 *)proj_mat);
@@ -237,6 +225,7 @@ i32 main() {
       glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
     });
 
+    glfwSwapBuffers(window->glfw_handle);
     glfwPollEvents();
     window_update_fps(window);
   }
