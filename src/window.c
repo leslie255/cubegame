@@ -1,5 +1,41 @@
 #include "window.h"
 
+/// Get the `Window` object from `GLFWwindow`.
+static inline Window *get_window(GLFWwindow *glfw_window) {
+  Window *window = glfwGetWindowUserPointer(glfw_window);
+  DEBUG_ASSERT(window != nullptr);
+  return window;
+}
+
+static inline void resize_callback(GLFWwindow *glfw_window, int width, int height) {
+  auto window = get_window(glfw_window);
+  glViewport(0, 0, width, height);
+  window->width = (u32)width;
+  window->height = (u32)height;
+  if (window->cursor_move_callback != nullptr)
+    (window->cursor_move_callback)(window->game_state, window);
+}
+
+static inline void cursor_position_callback(GLFWwindow *glfw_window, f64 xpos, f64 ypos) {
+  auto window = get_window(glfw_window);
+  window->cursor_x = xpos;
+  window->cursor_y = ypos;
+  if (window->cursor_move_callback != nullptr)
+    (window->cursor_move_callback)(window->game_state, window);
+}
+
+static inline void error_callback(i32 error, const char *description) {
+  fprintf(stderr, "GLFW error %d: %s\n", error, description);
+}
+
+static inline void key_callback(GLFWwindow *glfw_window, int key, int scancode, int action, int mods) {
+  auto window = get_window(glfw_window);
+  if ((mods & GLFW_MOD_SUPER) != 0 && key == GLFW_KEY_W)
+    glfwSetWindowShouldClose(glfw_window, true);
+  if (window->key_callback != nullptr)
+    (window->key_callback)(window->game_state, window, key, scancode, action, mods);
+}
+
 constexpr usize TITLE_BUFFER_SIZE = 256;
 static inline void update_title_with_fps(Window *window) {
   if (isnan(window->fps))
@@ -18,12 +54,13 @@ Window *window_init(u32 width, u32 height, const char *name) {
 #ifdef __APPLE__
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
-  glfwSetErrorCallback(window_glfw_error_callback);
+  glfwSetErrorCallback(error_callback);
   GLFWwindow *glfw_window = glfwCreateWindow((int)width, (int)height, name, nullptr, nullptr);
   ASSERT(glfw_window != nullptr);
   glfwMakeContextCurrent(glfw_window);
-  glfwSetFramebufferSizeCallback(glfw_window, window_glfw_resize_callback);
+  glfwSetFramebufferSizeCallback(glfw_window, resize_callback);
   glfwSetCursorPosCallback(glfw_window, cursor_position_callback);
+  glfwSetKeyCallback(glfw_window, key_callback);
   ASSERT(gladLoadGLLoader((GLADloadproc)glfwGetProcAddress) != 0);
   Window *window = PUT_ON_HEAP(((Window){
       .glfw_handle = glfw_window,
@@ -47,31 +84,6 @@ void window_cleanup(Window **window_) {
     window_ = nullptr;
 }
 
-/// Get the `Window` object from `GLFWwindow`.
-static inline Window*get_window(GLFWwindow *glfw_window) {
-  Window *window = glfwGetWindowUserPointer(glfw_window);
-  DEBUG_ASSERT(window != nullptr);
-  return window;
-}
-
-void window_glfw_resize_callback(GLFWwindow *glfw_window, int width, int height) {
-  auto window = get_window(glfw_window);
-  glViewport(0, 0, width, height);
-  window->width = (u32)width;
-  window->height = (u32)height;
-}
-
-void cursor_position_callback(GLFWwindow *glfw_window, f64 xpos, f64 ypos) {
-  Window *window = glfwGetWindowUserPointer(glfw_window);
-  DEBUG_ASSERT(window != nullptr);
-  window->cursor_x = xpos;
-  window->cursor_y = ypos;
-}
-
-void window_glfw_error_callback(i32 error, const char *description) {
-  fprintf(stderr, "GLFW error %d: %s\n", error, description);
-}
-
 void window_update_fps(Window *window) {
   f64 current_seconds = glfwGetTime();
   f64 elapsed_seconds = current_seconds - window->previous_seconds;
@@ -91,4 +103,9 @@ void window_disable_cursor(Window *window) {
 
 void window_restore_cursor(Window *window) {
   glfwSetInputMode(window->glfw_handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+}
+
+void window_poll_events(Window *window) {
+  USE_VARIABLE(window);
+  glfwPollEvents();
 }

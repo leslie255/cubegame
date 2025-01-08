@@ -9,10 +9,11 @@
 #include "shader.h"
 #include "window.h"
 
+static constexpr char WINDOW_TITLE[] = "Cube Game";
 constexpr f32 CAMERA_INIT_PITCH = 0.f;
 constexpr f32 CAMERA_INIT_YAW = -90.f;
 
-static const char VERTEX_SHADER[] = //
+static constexpr char VERTEX_SHADER[] = //
     "#version 330 core\n"
     "layout (location = 0) in vec3 the_pos;\n"
     "layout (location = 1) in vec2 the_tex_coord;\n"
@@ -25,7 +26,7 @@ static const char VERTEX_SHADER[] = //
     "  tex_coord = the_tex_coord;\n"
     "}\n";
 
-static const char FRAGMENT_SHADER[] = //
+static constexpr char FRAGMENT_SHADER[] = //
     "#version 330 core\n"
     "in vec2 tex_coord;\n"
     "out vec4 frag_color;\n"
@@ -34,100 +35,64 @@ static const char FRAGMENT_SHADER[] = //
     "  frag_color = texture(the_texture, tex_coord);\n"
     "}\n";
 
-static inline void handle_events(Window *window, Camera *camera) {
+const f32 vertices[] = {
+    //                 Coords              Texture
+    /* Top right    */ 1.f, 1.f, 0.f, /**/ 1.f, 0.f,
+    /* Bottom right */ 1.f, 0.f, 0.f, /**/ 1.f, 1.f,
+    /* Top left     */ 0.f, 0.f, 0.f, /**/ 0.f, 1.f,
+    /* Bottom left  */ 0.f, 1.f, 0.f, /**/ 0.f, 0.f,
+};
 
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_F3) == GLFW_PRESS)
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-  else
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+const u32 indices[] = {
+    0, 1, 3, //
+    1, 2, 3,
+};
 
-  vec3 camera_movement = {};
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_W) == GLFW_PRESS)
-    camera_movement[2] += 0.05f;
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_S) == GLFW_PRESS)
-    camera_movement[2] -= 0.05f;
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_A) == GLFW_PRESS)
-    camera_movement[0] -= 0.05f;
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_D) == GLFW_PRESS)
-    camera_movement[0] += 0.05f;
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_R) == GLFW_PRESS)
-    camera_movement[1] -= 0.05f;
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_SPACE) == GLFW_PRESS)
-    camera_movement[1] += 0.05f;
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_C) == GLFW_PRESS)
-    camera->fov = glm_rad(30.f);
-  else
-    camera->fov = glm_rad(90.f);
+typedef struct game_state {
+  ShaderProgram the_shader;
+  GLuint the_vao;
+  GLuint the_ebo;
+  GLuint the_vbo;
+  GLuint the_texture;
+  Camera camera;
+  bool is_paused;
 
-  if (camera_movement[0] != 0 || camera_movement[1] != 0 || camera_movement[2] != 0)
-    camera_move(camera, camera_movement);
+  f32 camera_pitch;
+  f32 camera_yaw;
 
-  // TODO: These are ugly, and shouldn't be here.
-  static f32 camera_pitch = CAMERA_INIT_PITCH;
-  static f32 camera_yaw = CAMERA_INIT_YAW;
+  bool cursor_has_moved_before;
+  f64 previous_cursor_x;
+  f64 previous_cursor_y;
 
-  static f64 previous_cursor_x = 0.;
-  static f64 previous_cursor_y = 0.;
-  static bool is_first_time = true;
+  bool is_wireframe_mode;
+} GameState;
 
-  f32 sensitivity = 0.1f;
-  f32 dx = (f32)(window->cursor_x - previous_cursor_x);
-  f32 dy = (f32)(window->cursor_y - previous_cursor_y);
-  previous_cursor_x = window->cursor_x;
-  previous_cursor_y = window->cursor_y;
-  if (absf(dx) > 0.f || absf(dy) > 0.f) {
-    if (is_first_time) {
-      previous_cursor_x = window->cursor_x;
-      previous_cursor_y = window->cursor_y;
-      is_first_time = false;
-      return;
-    }
-    camera_pitch -= dy * sensitivity;
-    camera_yaw += dx * sensitivity;
-    if (camera_pitch > 89.9f)
-      camera_pitch = 89.9f;
-    if (camera_pitch < -89.9f)
-      camera_pitch = -89.9f;
-    camera_set_direction(camera, camera_yaw, camera_pitch);
-  }
-}
+void game_init(GameState *game) {
+  game->is_paused = false;
+  game->camera_pitch = CAMERA_INIT_PITCH;
+  game->camera_yaw = CAMERA_INIT_YAW;
+  game->cursor_has_moved_before = false;
+  game->previous_cursor_x = 0.f;
+  game->previous_cursor_y = 0.f;
+  game->is_wireframe_mode = false;
 
-i32 main() {
-  [[gnu::cleanup(window_cleanup)]]
-  Window *window = window_init(800, 600, "Cube Game");
+  // Shader.
+  game->the_shader = shader_init(sizeof(VERTEX_SHADER), VERTEX_SHADER, sizeof(FRAGMENT_SHADER), FRAGMENT_SHADER);
+  // Verify uniforms are ok.
+  ASSERT(glGetUniformLocation(game->the_shader.gl_handle, "model") != -1);
+  ASSERT(glGetUniformLocation(game->the_shader.gl_handle, "view") != -1);
+  ASSERT(glGetUniformLocation(game->the_shader.gl_handle, "proj") != -1);
 
-  ShaderProgram shader = shader_init(sizeof(VERTEX_SHADER), VERTEX_SHADER, sizeof(FRAGMENT_SHADER), FRAGMENT_SHADER);
-  GLint uniform_model = glGetUniformLocation(shader.gl_handle, "model");
-  GLint uniform_view = glGetUniformLocation(shader.gl_handle, "view");
-  GLint uniform_proj = glGetUniformLocation(shader.gl_handle, "proj");
-  assert(uniform_model != -1);
-  assert(uniform_view != -1);
-  assert(uniform_proj != -1);
-
-  const f32 vertices[] = {
-      //                 Coords              Texture
-      /* Top right    */ 1.f, 1.f, 0.f, /**/ 1.f, 0.f,
-      /* Bottom right */ 1.f, 0.f, 0.f, /**/ 1.f, 1.f,
-      /* Top left     */ 0.f, 0.f, 0.f, /**/ 0.f, 1.f,
-      /* Bottom left  */ 0.f, 1.f, 0.f, /**/ 0.f, 0.f,
-  };
-
-  const u32 indices[] = {
-      0, 1, 3, //
-      1, 2, 3,
-  };
-
-  GLuint vao;
-  glGenVertexArrays(1, &vao);
-  glBindVertexArray(vao);
-  glBindVertexArray(vao); // ?
-  GLuint ebo;
-  glGenBuffers(1, &ebo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+  // VAO.
+  glGenVertexArrays(1, &game->the_vao);
+  glBindVertexArray(game->the_vao);
+  // EBO.
+  glGenBuffers(1, &game->the_ebo);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, game->the_ebo);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-  GLuint vbo;
-  glGenBuffers(1, &vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  // VBO.
+  glGenBuffers(1, &game->the_vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, game->the_vbo);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
   glVertexAttribPointer(
       /* location    */ 0,
@@ -146,47 +111,38 @@ i32 main() {
       /* offset      */ (void *)sizeof(float[3]));
   glEnableVertexAttribArray(1);
 
-  GLuint texture = ({
-    i32 width;
-    i32 height;
-    i32 n_channels;
-    constexpr char test_texture_path[] = "res/texture/test_texture.png";
-    auto texture_data = stbi_load(test_texture_path, &width, &height, &n_channels, 0);
-    ASSERT(texture_data != nullptr);
-    printf("Loaded texture, dimension: %dx%d, channels: %d\n", width, height, n_channels);
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    GLenum format;
-    switch (n_channels) {
-    case 1: {
-      format = GL_RED;
-    } break;
-    case 2: {
-      format = GL_RG;
-    } break;
-    case 3: {
-      format = GL_RGB;
-    } break;
-    case 4: {
-      format = GL_RGBA;
-    } break;
-    }
-    glTexImage2D(GL_TEXTURE_2D, 0, (GLint)format, width, height, 0, format, GL_UNSIGNED_BYTE, texture_data);
-    stbi_image_free(texture_data);
-    texture;
-  });
-
+  // Texture.
+  i32 texture_width;
+  i32 texture_height;
+  i32 texture_n_channels;
+  constexpr char test_texture_path[] = "res/texture/test_texture.png";
+  auto texture_data = stbi_load(test_texture_path, &texture_width, &texture_height, &texture_n_channels, 0);
+  ASSERT(texture_data != nullptr);
+  printf("Loaded texture, dimension: %dx%d, channels: %d\n", texture_width, texture_height, texture_n_channels);
+  glGenTextures(1, &game->the_texture);
+  glBindTexture(GL_TEXTURE_2D, game->the_texture);
+  GLenum format;
+  switch (texture_n_channels) {
+  case 1: {
+    format = GL_RED;
+  } break;
+  case 2: {
+    format = GL_RG;
+  } break;
+  case 3: {
+    format = GL_RGB;
+  } break;
+  case 4: {
+    format = GL_RGBA;
+  } break;
+  }
+  glTexImage2D(GL_TEXTURE_2D, 0, (GLint)format, texture_width, texture_height, 0, format, GL_UNSIGNED_BYTE,
+               texture_data);
+  stbi_image_free(texture_data);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-  // glEnable(GL_CULL_FACE);
-  // glCullFace(GL_BACK);
-  // glFrontFace(GL_CW);
-
-  glEnable(GL_DEPTH_TEST);
-
-  Camera camera = {
+  game->camera = (Camera){
       .position = {0.f, 0.f, 5.f},
       .direction = {0.f, 0.f, -1.f},
       .up = {0.f, 1.f, 0.f},
@@ -194,45 +150,135 @@ i32 main() {
       .near_plane_dist = 0.1f,
       .far_plane_dist = 100.f,
   };
-  glm_normalize(camera.up);
-  glm_normalize(camera.direction);
+  glm_normalize(game->camera.up);
+  glm_normalize(game->camera.direction);
+}
+
+void game_cursor_callback(void *game_, Window *window) {
+  GameState *game = game_;
+
+  if (!game->is_paused) {
+    f32 sensitivity = 0.1f;
+    f32 dx = (f32)(window->cursor_x - game->previous_cursor_x);
+    f32 dy = (f32)(window->cursor_y - game->previous_cursor_y);
+    game->previous_cursor_x = window->cursor_x;
+    game->previous_cursor_y = window->cursor_y;
+    if (!game->cursor_has_moved_before) {
+      game->previous_cursor_x = window->cursor_x;
+      game->previous_cursor_y = window->cursor_y;
+      game->cursor_has_moved_before = true;
+      return;
+    }
+    game->camera_pitch -= dy * sensitivity;
+    game->camera_yaw += dx * sensitivity;
+    if (game->camera_pitch > 89.9f)
+      game->camera_pitch = 89.9f;
+    if (game->camera_pitch < -89.9f)
+      game->camera_pitch = -89.9f;
+    camera_set_direction(&game->camera, game->camera_yaw, game->camera_pitch);
+  }
+}
+
+void game_key_callback(void *game_, Window *window, int key, int scancode, int action, int mods) {
+  USE_VARIABLE(scancode);
+  USE_VARIABLE(mods);
+  GameState *game = game_;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_F3) == GLFW_PRESS) {
+    if (key == GLFW_KEY_L && action == GLFW_PRESS) {
+      game->is_wireframe_mode = !game->is_wireframe_mode;
+      glPolygonMode(GL_FRONT_AND_BACK, game->is_wireframe_mode ? GL_LINE : GL_FILL);
+    }
+    return;
+  }
+  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+    game->is_paused = !game->is_paused;
+    if (game->is_paused) {
+      printf("Game is paused\n");
+      window_restore_cursor(window);
+    } else {
+      printf("Game is unpaused\n");
+      window_disable_cursor(window);
+      game->cursor_has_moved_before = false;
+    }
+  }
+}
+
+void update_events(Window *window, GameState *game) {
+  vec3 camera_movement = {};
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_W) == GLFW_PRESS)
+    camera_movement[2] += 0.05f;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_S) == GLFW_PRESS)
+    camera_movement[2] -= 0.05f;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_A) == GLFW_PRESS)
+    camera_movement[0] -= 0.05f;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_D) == GLFW_PRESS)
+    camera_movement[0] += 0.05f;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_R) == GLFW_PRESS)
+    camera_movement[1] -= 0.05f;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_SPACE) == GLFW_PRESS)
+    camera_movement[1] += 0.05f;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_C) == GLFW_PRESS)
+    game->camera.fov = glm_rad(30.f);
+  else
+    game->camera.fov = glm_rad(90.f);
+
+  if (camera_movement[0] != 0 || camera_movement[1] != 0 || camera_movement[2] != 0)
+    camera_move(&game->camera, camera_movement);
+}
+
+void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
+  glClearColor(.1f, .1f, .1f, 1.f);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  mat4 view_mat = {};
+  camera_view_mat(game->camera, view_mat);
+
+  mat4 proj_mat = {};
+  camera_proj_mat(game->camera, frame_width / frame_height, proj_mat);
+
+  auto uniform_model = glGetUniformLocation(game->the_shader.gl_handle, "model");
+  auto uniform_view = glGetUniformLocation(game->the_shader.gl_handle, "view");
+  auto uniform_proj = glGetUniformLocation(game->the_shader.gl_handle, "proj");
+
+  ({
+    mat4 model_mat = GLM_MAT4_IDENTITY;
+    glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
+    glUniformMatrix4fv(uniform_view, 1, false, (f32 *)view_mat);
+    glUniformMatrix4fv(uniform_proj, 1, false, (f32 *)proj_mat);
+    shader_use(game->the_shader);
+    glUniform1i(glGetUniformLocation(game->the_shader.gl_handle, "the_texture"), 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, game->the_texture);
+    glBindVertexArray(game->the_vao);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, game->the_ebo);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+  });
+}
+
+i32 main() {
+  [[gnu::cleanup(window_cleanup)]]
+  Window *window = window_init(800, 600, WINDOW_TITLE);
+
+  GameState *game = xalloc(GameState, 1);
+  game_init(game);
+
+  window->game_state = game;
+  window->cursor_move_callback = game_cursor_callback;
+  window->key_callback = game_key_callback;
 
   window_disable_cursor(window);
 
   while (!glfwWindowShouldClose(window->glfw_handle)) {
-    glClearColor(.1f, .1f, .1f, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    handle_events(window, &camera);
-
-    mat4 view_mat = {};
-    camera_view_mat(camera, view_mat);
-
-    mat4 proj_mat = {};
-    camera_proj_mat(camera, (f32)window->width / (f32)window->height, proj_mat);
-
-    ({
-      mat4 model_mat = GLM_MAT4_IDENTITY;
-      glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
-      glUniformMatrix4fv(uniform_view, 1, false, (f32 *)view_mat);
-      glUniformMatrix4fv(uniform_proj, 1, false, (f32 *)proj_mat);
-      shader_use(shader);
-      glUniform1i(glGetUniformLocation(shader.gl_handle, "the_texture"), 0);
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, texture);
-      glBindVertexArray(vao);
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-      glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-    });
-
     glfwSwapBuffers(window->glfw_handle);
     glfwPollEvents();
+    update_events(window, game);
+    game_frame(game, (f32)window->width, (f32)window->height);
     window_update_fps(window);
   }
 
-  glDeleteVertexArrays(1, &vao);
-  glDeleteBuffers(1, &vbo);
-  glDeleteBuffers(1, &ebo);
+  glDeleteVertexArrays(1, &game->the_vao);
+  glDeleteBuffers(1, &game->the_vbo);
+  glDeleteBuffers(1, &game->the_ebo);
   glfwTerminate();
   return 0;
 }
