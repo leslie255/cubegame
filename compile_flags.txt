@@ -5,3 +5,4 @@
 -Ilibs/glfw/include/
 -Ilibs/glad/include/
 -Ilibs/cglm/include/
+-Ilibs/stb/include/

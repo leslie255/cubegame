@@ -1,9 +1,9 @@
 #include "common.h"
 
 #include <glad/glad.h>
-
 #include <GLFW/glfw3.h>
 #include <cglm/cglm.h>
+#include <stb/stb_image.h>
 
 #include "camera.h"
 #include "shader.h"
@@ -13,21 +13,27 @@ static const char VERTEX_SHADER[] = //
     "#version 330 core\n"
     "layout (location = 0) in vec3 the_pos;\n"
     "layout (location = 1) in vec3 the_color;\n"
+    "layout (location = 2) in vec2 the_tex_coord;\n"
     "out vec3 color;\n"
+    "out vec2 tex_coord;\n"
     "uniform mat4 model;\n"
     "uniform mat4 view;\n"
     "uniform mat4 proj;\n"
     "void main() {\n"
     "  gl_Position = proj * view * model * vec4(the_pos, 1.f);\n"
     "  color = the_color;\n"
+    "  tex_coord = the_tex_coord;\n"
     "}\n";
 
 static const char FRAGMENT_SHADER[] = //
     "#version 330 core\n"
     "in vec3 color;\n"
+    "in vec2 tex_coord;\n"
     "out vec4 frag_color;\n"
+    "uniform sampler2D the_texture;\n"
     "void main() {\n"
-    "  frag_color = vec4(color, 1.f);\n"
+    "  frag_color = mix(texture(the_texture, tex_coord), vec4(color, 1.f), 0.1);\n"
+    // "  frag_color = vec4(color, 1.f);\n"
     "}\n";
 
 static inline void handle_events(Window *window, Camera *camera) {
@@ -101,11 +107,11 @@ i32 main() {
   assert(uniform_proj != -1);
 
   const f32 vertices[] = {
-      // Coords               // Colors
-      +.5f, +.5f, 0.f, /**/ 1.f, 0.f, 0.f, //
-      +.5f, -.5f, 0.f, /**/ 1.f, 1.f, 0.f, //
-      -.5f, -.5f, 0.f, /**/ 0.f, 1.f, 0.f, //
-      -.5f, +.5f, 0.f, /**/ 0.f, 0.f, 1.f, //
+      //                 Coords                Colors              Texture
+      /* Top right    */ +.5f, +.5f, 0.f, /**/ 0.f, 0.f, 1.f, /**/ 1.f, 0.f,
+      /* Bottom right */ +.5f, -.5f, 0.f, /**/ 0.f, .5f, 1.f, /**/ 1.f, 1.f,
+      /* Top left     */ -.5f, -.5f, 0.f, /**/ 0.f, 0.f, 0.f, /**/ 0.f, 1.f,
+      /* Bottom left  */ -.5f, +.5f, 0.f, /**/ 0.f, 0.f, 0.f, /**/ 0.f, 0.f,
   };
 
   const u32 indices[] = {
@@ -116,6 +122,7 @@ i32 main() {
   GLuint vao;
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
+  glBindVertexArray(vao); // ?
   GLuint ebo;
   glGenBuffers(1, &ebo);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
@@ -124,26 +131,69 @@ i32 main() {
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-  glVertexAttribPointer(0,                // location
-                        3,                // size (vec3)
-                        GL_FLOAT,         // type
-                        GL_FALSE,         // normalized?
-                        sizeof(float[6]), // stride
-                        nullptr           // offset
-  );
+  glVertexAttribPointer(
+      /* location    */ 0,
+      /* size (vec3) */ 3,
+      /* type        */ GL_FLOAT,
+      /* normalized? */ GL_FALSE,
+      /* stride      */ sizeof(float[8]),
+      /* offset      */ nullptr);
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(1,                       // location
-                        3,                       // size (vec3)
-                        GL_FLOAT,                // type
-                        GL_FALSE,                // normalized?
-                        sizeof(float[6]),        // stride
-                        (void *)sizeof(float[3]) // offset
-  );
+  glVertexAttribPointer(
+      /* location    */ 1,
+      /* size (vec3) */ 3,
+      /* type        */ GL_FLOAT,
+      /* normalized? */ GL_FALSE,
+      /* stride      */ sizeof(float[8]),
+      /* offset      */ (void *)sizeof(float[3]));
   glEnableVertexAttribArray(1);
+  glVertexAttribPointer(
+      /* location    */ 2,
+      /* size (vec3) */ 2,
+      /* type        */ GL_FLOAT,
+      /* normalized? */ GL_FALSE,
+      /* stride      */ sizeof(float[8]),
+      /* offset      */ (void *)sizeof(float[6]));
+  glEnableVertexAttribArray(2);
+
+  GLuint texture = ({
+    i32 width;
+    i32 height;
+    i32 n_channels;
+    constexpr char test_texture_path[] = "res/texture/test_texture.png";
+    auto texture_data = stbi_load(test_texture_path, &width, &height, &n_channels, 0);
+    ASSERT(texture_data != nullptr);
+    printf("Loaded texture, dimension: %dx%d, channels: %d\n", width, height, n_channels);
+    GLuint texture;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    GLenum format;
+    switch (n_channels) {
+    case 1: {
+      format = GL_RED;
+    } break;
+    case 2: {
+      format = GL_RG;
+    } break;
+    case 3: {
+      format = GL_RGB;
+    } break;
+    case 4: {
+      format = GL_RGBA;
+    } break;
+    }
+    glTexImage2D(GL_TEXTURE_2D, 0, (GLint)format, width, height, 0, format, GL_UNSIGNED_BYTE, texture_data);
+    stbi_image_free(texture_data);
+    texture;
+  });
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
   // glEnable(GL_CULL_FACE);
   // glCullFace(GL_BACK);
   // glFrontFace(GL_CW);
+
   glEnable(GL_DEPTH_TEST);
 
   Camera camera = {
@@ -174,22 +224,16 @@ i32 main() {
     ({
       mat4 model_mat = GLM_MAT4_IDENTITY;
       glm_translate(model_mat, (vec3){0.f, 0.1f, 0.f});
-      glm_rotate_x(model_mat, glm_rad(-90.f), model_mat);
-      glm_rotate_z(model_mat, (f32)glfwGetTime(), model_mat);
+      // glm_rotate_z(model_mat, (f32)glfwGetTime(), model_mat);
       glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
       glUniformMatrix4fv(uniform_view, 1, false, (f32 *)view_mat);
       glUniformMatrix4fv(uniform_proj, 1, false, (f32 *)proj_mat);
       shader_use(shader);
+      glUniform1i(glGetUniformLocation(shader.gl_handle, "the_texture"), 0);
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, texture);
       glBindVertexArray(vao);
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-      glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-    });
-
-    ({
-      mat4 model_mat = GLM_MAT4_IDENTITY;
-      glm_translate(model_mat, (vec3){0.f, 0.f, -1.5f});
-      glm_rotate_y(model_mat, glm_rad(45.f), model_mat);
-      glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
       glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
     });
 
@@ -197,6 +241,9 @@ i32 main() {
     window_update_fps(window);
   }
 
+  glDeleteVertexArrays(1, &vao);
+  glDeleteBuffers(1, &vbo);
+  glDeleteBuffers(1, &ebo);
   glfwTerminate();
   return 0;
 }
