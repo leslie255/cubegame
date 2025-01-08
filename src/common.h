@@ -25,7 +25,7 @@ typedef ssize_t isize;
 
 #define USE_VARIABLE(X) ({ [[maybe_unused]] auto _ = (X); })
 
-#define PUT_ON_HEAP(X) memcpy(malloc(sizeof(X)), &X, sizeof(X))
+#define PUT_ON_HEAP(X) ((typeof(X) *restrict)memcpy(malloc(sizeof(X)), &X, sizeof(X)))
 
 #define ARR_LEN(X) ((usize)(sizeof(X) / sizeof((X)[0])))
 
@@ -90,10 +90,8 @@ constexpr bool IS_DEBUG_MODE = false;
 
 #define PANIC() (fprintf(stderr, "[%s@%s:%d] PANIC\n", __FUNCTION__, __FILE__, __LINE__), print_stacktrace(), exit(1))
 #define PANIC_PRINTF(...)                                                                                              \
-  (fprintf(stderr, "[%s@%s:%d] PANIC\n", __FUNCTION__, __FILE__, __LINE__),                                            \
-   fprintf(stderr, __VA_ARGS__),                                                                                       \
-   print_stacktrace(),                                                                                                 \
-   exit(1))
+  (fprintf(stderr, "[%s@%s:%d] PANIC\n", __FUNCTION__, __FILE__, __LINE__), fprintf(stderr, __VA_ARGS__),              \
+   print_stacktrace(), exit(1))
 
 /// Return `0` to the caller if value is `0`
 #define TRY_NULL(X)                                                                                                    \

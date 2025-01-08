@@ -5,6 +5,9 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+/// `Window` have to always exist on the heap due to GLFW user pointers pointing to it.
+/// In the future it may be re-made into an opaque struct for safety, but rn it's still an incomplete abstraction so
+/// it's left open.
 typedef struct window {
   GLFWwindow *glfw_handle;
   const char *name;

@@ -1,20 +1,16 @@
 #include "window.h"
 
-static bool WINDOW_EXISTS = false;
-static Window THE_ONLY_WINDOW = {};
-
 constexpr usize TITLE_BUFFER_SIZE = 256;
-static inline void update_title_with_fps(Window window) {
-  if (isnan(window.fps))
-    snprintf(window.real_title, TITLE_BUFFER_SIZE, "%s (FPS: ---.--)", window.name);
+static inline void update_title_with_fps(Window *window) {
+  if (isnan(window->fps))
+    snprintf(window->real_title, TITLE_BUFFER_SIZE, "%s (FPS: ---.--)", window->name);
   else
-    snprintf(window.real_title, TITLE_BUFFER_SIZE, "%s (FPS: %.2lf)", window.name, window.fps);
-  glfwSetWindowTitle(window.glfw_handle, window.real_title);
+    snprintf(window->real_title, TITLE_BUFFER_SIZE, "%s (FPS: %.2lf)", window->name, window->fps);
+  glfwSetWindowTitle(window->glfw_handle, window->real_title);
 }
 
 /// Panics on error.
 Window *window_init(u32 width, u32 height, const char *name) {
-  ASSERT(!WINDOW_EXISTS);
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -29,7 +25,7 @@ Window *window_init(u32 width, u32 height, const char *name) {
   glfwSetFramebufferSizeCallback(glfw_window, window_glfw_resize_callback);
   glfwSetCursorPosCallback(glfw_window, cursor_position_callback);
   ASSERT(gladLoadGLLoader((GLADloadproc)glfwGetProcAddress) != 0);
-  THE_ONLY_WINDOW = (Window){
+  Window *window = PUT_ON_HEAP(((Window){
       .glfw_handle = glfw_window,
       .width = width,
       .height = height,
@@ -37,29 +33,39 @@ Window *window_init(u32 width, u32 height, const char *name) {
       .real_title = xalloc(char, TITLE_BUFFER_SIZE),
       .previous_seconds = glfwGetTime(),
       .fps = NAN,
-  };
-  update_title_with_fps(THE_ONLY_WINDOW);
-  return &THE_ONLY_WINDOW;
+  }));
+  glfwSetWindowUserPointer(glfw_window, window);
+  update_title_with_fps(window);
+  return window;
 }
 
 void window_cleanup(Window **window_) {
   auto window = *window_;
   xfree(window->real_title);
+  xfree(window);
+  if (IS_DEBUG_MODE)
+    window_ = nullptr;
 }
 
-void window_glfw_resize_callback(GLFWwindow *window, int width, int height) {
-  if (window != THE_ONLY_WINDOW.glfw_handle)
-    return;
+/// Get the `Window` object from `GLFWwindow`.
+static inline Window*get_window(GLFWwindow *glfw_window) {
+  Window *window = glfwGetWindowUserPointer(glfw_window);
+  DEBUG_ASSERT(window != nullptr);
+  return window;
+}
+
+void window_glfw_resize_callback(GLFWwindow *glfw_window, int width, int height) {
+  auto window = get_window(glfw_window);
   glViewport(0, 0, width, height);
-  THE_ONLY_WINDOW.width = (u32)width;
-  THE_ONLY_WINDOW.height = (u32)height;
+  window->width = (u32)width;
+  window->height = (u32)height;
 }
 
-void cursor_position_callback(GLFWwindow *window, f64 xpos, f64 ypos) {
-  if (window != THE_ONLY_WINDOW.glfw_handle)
-    return;
-  THE_ONLY_WINDOW.cursor_x = xpos;
-  THE_ONLY_WINDOW.cursor_y = ypos;
+void cursor_position_callback(GLFWwindow *glfw_window, f64 xpos, f64 ypos) {
+  Window *window = glfwGetWindowUserPointer(glfw_window);
+  DEBUG_ASSERT(window != nullptr);
+  window->cursor_x = xpos;
+  window->cursor_y = ypos;
 }
 
 void window_glfw_error_callback(i32 error, const char *description) {
@@ -74,7 +80,7 @@ void window_update_fps(Window *window) {
     window->previous_seconds = current_seconds;
     window->fps = (f64)window->frame_count / elapsed_seconds;
     window->frame_count = 0;
-    update_title_with_fps(*window);
+    update_title_with_fps(window);
   }
 }
 

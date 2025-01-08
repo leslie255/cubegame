@@ -50,6 +50,10 @@ static inline void handle_events(Window *window, Camera *camera) {
     camera_movement[1] -= 0.05f;
   if (glfwGetKey(window->glfw_handle, GLFW_KEY_SPACE) == GLFW_PRESS)
     camera_movement[1] += 0.05f;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_C) == GLFW_PRESS)
+    camera->fov = glm_rad(30.f);
+  else
+    camera->fov = glm_rad(90.f);
 
   if (camera_movement[0] != 0 || camera_movement[1] != 0 || camera_movement[2] != 0)
     camera_move(camera, camera_movement);
@@ -66,7 +70,7 @@ static inline void handle_events(Window *window, Camera *camera) {
   }
 
   static f32 camera_pitch = 0.f;
-  static f32 camera_yaw = 0.f;
+  static f32 camera_yaw = -90.f;
 
   f32 sensitivity = 0.1f;
   f32 dx = (f32)(window->cursor_x - previous_cursor_x);
@@ -105,12 +109,8 @@ i32 main() {
   };
 
   const u32 indices[] = {
-      0,
-      1,
-      3, //
-      1,
-      2,
-      3, //
+      0, 1, 3, //
+      1, 2, 3,
   };
 
   GLuint vao;
