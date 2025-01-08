@@ -1,23 +1,18 @@
 #pragma once
 
 #include "common.h"
+#include "block.h"
 
 #include <cglm/cglm.h>
 
-typedef enum block_id : u16 {
-  BLOCKID_NULL = 0,
-  BLOCKID_AIR = 1,
-  BLOCKID_STONE,
-  BLOCKID_DIRT,
-  BLOCKID_GRASS,
-} BlockId;
-
-typedef struct block {
+typedef struct [[gnu::packed]] tile {
   BlockId id;
-} Block;
+} Tile;
 
-typedef struct chunk {
-  Block blocks[32 * 32 * 32];
+typedef struct [[gnu::packed]] chunk {
+  Tile blocks[32][32][32];
 } ChunkData;
 
 ChunkData *chunk_alloc();
+
+void chunk_cleanup(ChunkData **chunk);
