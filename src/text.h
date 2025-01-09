@@ -7,7 +7,7 @@
 #include "shader.h"
 #include "texture.h"
 
-constexpr f32 DEFAULT_FONT_SIZE = 24.f;
+constexpr f32 DEFAULT_FONT_SIZE = 32.f;
 
 /// A font in texture atlas form.
 typedef struct FontData {

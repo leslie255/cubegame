@@ -12,24 +12,36 @@
 #include "text.h"
 #include "texture.h"
 
+typedef enum cube_face : u8 {
+  /// +Y
+  CubeFace_Top = 0b000001,
+  /// -Y
+  CubeFace_Bottom = 0b000010,
+  /// -Z
+  CubeFace_North = 0b000100,
+  /// +Z
+  CubeFace_South = 0b001000,
+  /// +X
+  CubeFace_East = 0b010000,
+  /// -X
+  CubeFace_West = 0b100000,
+} CubeFace;
+
 typedef struct cube_painter {
   ShaderProgram shader;
   GLuint vao;
   GLuint ebo;
-  GLuint vbo;
+  GLuint ebo_reversed;
+  GLuint vbo_north_south;
 } CubePainter;
 
+CubePainter cube_painter_new();
+
+void cube_painter_cleanup(CubePainter *cp);
+
 typedef struct game_state {
-  /// Shader used for the test square.
-  ShaderProgram shader1;
-  /// VAO used for the test square.
-  GLuint vao1;
-  /// EBO used for the test square.
-  GLuint ebo1;
-  /// VBO used for the test square.
-  GLuint vbo1;
   /// Texture object used for the test square.
-  Texture texture1;
+  Texture test_texture;
 
   FontData *font;
   TextPainter text_painter;
@@ -38,6 +50,8 @@ typedef struct game_state {
   f32 camera_yaw;
   Camera camera;
 
+  CubePainter cube_painter;
+
   bool is_paused;
 
   bool cursor_has_moved_before;
@@ -45,6 +59,7 @@ typedef struct game_state {
   f64 previous_cursor_y;
 
   bool is_wireframe_mode;
+  bool disable_gl_face_culling;
 
   String overlay_text;
 
@@ -54,6 +69,11 @@ typedef struct game_state {
   f64 fps;
 
   String overlap_text;
+
+  /// Updated when `game_frame` is called with `frame_width` being one of its parameter.
+  f32 frame_width;
+  /// Updated when `game_frame` is called with `frame_height` being one of its parameter.
+  f32 frame_height;
 } GameState;
 
 GameState *game_init();
@@ -67,3 +87,5 @@ void game_key_callback(void *gam_, Window *window, int key, int scancode, int ac
 void game_update_events(GameState *game, Window *window);
 
 void game_frame(GameState *game, f32 frame_width, f32 frame_height);
+
+void paint_cube(CubePainter *cp, GameState *game, CubeFace faces, Texture texture);

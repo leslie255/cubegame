@@ -88,7 +88,7 @@ static inline void tp_setup_mesh(TextPainter *tp) {
   };
 
   constexpr u32 indices[] = {
-      0, 1, 2, //
+      2, 1, 0, //
       1, 2, 3, //
   };
 

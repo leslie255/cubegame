@@ -5,6 +5,8 @@
 constexpr f32 CAMERA_INIT_PITCH = 0.f;
 constexpr f32 CAMERA_INIT_YAW = -90.f;
 
+#define STRING_LITERAL_ARG(S) sizeof(S) - 1, S
+
 #define CHECK_OPENGL_ERROR()                                                                                           \
   ({                                                                                                                   \
     GLenum err = glGetError();                                                                                         \
@@ -12,7 +14,42 @@ constexpr f32 CAMERA_INIT_YAW = -90.f;
       DBG_PRINTF("OpenGL error: %d\n", err);                                                                           \
   })
 
-static inline void setup_the_3d_square(GameState *game) {
+/// Helper function used in `cube_painter_new`.
+static GLuint cp_gen_ebo(u32 indices[6]) {
+  GLuint ebo;
+  glGenBuffers(1, &ebo);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32[6]), indices, GL_STATIC_DRAW);
+  return ebo;
+}
+
+/// Helper function used in `cube_painter_new`.
+static GLuint cp_gen_vbo(f32 vertices[20]) {
+  GLuint vbo;
+  // VBO.
+  glGenBuffers(1, &vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(f32[20]), vertices, GL_STATIC_DRAW);
+  glVertexAttribPointer(
+      /* location    */ 0,
+      /* size (vec3) */ 3,
+      /* type        */ GL_FLOAT,
+      /* normalized? */ GL_FALSE,
+      /* stride      */ sizeof(f32[5]),
+      /* offset      */ nullptr);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(
+      /* location    */ 1,
+      /* size (vec3) */ 2,
+      /* type        */ GL_FLOAT,
+      /* normalized? */ GL_FALSE,
+      /* stride      */ sizeof(f32[5]),
+      /* offset      */ (void *)sizeof(f32[3]));
+  glEnableVertexAttribArray(1);
+  return vbo;
+}
+
+CubePainter cube_painter_new() {
   constexpr char VERTEX_SHADER[] = //
       "#version 330 core\n"
       "layout (location = 0) in vec3 the_pos;\n"
@@ -35,56 +72,79 @@ static inline void setup_the_3d_square(GameState *game) {
       "  frag_color = texture(the_texture, tex_coord);\n"
       "}\n";
 
-  constexpr f32 vertices[] = {
+  CubePainter cp = {};
+  cp.shader = shader_init(STRING_LITERAL_ARG(VERTEX_SHADER), STRING_LITERAL_ARG(FRAGMENT_SHADER));
+
+  // VAO.
+  glGenVertexArrays(1, &cp.vao);
+  glBindVertexArray(cp.vao);
+
+  // EBO.
+  cp.ebo = cp_gen_ebo((u32[]){
+      2, 1, 0, //
+      1, 2, 3, //
+  });
+  cp.ebo_reversed = cp_gen_ebo((u32[]){
+      0, 1, 2, //
+      3, 2, 1, //
+  });
+
+  // VBO.
+  cp.vbo_north_south = cp_gen_vbo((f32[]){
       //                 Coords              Texture
       /* Top left     */ 0.f, 1.f, 0.f, /**/ 0.f, 0.f,
       /* Top right    */ 1.f, 1.f, 0.f, /**/ 1.f, 0.f,
       /* Bottom left  */ 0.f, 0.f, 0.f, /**/ 0.f, 1.f,
       /* Bottom right */ 1.f, 0.f, 0.f, /**/ 1.f, 1.f,
-  };
+  });
 
-  constexpr u32 indices[] = {
-      0, 1, 2, //
-      1, 2, 3, //
-  };
+  return cp;
+}
 
-  // VAO.
-  glGenVertexArrays(1, &game->vao1);
-  glBindVertexArray(game->vao1);
-  // EBO.
-  glGenBuffers(1, &game->ebo1);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, game->ebo1);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-  // VBO.
-  glGenBuffers(1, &game->vbo1);
-  glBindBuffer(GL_ARRAY_BUFFER, game->vbo1);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-  glVertexAttribPointer(
-      /* location    */ 0,
-      /* size (vec3) */ 3,
-      /* type        */ GL_FLOAT,
-      /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(f32[5]),
-      /* offset      */ nullptr);
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(
-      /* location    */ 1,
-      /* size (vec3) */ 2,
-      /* type        */ GL_FLOAT,
-      /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(f32[5]),
-      /* offset      */ (void *)sizeof(f32[3]));
-  glEnableVertexAttribArray(1);
+void cube_painter_cleanup(CubePainter *cp) {
+  glDeleteVertexArrays(1, &cp->vao);
+  glDeleteBuffers(1, &cp->vbo_north_south);
+  glDeleteBuffers(1, &cp->ebo);
+}
 
-  // Texture.
-  game->texture1 = texture_load_from_file("res/texture/test_texture.png", true);
+void paint_cube(CubePainter *cp, GameState *game, CubeFace faces, Texture texture) {
+  MARK_USED(faces);
 
-  // Shader.
-  game->shader1 = shader_init(sizeof(VERTEX_SHADER), VERTEX_SHADER, sizeof(FRAGMENT_SHADER), FRAGMENT_SHADER);
-  // Verify uniforms are ok.
-  ASSERT(glGetUniformLocation(game->shader1.gl_handle, "model") != -1);
-  ASSERT(glGetUniformLocation(game->shader1.gl_handle, "view") != -1);
-  ASSERT(glGetUniformLocation(game->shader1.gl_handle, "proj") != -1);
+  mat4 model_mat = {};
+  mat4 view_mat = {};
+  camera_view_mat(game->camera, view_mat);
+  mat4 proj_mat = {};
+  camera_proj_mat(game->camera, game->frame_width / game->frame_height, proj_mat);
+
+  shader_use(cp->shader);
+
+  auto uniform_model = glGetUniformLocation(cp->shader.gl_handle, "model");
+  auto uniform_view = glGetUniformLocation(cp->shader.gl_handle, "view");
+  auto uniform_proj = glGetUniformLocation(cp->shader.gl_handle, "proj");
+  glUniformMatrix4fv(uniform_view, 1, false, (f32 *)view_mat);
+  glUniformMatrix4fv(uniform_proj, 1, false, (f32 *)proj_mat);
+  glBindTexture(GL_TEXTURE_2D, texture.gl);
+  glActiveTexture(GL_TEXTURE0);
+  glUniform1i(glGetUniformLocation(cp->shader.gl_handle, "the_texture"), 0);
+
+  if (faces & CubeFace_North) {
+    glm_mat4_identity(model_mat);
+    glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
+    glBindVertexArray(cp->vao);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cp->ebo_reversed);
+    glBindBuffer(GL_ARRAY_BUFFER, cp->vbo_north_south);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+  }
+
+  if (faces & CubeFace_South) {
+    glm_mat4_identity(model_mat);
+    glm_translated(model_mat, (vec4){0.f, 0.f, 1.f, 0.f});
+    glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
+    glBindVertexArray(cp->vao);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cp->ebo);
+    glBindBuffer(GL_ARRAY_BUFFER, cp->vbo_north_south);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+  }
 }
 
 GameState *game_init() {
@@ -96,14 +156,10 @@ GameState *game_init() {
   game->previous_cursor_x = 0.f;
   game->previous_cursor_y = 0.f;
   game->is_wireframe_mode = false;
+  game->disable_gl_face_culling = false;
 
   game->font = default_font();
   game->text_painter = text_painter_new(game->font);
-
-  game->fps = NAN;
-  game->overlap_text = EMPTY_STRING;
-
-  setup_the_3d_square(game);
 
   game->camera = (Camera){
       .position = {0.f, 0.f, 5.f},
@@ -116,16 +172,20 @@ GameState *game_init() {
   glm_normalize(game->camera.up);
   glm_normalize(game->camera.direction);
 
+  game->test_texture = texture_load_from_file("res/texture/test_texture.png", true);
+  game->cube_painter = cube_painter_new();
+
+  game->fps = NAN;
+  game->overlap_text = EMPTY_STRING;
+
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
+
   return game;
 }
 
 void game_cleanup(GameState **game_) {
   auto game = *game_;
-  glDeleteVertexArrays(1, &game->vao1);
-  glDeleteBuffers(1, &game->vbo1);
-  glDeleteBuffers(1, &game->ebo1);
-  texture_cleanup(&game->texture1);
-  shader_cleanup(&game->shader1);
   text_painter_cleanup(&game->text_painter);
   font_cleanup(&game->font);
   xfree(game);
@@ -163,10 +223,17 @@ void game_key_callback(void *game_, Window *window, int key, int scancode, int a
   MARK_USED(mods);
   GameState *game = game_;
   if (glfwGetKey(window->glfw_handle, GLFW_KEY_F3) == GLFW_PRESS) {
-    if (key == GLFW_KEY_L && action == GLFW_PRESS) {
+    if (key == GLFW_KEY_L && action == GLFW_PRESS)
       game->is_wireframe_mode = !game->is_wireframe_mode;
-      glPolygonMode(GL_FRONT_AND_BACK, game->is_wireframe_mode ? GL_LINE : GL_FILL);
-    }
+    else if (key == GLFW_KEY_F && action == GLFW_PRESS)
+      game->disable_gl_face_culling = !game->disable_gl_face_culling;
+
+    glPolygonMode(GL_FRONT_AND_BACK, game->is_wireframe_mode ? GL_LINE : GL_FILL);
+    if (game->is_wireframe_mode || game->disable_gl_face_culling)
+      glDisable(GL_CULL_FACE);
+    else
+      glEnable(GL_CULL_FACE);
+
     return;
   }
   if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
@@ -204,28 +271,6 @@ void game_update_events(GameState *game, Window *window) {
   }
 }
 
-static inline void draw_the_3d_square(GameState *game, f32 frame_width, f32 frame_height) {
-  mat4 view_mat = {};
-  camera_view_mat(game->camera, view_mat);
-  mat4 proj_mat = {};
-  camera_proj_mat(game->camera, frame_width / frame_height, proj_mat);
-
-  shader_use(game->shader1);
-
-  auto uniform_model = glGetUniformLocation(game->shader1.gl_handle, "model");
-  auto uniform_view = glGetUniformLocation(game->shader1.gl_handle, "view");
-  auto uniform_proj = glGetUniformLocation(game->shader1.gl_handle, "proj");
-  mat4 model_mat = GLM_MAT4_IDENTITY;
-  glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
-  glUniformMatrix4fv(uniform_view, 1, false, (f32 *)view_mat);
-  glUniformMatrix4fv(uniform_proj, 1, false, (f32 *)proj_mat);
-  glBindTexture(GL_TEXTURE_2D, game->texture1.gl);
-  glActiveTexture(GL_TEXTURE0);
-  glUniform1i(glGetUniformLocation(game->shader1.gl_handle, "the_texture"), 0);
-  glBindVertexArray(game->vao1);
-  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-}
-
 static inline f32 font_aspect_ratio(const GameState *game) {
   return (f32)game->font->glyph_width / (f32)game->font->glyph_height;
 }
@@ -243,9 +288,7 @@ static inline u8 hex_digit(char digit) {
   }
 }
 
-static inline void print(GameState *game, vec2 pos, f32 frame_width, f32 frame_height, usize length, char s[length]) {
-  if (game->is_wireframe_mode)
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+static inline void print(GameState *game, vec2 pos, usize length, char s[length]) {
   if (length == 0)
     length = strlen(s);
   usize x_counter = 0;
@@ -290,19 +333,14 @@ static inline void print(GameState *game, vec2 pos, f32 frame_width, f32 frame_h
           pos[0] + (f32)x_counter * DEFAULT_FONT_SIZE * font_aspect_ratio(game),
           pos[1] - (f32)y_counter * DEFAULT_FONT_SIZE,
       };
-      text_paint(game->text_painter, frame_width, frame_height, pos_, s[i]);
+      text_paint(game->text_painter, game->frame_width, game->frame_height, pos_, s[i]);
       ++x_counter;
     } break;
     }
   }
-  if (game->is_wireframe_mode)
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 }
 
-#define STRING_LITERAL_ARG(S) sizeof(S) - 1, S
-
-static inline void draw_overlap_text(GameState *game, f32 frame_width, f32 frame_height) {
-  glDisable(GL_DEPTH_TEST);
+static inline void draw_overlap_text(GameState *game) {
   if (game->is_paused) {
     string_append(&game->overlap_text,
                   STRING_LITERAL_ARG(
@@ -312,26 +350,51 @@ static inline void draw_overlap_text(GameState *game, f32 frame_width, f32 frame
   }
 
   if (isnan(game->fps))
-    string_snprintf(&game->overlap_text, 64, "FPS ---.--");
+    string_snprintf(&game->overlap_text, 64, "FPS ---.--\n");
   else
-    string_snprintf(&game->overlap_text, 64, "FPS: %.2lf", game->fps);
+    string_snprintf(&game->overlap_text, 64, "FPS: %.2lf\n", game->fps);
+
+  string_snprintf(&game->overlap_text, 64, "Camera XYZ: %f, %f, %f", game->camera.position[0], game->camera.position[1],
+                  game->camera.position[2]);
 
   if (game->is_wireframe_mode) {
     string_append(&game->overlap_text,
                   STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002303030[\a\001FF8000F3+L\a\001FFFFFF] DEBUG: Wireframe Mode"));
   }
 
-  print(game, (vec2){10.f, frame_height - DEFAULT_FONT_SIZE - 10.f}, frame_width, frame_height,
-        game->overlap_text.length, game->overlap_text.buffer);
+  if (game->disable_gl_face_culling) {
+    string_append(&game->overlap_text,
+                  STRING_LITERAL_ARG(
+                      "\n\a\001FFFFFF\a\002303030[\a\001FF8000F3+F\a\001FFFFFF] DEBUG: Disable OpenGL Face Culling"));
+  }
+
+  vec2 pos = {
+      10.f,
+      game->frame_height - DEFAULT_FONT_SIZE - 10.f,
+  };
+
+  glDisable(GL_DEPTH_TEST);
+  if (!game->disable_gl_face_culling)
+    glDisable(GL_CULL_FACE);
+  if (game->is_wireframe_mode)
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+  print(game, pos, game->overlap_text.length, game->overlap_text.buffer);
 
   glEnable(GL_DEPTH_TEST);
+  if (game->is_wireframe_mode)
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  if (!game->disable_gl_face_culling)
+    glEnable(GL_CULL_FACE);
 }
 
 void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
+  game->frame_width = frame_width;
+  game->frame_height = frame_height;
   glClearColor(.1f, .1f, .1f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  draw_the_3d_square(game, frame_width, frame_height);
+  paint_cube(&game->cube_painter, game, CubeFace_North | CubeFace_South, game->test_texture);
   string_clear(&game->overlap_text);
-  draw_overlap_text(game, frame_width, frame_height);
+  draw_overlap_text(game);
   CHECK_OPENGL_ERROR();
 }
