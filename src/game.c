@@ -197,10 +197,8 @@ void game_key_callback(void *game_, Window *window, int key, int scancode, int a
   if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
     game->is_paused = !game->is_paused;
     if (game->is_paused) {
-      printf("Game is paused\n");
       window_restore_cursor(window);
     } else {
-      printf("Game is unpaused\n");
       window_disable_cursor(window);
       game->cursor_has_moved_before = false;
     }
@@ -208,26 +206,27 @@ void game_key_callback(void *game_, Window *window, int key, int scancode, int a
 }
 
 void game_update_events(GameState *game, Window *window) {
-  vec3 camera_movement = {};
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_W) == GLFW_PRESS)
-    camera_movement[2] += 0.05f;
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_S) == GLFW_PRESS)
-    camera_movement[2] -= 0.05f;
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_A) == GLFW_PRESS)
-    camera_movement[0] -= 0.05f;
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_D) == GLFW_PRESS)
-    camera_movement[0] += 0.05f;
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_R) == GLFW_PRESS)
-    camera_movement[1] -= 0.05f;
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_SPACE) == GLFW_PRESS)
-    camera_movement[1] += 0.05f;
-  if (glfwGetKey(window->glfw_handle, GLFW_KEY_C) == GLFW_PRESS)
-    game->camera.fov = glm_rad(30.f);
-  else
-    game->camera.fov = glm_rad(90.f);
-
-  if (camera_movement[0] != 0 || camera_movement[1] != 0 || camera_movement[2] != 0)
-    camera_move(&game->camera, camera_movement);
+  if (!game->is_paused) {
+    vec3 camera_movement = {};
+    if (glfwGetKey(window->glfw_handle, GLFW_KEY_W) == GLFW_PRESS)
+      camera_movement[2] += 0.05f;
+    if (glfwGetKey(window->glfw_handle, GLFW_KEY_S) == GLFW_PRESS)
+      camera_movement[2] -= 0.05f;
+    if (glfwGetKey(window->glfw_handle, GLFW_KEY_A) == GLFW_PRESS)
+      camera_movement[0] -= 0.05f;
+    if (glfwGetKey(window->glfw_handle, GLFW_KEY_D) == GLFW_PRESS)
+      camera_movement[0] += 0.05f;
+    if (glfwGetKey(window->glfw_handle, GLFW_KEY_R) == GLFW_PRESS)
+      camera_movement[1] -= 0.05f;
+    if (glfwGetKey(window->glfw_handle, GLFW_KEY_SPACE) == GLFW_PRESS)
+      camera_movement[1] += 0.05f;
+    if (glfwGetKey(window->glfw_handle, GLFW_KEY_C) == GLFW_PRESS)
+      game->camera.fov = glm_rad(30.f);
+    else
+      game->camera.fov = glm_rad(90.f);
+    if (camera_movement[0] != 0 || camera_movement[1] != 0 || camera_movement[2] != 0)
+      camera_move(&game->camera, camera_movement);
+  }
 }
 
 static inline void draw_the_3d_square(GameState *game, f32 frame_width, f32 frame_height) {
@@ -252,16 +251,31 @@ static inline void draw_the_3d_square(GameState *game, f32 frame_width, f32 fram
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 }
 
+/// Draw a line of text.
+/// `length = 0` for C strings.
+static inline void
+draw_text_line(GameState *game, vec2 pos, f32 frame_width, f32 frame_height, usize length, char s[length]) {
+  if (length == 0) {
+    for (usize i = 0; s[i] != '\0'; ++i) {
+      vec2 pos_ = {pos[0] + (f32)i * 33.33f, pos[1]};
+      text_paint(game->text_painter, frame_width, frame_height, pos_, s[i]);
+    }
+  } else {
+    for (usize i = 0; i < length; ++i) {
+      vec2 pos_ = {pos[0] + (f32)i * 33.33f, pos[1]};
+      text_paint(game->text_painter, frame_width, frame_height, pos_, s[i]);
+    }
+  }
+}
+
 void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   glClearColor(.1f, .1f, .1f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glEnable(GL_DEPTH_TEST);
   draw_the_3d_square(game, frame_width, frame_height);
   glDisable(GL_DEPTH_TEST);
-  char s[] = "Hello, World!";
-  for (usize i = 0; i < sizeof(s) - 1; ++i) {
-    vec2 pos = {10.f + (f32)i * 50.f, 10.f};
-    text_paint(game->text_painter, frame_width, frame_height, pos, s[i]);
-  }
+  if (game->is_paused)
+    draw_text_line(game, (vec2){10.f, frame_height - 60.f}, frame_width, frame_height, 0,
+                   "GAME PAUSED (ESC)");
   CHECK_OPENGL_ERROR();
 }

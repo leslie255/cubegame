@@ -206,7 +206,7 @@ void text_paint(TextPainter tp, f32 frame_width, f32 frame_height, vec2 coord, c
   f32 text_size = 50.f;
   mat4 model_mat = GLM_MAT4_IDENTITY;
   glm_translated(model_mat, (vec4){coord[0], coord[1], 0.f, 0.f});
-  glm_scale(model_mat, (vec4){text_size, text_size * (f32)tp.font->glyph_height / (f32)tp.font->glyph_width});
+  glm_scale(model_mat, (vec4){text_size * (f32)tp.font->glyph_width / (f32)tp.font->glyph_height, text_size});
   mat4 proj_mat = GLM_MAT4_IDENTITY;
   glm_ortho( //
       /* left   */ 0.0f,
