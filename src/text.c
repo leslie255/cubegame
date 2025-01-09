@@ -5,40 +5,9 @@
 #include "atlas.h"
 
 FontData *default_font() {
-  static constexpr char path[] = "res/font/bigblueterminal.png";
   FontData *font = xalloc(FontData, 1);
   memset(font, 0, sizeof(FontData));
-  auto data = stbi_load(path, (i32 *)&font->image_width, (i32 *)&font->image_height, (i32 *)&font->image_n_channels, 0);
-  ASSERT(data != nullptr);
-  printf("Loaded texture `%s`, dimension: %dx%d, channels: %d\n", path, font->image_width, font->image_height,
-         font->image_n_channels);
-  GLenum format;
-  switch (font->image_n_channels) {
-  case 1: {
-    format = GL_RED;
-  } break;
-  case 2: {
-    format = GL_RG;
-  } break;
-  case 3: {
-    format = GL_RGB;
-  } break;
-  case 4: {
-    format = GL_RGBA;
-  } break;
-  default: {
-    format = GL_RGBA;
-  } break;
-  }
-  glGenTextures(1, &font->gl_texture);
-  glBindTexture(GL_TEXTURE_2D, font->gl_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, (GLint)format, (GLint)font->image_width, (GLint)font->image_height, 0, format,
-               GL_UNSIGNED_BYTE, data);
-  stbi_image_free(data);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-  glGenerateMipmap(GL_TEXTURE_2D);
+  font->texture = texture_load_from_file("res/font/bigblueterminal.png", true);
   font->glyph_width = 8;
   font->glyph_height = 12;
   font->n_glyphs_per_line = 16;
@@ -50,7 +19,7 @@ FontData *default_font() {
 }
 
 void font_cleanup(FontData **font) {
-  stbi_image_free((*font)->texture_data);
+  texture_cleanup(&(*font)->texture);
   xfree(*font);
   if (IS_DEBUG_MODE)
     *font = nullptr;
@@ -71,7 +40,7 @@ void font_sample(const FontData *font, char ch, mat3 dest) {
   u32 y_min = y * font->glyph_height;
   u32 x_max = x_min + font->glyph_width;
   u32 y_max = y_min + font->glyph_height;
-  atlas_mat(font->image_width, font->image_height, x_min, y_min, x_max, y_max, dest);
+  atlas_mat(font->texture.width, font->texture.height, x_min, y_min, x_max, y_max, dest);
 }
 
 /// Helper function used in `text_painter_new`.
@@ -207,12 +176,12 @@ void text_paint(TextPainter tp, f32 frame_width, f32 frame_height, vec2 coord, c
   mat3 tex_trans_mat;
   if (font_has_char(tp.font, ch))
     font_sample(tp.font, ch, tex_trans_mat);
-  else 
+  else
     glm_mat3_identity(tex_trans_mat);
   glUniformMatrix3fv(tex_trans, 1, false, (f32 *)tex_trans_mat);
 
   glActiveTexture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D, tp.font->gl_texture);
+  glBindTexture(GL_TEXTURE_2D, tp.font->texture.gl);
   glUniform1i(the_texture, 1);
 
   glBindVertexArray(tp.vao);

@@ -96,7 +96,7 @@ void string_snprintf(String *string, usize n, const char *restrict fmt, ...) {
   string_reserve(string, n);
   va_list args;
   va_start(args, fmt);
-  usize growth = vsnprintf(&string->buffer[string->length], n, fmt, args);
+  auto growth = (usize)vsnprintf(&string->buffer[string->length], n, fmt, args);
   va_end(args);
   string->length += growth;
 }

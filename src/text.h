@@ -5,21 +5,13 @@
 
 #include "common.h"
 #include "shader.h"
+#include "texture.h"
 
 constexpr f32 DEFAULT_FONT_SIZE = 24.f;
 
 /// A font in texture atlas form.
 typedef struct FontData {
-  /// The OpenGL texture.
-  GLuint gl_texture;
-  /// Data of the image.
-  u8 *texture_data;
-  /// Width of the entire image.
-  u32 image_width;
-  /// Height of the entire image.
-  u32 image_height;
-  /// Number of channels of the image.
-  u32 image_n_channels;
+  Texture texture;
   /// Width of one single glyph.
   u32 glyph_width;
   /// Height of one single glyph.

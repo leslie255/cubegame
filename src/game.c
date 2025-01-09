@@ -77,35 +77,7 @@ static inline void setup_the_3d_square(GameState *game) {
   glEnableVertexAttribArray(1);
 
   // Texture.
-  i32 texture_width;
-  i32 texture_height;
-  i32 texture_n_channels;
-  constexpr char test_texture_path[] = "res/texture/test_texture.png";
-  auto texture_data = stbi_load(test_texture_path, &texture_width, &texture_height, &texture_n_channels, 0);
-  ASSERT(texture_data != nullptr);
-  printf("Loaded texture, dimension: %dx%d, channels: %d\n", texture_width, texture_height, texture_n_channels);
-  glGenTextures(1, &game->texture1);
-  glBindTexture(GL_TEXTURE_2D, game->texture1);
-  GLenum format;
-  switch (texture_n_channels) {
-  case 1: {
-    format = GL_RED;
-  } break;
-  case 2: {
-    format = GL_RG;
-  } break;
-  case 3: {
-    format = GL_RGB;
-  } break;
-  case 4: {
-    format = GL_RGBA;
-  } break;
-  }
-  glTexImage2D(GL_TEXTURE_2D, 0, (GLint)format, texture_width, texture_height, 0, format, GL_UNSIGNED_BYTE,
-               texture_data);
-  stbi_image_free(texture_data);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  game->texture1 = texture_load_from_file("res/texture/test_texture.png", true);
 
   // Shader.
   game->shader1 = shader_init(sizeof(VERTEX_SHADER), VERTEX_SHADER, sizeof(FRAGMENT_SHADER), FRAGMENT_SHADER);
@@ -152,7 +124,7 @@ void game_cleanup(GameState **game_) {
   glDeleteVertexArrays(1, &game->vao1);
   glDeleteBuffers(1, &game->vbo1);
   glDeleteBuffers(1, &game->ebo1);
-  glDeleteTextures(1, &game->texture1);
+  texture_cleanup(&game->texture1);
   shader_cleanup(&game->shader1);
   text_painter_cleanup(&game->text_painter);
   font_cleanup(&game->font);
@@ -247,7 +219,7 @@ static inline void draw_the_3d_square(GameState *game, f32 frame_width, f32 fram
   glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
   glUniformMatrix4fv(uniform_view, 1, false, (f32 *)view_mat);
   glUniformMatrix4fv(uniform_proj, 1, false, (f32 *)proj_mat);
-  glBindTexture(GL_TEXTURE_2D, game->texture1);
+  glBindTexture(GL_TEXTURE_2D, game->texture1.gl);
   glActiveTexture(GL_TEXTURE0);
   glUniform1i(glGetUniformLocation(game->shader1.gl_handle, "the_texture"), 0);
   glBindVertexArray(game->vao1);

@@ -10,6 +10,14 @@
 #include "window.h"
 #include "string.h"
 #include "text.h"
+#include "texture.h"
+
+typedef struct cube_painter {
+  ShaderProgram shader;
+  GLuint vao;
+  GLuint ebo;
+  GLuint vbo;
+} CubePainter;
 
 typedef struct game_state {
   /// Shader used for the test square.
@@ -21,7 +29,7 @@ typedef struct game_state {
   /// VBO used for the test square.
   GLuint vbo1;
   /// Texture object used for the test square.
-  GLuint texture1;
+  Texture texture1;
 
   FontData *font;
   TextPainter text_painter;
