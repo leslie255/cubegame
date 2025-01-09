@@ -1,4 +1,5 @@
 --std=gnu23
+-DIN_EDITOR
 -Wall
 -Wextra
 -Wconversion

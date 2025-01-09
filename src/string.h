@@ -21,6 +21,9 @@ String string_clone(String string);
 /// Note that `string` is nullable if `length = 0`. This is because we're using GNU C.
 String string_from(usize length, char string[length]);
 
+#define STRING_LITERAL(S) (string_from(sizeof(S) - 1, S))
+
+/// For initializing with string literals, use `STRING_LITERAL`.
 String string_from_c_string(char *c_string);
 
 void string_cleanup(String *string);

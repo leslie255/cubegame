@@ -1,77 +1,89 @@
 #include "game.h"
+#include "debug_utils.h"
+#include "text.h"
 
 constexpr f32 CAMERA_INIT_PITCH = 0.f;
 constexpr f32 CAMERA_INIT_YAW = -90.f;
 
-static constexpr char VERTEX_SHADER[] = //
-    "#version 330 core\n"
-    "layout (location = 0) in vec3 the_pos;\n"
-    "layout (location = 1) in vec2 the_tex_coord;\n"
-    "out vec2 tex_coord;\n"
-    "uniform mat4 model;\n"
-    "uniform mat4 view;\n"
-    "uniform mat4 proj;\n"
-    "void main() {\n"
-    "  gl_Position = proj * view * model * vec4(the_pos, 1.f);\n"
-    "  tex_coord = the_tex_coord;\n"
-    "}\n";
+#define CHECK_OPENGL_ERROR()                                                                                           \
+  ({                                                                                                                   \
+    GLenum err = glGetError();                                                                                         \
+    if (err != GL_NO_ERROR)                                                                                            \
+      DBG_PRINTF("OpenGL error: %d\n", err);                                                                           \
+  })
 
-static constexpr char FRAGMENT_SHADER[] = //
-    "#version 330 core\n"
-    "in vec2 tex_coord;\n"
-    "out vec4 frag_color;\n"
-    "uniform sampler2D the_texture;\n"
-    "void main() {\n"
-    "  frag_color = texture(the_texture, tex_coord);\n"
-    "}\n";
+/// View matrix for UI elements.
+static inline void ui_view_mat(mat4 dest) {
+  // Me when nothing happens: 😱😱😱
+  glm_mat4_identity(dest);
+}
 
-static constexpr f32 vertices[] = {
-    //                 Coords              Texture
-    /* Top right    */ 1.f, 1.f, 0.f, /**/ 1.f, 0.f,
-    /* Bottom right */ 1.f, 0.f, 0.f, /**/ 1.f, 1.f,
-    /* Top left     */ 0.f, 0.f, 0.f, /**/ 0.f, 1.f,
-    /* Bottom left  */ 0.f, 1.f, 0.f, /**/ 0.f, 0.f,
-};
+/// Projection matrix for UI elements.
+static inline void ui_proj_mat(f32 screen_width, f32 screen_height, mat4 dest) {
+  glm_mat4_identity(dest);
+  glm_ortho( //
+      /* left   */ 0.0f,
+      /* right  */ screen_width,
+      /* bottom */ 0.0f,
+      /* top    */ screen_height,
+      /* nearZ  */ -1.f,
+      /* farZ   */ +1.f,
+      /* dest   */ dest);
+}
 
-static constexpr u32 indices[] = {
-    0, 1, 3, //
-    1, 2, 3,
-};
+static inline void setup_the_3d_square(GameState *game) {
+  constexpr char VERTEX_SHADER[] = //
+      "#version 330 core\n"
+      "layout (location = 0) in vec3 the_pos;\n"
+      "layout (location = 1) in vec2 the_tex_coord;\n"
+      "out vec2 tex_coord;\n"
+      "uniform mat4 model;\n"
+      "uniform mat4 view;\n"
+      "uniform mat4 proj;\n"
+      "void main() {\n"
+      "  gl_Position = proj * view * model * vec4(the_pos, 1.f);\n"
+      "  tex_coord = the_tex_coord;\n"
+      "}\n";
 
-GameState *game_init() {
-  auto game = xalloc(GameState, 1);
-  game->is_paused = false;
-  game->camera_pitch = CAMERA_INIT_PITCH;
-  game->camera_yaw = CAMERA_INIT_YAW;
-  game->cursor_has_moved_before = false;
-  game->previous_cursor_x = 0.f;
-  game->previous_cursor_y = 0.f;
-  game->is_wireframe_mode = false;
+  constexpr char FRAGMENT_SHADER[] = //
+      "#version 330 core\n"
+      "in vec2 tex_coord;\n"
+      "out vec4 frag_color;\n"
+      "uniform sampler2D the_texture;\n"
+      "void main() {\n"
+      "  frag_color = texture(the_texture, tex_coord);\n"
+      "}\n";
 
-  // Shader.
-  game->the_shader = shader_init(sizeof(VERTEX_SHADER), VERTEX_SHADER, sizeof(FRAGMENT_SHADER), FRAGMENT_SHADER);
-  // Verify uniforms are ok.
-  ASSERT(glGetUniformLocation(game->the_shader.gl_handle, "model") != -1);
-  ASSERT(glGetUniformLocation(game->the_shader.gl_handle, "view") != -1);
-  ASSERT(glGetUniformLocation(game->the_shader.gl_handle, "proj") != -1);
+  constexpr f32 vertices[] = {
+      //                 Coords              Texture
+      /* Top left     */ 0.f, 1.f, 0.f, /**/ 0.f, 0.f,
+      /* Top right    */ 1.f, 1.f, 0.f, /**/ 1.f, 0.f,
+      /* Bottom left  */ 0.f, 0.f, 0.f, /**/ 0.f, 1.f,
+      /* Bottom right */ 1.f, 0.f, 0.f, /**/ 1.f, 1.f,
+  };
+
+  constexpr u32 indices[] = {
+      0, 1, 2, //
+      1, 2, 3, //
+  };
 
   // VAO.
-  glGenVertexArrays(1, &game->the_vao);
-  glBindVertexArray(game->the_vao);
+  glGenVertexArrays(1, &game->vao1);
+  glBindVertexArray(game->vao1);
   // EBO.
-  glGenBuffers(1, &game->the_ebo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, game->the_ebo);
+  glGenBuffers(1, &game->ebo1);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, game->ebo1);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
   // VBO.
-  glGenBuffers(1, &game->the_vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, game->the_vbo);
+  glGenBuffers(1, &game->vbo1);
+  glBindBuffer(GL_ARRAY_BUFFER, game->vbo1);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
   glVertexAttribPointer(
       /* location    */ 0,
       /* size (vec3) */ 3,
       /* type        */ GL_FLOAT,
       /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(float[5]),
+      /* stride      */ sizeof(f32[5]),
       /* offset      */ nullptr);
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(
@@ -79,8 +91,8 @@ GameState *game_init() {
       /* size (vec3) */ 2,
       /* type        */ GL_FLOAT,
       /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(float[5]),
-      /* offset      */ (void *)sizeof(float[3]));
+      /* stride      */ sizeof(f32[5]),
+      /* offset      */ (void *)sizeof(f32[3]));
   glEnableVertexAttribArray(1);
 
   // Texture.
@@ -91,8 +103,8 @@ GameState *game_init() {
   auto texture_data = stbi_load(test_texture_path, &texture_width, &texture_height, &texture_n_channels, 0);
   ASSERT(texture_data != nullptr);
   printf("Loaded texture, dimension: %dx%d, channels: %d\n", texture_width, texture_height, texture_n_channels);
-  glGenTextures(1, &game->the_texture);
-  glBindTexture(GL_TEXTURE_2D, game->the_texture);
+  glGenTextures(1, &game->texture1);
+  glBindTexture(GL_TEXTURE_2D, game->texture1);
   GLenum format;
   switch (texture_n_channels) {
   case 1: {
@@ -114,6 +126,192 @@ GameState *game_init() {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
+  // Shader.
+  game->shader1 = shader_init(sizeof(VERTEX_SHADER), VERTEX_SHADER, sizeof(FRAGMENT_SHADER), FRAGMENT_SHADER);
+  // Verify uniforms are ok.
+  ASSERT(glGetUniformLocation(game->shader1.gl_handle, "model") != -1);
+  ASSERT(glGetUniformLocation(game->shader1.gl_handle, "view") != -1);
+  ASSERT(glGetUniformLocation(game->shader1.gl_handle, "proj") != -1);
+}
+
+static inline void ui_setup_shader(ShaderProgram *shader) {
+  constexpr char VERTEX_SHADER[] = //
+      "#version 330 core\n"
+      "layout (location = 0) in vec2 the_pos;\n"
+      "layout (location = 1) in vec2 the_tex_coord;\n"
+      "out vec2 tex_coord;\n"
+      "uniform mat4 model;\n"
+      "uniform mat4 view;\n"
+      "uniform mat4 proj;\n"
+      "void main() {\n"
+      "  gl_Position = proj * view * model * vec4(the_pos, 0.f, 1.f);\n"
+      "  tex_coord = the_tex_coord;\n"
+      "}\n";
+
+  constexpr char FRAGMENT_SHADER[] = //
+      "#version 330 core\n"
+      "in vec2 tex_coord;\n"
+      "out vec4 frag_color;\n"
+      "uniform vec4 fg_color;\n"
+      "uniform vec4 bg_color;\n"
+      "uniform sampler2D the_texture;\n"
+      "void main() {\n"
+      "  vec4 sample = texture(the_texture, tex_coord);\n"
+      "  frag_color = (sample.a * fg_color) + ((1.f - sample.a) * bg_color);\n"
+      "}\n";
+  *shader = shader_init(sizeof(VERTEX_SHADER), VERTEX_SHADER, sizeof(FRAGMENT_SHADER), FRAGMENT_SHADER);
+  ASSERT(glGetUniformLocation(shader->gl_handle, "model") != -1);
+  ASSERT(glGetUniformLocation(shader->gl_handle, "view") != -1);
+  ASSERT(glGetUniformLocation(shader->gl_handle, "proj") != -1);
+  ASSERT(glGetUniformLocation(shader->gl_handle, "fg_color") != -1);
+  ASSERT(glGetUniformLocation(shader->gl_handle, "bg_color") != -1);
+}
+
+static inline void ui_setup_mesh(const FontData *font, GLuint *vao, GLuint *vbo, GLuint *ebo) {
+  vec2 glyph_start;
+  vec2 glyph_end;
+  font_glyph_coord(font, 'A', glyph_start, glyph_end);
+  DBG_PRINT(font_has_char(font, 'A'));
+  DBG_PRINTF("{%f, %f} ... {%f, %f}\n", glyph_start[0], glyph_start[1], glyph_end[0], glyph_end[1]);
+  const f32 vertices[] = {
+      //                 Coords     Texture
+      /* Top left     */ 0.f,   100.f, glyph_start[0], glyph_start[1],
+      /* Top right    */ 100.f, 100.f, glyph_end[0], glyph_start[1],
+      /* Bottom left  */ 0.f,   0.f,   glyph_start[0], glyph_end[1],
+      /* Bottom right */ 100.f, 0.f,   glyph_end[0], glyph_end[1],
+  };
+
+  constexpr u32 indices[] = {
+      0, 1, 2, //
+      1, 2, 3, //
+  };
+
+  // VAO.
+  glGenVertexArrays(1, vao);
+  glBindVertexArray(*vao);
+  // EBO.
+  glGenBuffers(1, ebo);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *ebo);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+  // VBO.
+  glGenBuffers(1, vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, *vbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+  glVertexAttribPointer(
+      /* location    */ 0,
+      /* size (vec2) */ 2,
+      /* type        */ GL_FLOAT,
+      /* normalized? */ GL_FALSE,
+      /* stride      */ sizeof(f32[4]),
+      /* offset      */ nullptr);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(
+      /* location    */ 1,
+      /* size (vec2) */ 2,
+      /* type        */ GL_FLOAT,
+      /* normalized? */ GL_FALSE,
+      /* stride      */ sizeof(f32[4]),
+      /* offset      */ (void *)sizeof(f32[2]));
+  glEnableVertexAttribArray(1);
+}
+
+static inline void ui_setup_texture(GLuint *tex) {
+  i32 width;
+  i32 height;
+  i32 n_channels;
+  constexpr char tex_path[] = "res/font/pix_chicago.png";
+  auto data = stbi_load(tex_path, &width, &height, &n_channels, 0);
+  ASSERT(data != nullptr);
+  printf("Loaded texture `%s`, dimension: %dx%d, channels: %d\n", tex_path, width, height, n_channels);
+  GLenum format;
+  switch (n_channels) {
+  case 1: {
+    format = GL_RED;
+  } break;
+  case 2: {
+    format = GL_RG;
+  } break;
+  case 3: {
+    format = GL_RGB;
+  } break;
+  case 4: {
+    format = GL_RGBA;
+  } break;
+  default: {
+    format = GL_RGBA;
+  } break;
+  }
+  glGenTextures(1, tex);
+  CHECK_OPENGL_ERROR();
+  glBindTexture(GL_TEXTURE_2D, *tex);
+  glTexImage2D(GL_TEXTURE_2D, 0, (GLint)format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+  stbi_image_free(data);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+  glGenerateMipmap(GL_TEXTURE_2D);
+}
+
+static inline UiTest ui_init() {
+  UiTest ui = {};
+  ui.font = init_pix_chicago_font();
+  ui_setup_shader(&ui.shader);
+  ui_setup_mesh(ui.font, &ui.vao, &ui.vbo, &ui.ebo);
+  ui_setup_texture(&ui.tex);
+  return ui;
+}
+
+static inline void ui_cleanup(UiTest *ui) {
+  glDeleteVertexArrays(1, &ui->vao);
+  glDeleteBuffers(1, &ui->vbo);
+  glDeleteBuffers(1, &ui->ebo);
+  glDeleteTextures(1, &ui->tex);
+  if (IS_DEBUG_MODE)
+    memset(ui, 0, sizeof(*ui));
+}
+
+static inline void ui_draw(UiTest *ui, f32 frame_width, f32 frame_height) {
+  mat4 model_mat = GLM_MAT4_IDENTITY;
+  glm_translated(model_mat, (vec4){10.f, 10.f, 0.f, 0.f});
+  glm_scale(model_mat, (vec4){2.f, 2.f});
+  mat4 view_mat = {};
+  ui_view_mat(view_mat);
+  mat4 proj_mat = {};
+  ui_proj_mat(frame_width, frame_height, proj_mat);
+
+  shader_use(ui->shader);
+
+  auto model = glGetUniformLocation(ui->shader.gl_handle, "model");
+  glUniformMatrix4fv(model, 1, false, (f32 *)model_mat);
+  auto view = glGetUniformLocation(ui->shader.gl_handle, "view");
+  glUniformMatrix4fv(view, 1, false, (f32 *)view_mat);
+  auto proj = glGetUniformLocation(ui->shader.gl_handle, "proj");
+  glUniformMatrix4fv(proj, 1, false, (f32 *)proj_mat);
+  auto fg_color = glGetUniformLocation(ui->shader.gl_handle, "fg_color");
+  glUniform4f(fg_color, 1.f, 1.f, 1.f, 1.f);
+  auto bg_color = glGetUniformLocation(ui->shader.gl_handle, "bg_color");
+  glUniform4f(bg_color, .2f, .2f, .2f, 1.f);
+  glBindVertexArray(ui->vao);
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, ui->tex);
+  glUniform1i(glGetUniformLocation(ui->shader.gl_handle, "the_texture"), 1);
+  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+}
+
+GameState *game_init() {
+  auto game = xalloc(GameState, 1);
+  game->is_paused = false;
+  game->camera_pitch = CAMERA_INIT_PITCH;
+  game->camera_yaw = CAMERA_INIT_YAW;
+  game->cursor_has_moved_before = false;
+  game->previous_cursor_x = 0.f;
+  game->previous_cursor_y = 0.f;
+  game->is_wireframe_mode = false;
+
+  setup_the_3d_square(game);
+
+  game->ui_test = ui_init();
+
   game->camera = (Camera){
       .position = {0.f, 0.f, 5.f},
       .direction = {0.f, 0.f, -1.f},
@@ -130,14 +328,15 @@ GameState *game_init() {
 
 void game_cleanup(GameState **game_) {
   auto game = *game_;
-  glDeleteVertexArrays(1, &game->the_vao);
-  glDeleteBuffers(1, &game->the_vbo);
-  glDeleteBuffers(1, &game->the_ebo);
+  glDeleteVertexArrays(1, &game->vao1);
+  glDeleteBuffers(1, &game->vbo1);
+  glDeleteBuffers(1, &game->ebo1);
+  glDeleteTextures(1, &game->texture1);
+  ui_cleanup(&game->ui_test);
 
   xfree(game);
-  if (IS_DEBUG_MODE) {
+  if (IS_DEBUG_MODE)
     *game_ = nullptr;
-  }
 }
 
 void game_cursor_callback(void *game_, Window *window) {
@@ -166,8 +365,8 @@ void game_cursor_callback(void *game_, Window *window) {
 }
 
 void game_key_callback(void *game_, Window *window, int key, int scancode, int action, int mods) {
-  USE_VARIABLE(scancode);
-  USE_VARIABLE(mods);
+  MARK_USED(scancode);
+  MARK_USED(mods);
   GameState *game = game_;
   if (glfwGetKey(window->glfw_handle, GLFW_KEY_F3) == GLFW_PRESS) {
     if (key == GLFW_KEY_L && action == GLFW_PRESS) {
@@ -189,7 +388,7 @@ void game_key_callback(void *game_, Window *window, int key, int scancode, int a
   }
 }
 
-void update_events(Window *window, GameState *game) {
+void game_update_events(GameState *game, Window *window) {
   vec3 camera_movement = {};
   if (glfwGetKey(window->glfw_handle, GLFW_KEY_W) == GLFW_PRESS)
     camera_movement[2] += 0.05f;
@@ -212,30 +411,34 @@ void update_events(Window *window, GameState *game) {
     camera_move(&game->camera, camera_movement);
 }
 
-void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
-  glClearColor(.1f, .1f, .1f, 1.f);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+static inline void draw_the_3d_square(GameState *game, f32 frame_width, f32 frame_height) {
   mat4 view_mat = {};
   camera_view_mat(game->camera, view_mat);
-
   mat4 proj_mat = {};
   camera_proj_mat(game->camera, frame_width / frame_height, proj_mat);
 
-  auto uniform_model = glGetUniformLocation(game->the_shader.gl_handle, "model");
-  auto uniform_view = glGetUniformLocation(game->the_shader.gl_handle, "view");
-  auto uniform_proj = glGetUniformLocation(game->the_shader.gl_handle, "proj");
+  shader_use(game->shader1);
 
-  ({
-    mat4 model_mat = GLM_MAT4_IDENTITY;
-    glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
-    glUniformMatrix4fv(uniform_view, 1, false, (f32 *)view_mat);
-    glUniformMatrix4fv(uniform_proj, 1, false, (f32 *)proj_mat);
-    shader_use(game->the_shader);
-    glUniform1i(glGetUniformLocation(game->the_shader.gl_handle, "the_texture"), 0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, game->the_texture);
-    glBindVertexArray(game->the_vao);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-  });
+  auto uniform_model = glGetUniformLocation(game->shader1.gl_handle, "model");
+  auto uniform_view = glGetUniformLocation(game->shader1.gl_handle, "view");
+  auto uniform_proj = glGetUniformLocation(game->shader1.gl_handle, "proj");
+  mat4 model_mat = GLM_MAT4_IDENTITY;
+  glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
+  glUniformMatrix4fv(uniform_view, 1, false, (f32 *)view_mat);
+  glUniformMatrix4fv(uniform_proj, 1, false, (f32 *)proj_mat);
+  glBindTexture(GL_TEXTURE_2D, game->texture1);
+  glActiveTexture(GL_TEXTURE0);
+  glUniform1i(glGetUniformLocation(game->shader1.gl_handle, "the_texture"), 0);
+  glBindVertexArray(game->vao1);
+  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+}
+
+void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
+  glClearColor(.1f, .1f, .1f, 1.f);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glEnable(GL_DEPTH_TEST);
+  draw_the_3d_square(game, frame_width, frame_height);
+  glDisable(GL_DEPTH_TEST);
+  ui_draw(&game->ui_test, frame_width, frame_height);
+  CHECK_OPENGL_ERROR();
 }

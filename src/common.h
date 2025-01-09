@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+// C23's `auto` doesn't work with GNU's cleanup attribute :(
+#define auto __auto_type
+
 typedef uint64_t u64;
 typedef uint32_t u32;
 typedef uint16_t u16;
@@ -27,7 +30,21 @@ static inline f32 absf(f32 f) {
   return (f >= 0.f) ? (f) : (-f);
 }
 
-#define USE_VARIABLE(X) ({ [[maybe_unused]] auto _ = (X); })
+#define MAX(X, Y)                                                                                                      \
+  ({                                                                                                                   \
+    auto x = (X);                                                                                                      \
+    auto y = (Y);                                                                                                      \
+    (x > y) ? x : y;                                                                                                   \
+  })
+
+#define MIN(X, Y)                                                                                                      \
+  ({                                                                                                                   \
+    auto x = (X);                                                                                                      \
+    auto y = (Y);                                                                                                      \
+    (x < y) ? x : y;                                                                                                   \
+  })
+
+#define MARK_USED(X) ({ [[maybe_unused]] auto _ = (X); })
 
 #define PUT_ON_HEAP(X) ((typeof(X) *restrict)memcpy(malloc(sizeof(X)), &X, sizeof(X)))
 
@@ -117,14 +134,13 @@ constexpr bool IS_DEBUG_MODE = false;
 
 __attribute__((always_inline)) static inline void *xalloc_(usize len) {
   void *p = malloc(len);
-  ASSERT(p != NULL);
+  ASSERT(p != nullptr || len == 0);
   return p;
 }
 
 __attribute__((always_inline)) static inline void *xrealloc_(void *p, usize len) {
-  DEBUG_ASSERT(p != NULL);
   p = realloc(p, len);
-  ASSERT(p != NULL);
+  ASSERT(p != nullptr || len == 0);
   return p;
 }
 

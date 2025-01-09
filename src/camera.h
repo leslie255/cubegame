@@ -20,3 +20,4 @@ void camera_proj_mat(Camera camera, f32 aspect_ratio, mat4 dest);
 void camera_set_direction(Camera *camera, float pitch, float yaw);
 
 void camera_move(Camera *camera, vec3 v);
+

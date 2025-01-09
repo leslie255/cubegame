@@ -30,8 +30,10 @@ static inline void error_callback(i32 error, const char *description) {
 
 static inline void key_callback(GLFWwindow *glfw_window, int key, int scancode, int action, int mods) {
   auto window = get_window(glfw_window);
+#ifdef __APPLE__
   if ((mods & GLFW_MOD_SUPER) != 0 && key == GLFW_KEY_W)
     glfwSetWindowShouldClose(glfw_window, true);
+#endif
   if (window->key_callback != nullptr)
     (window->key_callback)(window->game_state, window, key, scancode, action, mods);
 }
@@ -106,6 +108,6 @@ void window_restore_cursor(Window *window) {
 }
 
 void window_poll_events(Window *window) {
-  USE_VARIABLE(window);
+  MARK_USED(window);
   glfwPollEvents();
 }

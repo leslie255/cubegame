@@ -10,7 +10,7 @@
 
 i32 main() {
   [[gnu::cleanup(window_cleanup)]]
-  Window *window = window_init(800, 600, "Cube Game");
+  Window *window = window_init(800, 600, "The Window");
 
   [[gnu::cleanup(game_cleanup)]]
   GameState *game = game_init();
@@ -24,7 +24,7 @@ i32 main() {
   while (!glfwWindowShouldClose(window->glfw_handle)) {
     glfwSwapBuffers(window->glfw_handle);
     glfwPollEvents();
-    update_events(window, game);
+    game_update_events(game, window);
     game_frame(game, (f32)window->width, (f32)window->height);
     window_update_fps(window);
   }
