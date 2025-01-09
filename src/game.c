@@ -272,6 +272,8 @@ static inline u8 hex_digit(char digit) {
 }
 
 static inline void print(GameState *game, vec2 pos, f32 frame_width, f32 frame_height, usize length, char s[length]) {
+  if (game->is_wireframe_mode)
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   if (length == 0)
     length = strlen(s);
   usize x_counter = 0;
@@ -321,6 +323,8 @@ static inline void print(GameState *game, vec2 pos, f32 frame_width, f32 frame_h
     } break;
     }
   }
+  if (game->is_wireframe_mode)
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 }
 
 #define STRING_LITERAL_ARG(S) sizeof(S) - 1, S
@@ -328,14 +332,22 @@ static inline void print(GameState *game, vec2 pos, f32 frame_width, f32 frame_h
 static inline void draw_overlap_text(GameState *game, f32 frame_width, f32 frame_height) {
   glDisable(GL_DEPTH_TEST);
   if (game->is_paused) {
-    string_append(&game->overlap_text, STRING_LITERAL_ARG("\a\001000000\a\002E0E0E0Game paused [ESC]\a\001FFFFFF\a\002303030\n"));
+    string_append(&game->overlap_text,
+                  STRING_LITERAL_ARG(
+                      "\a\001000000\a\002E0E0E0[\a\001FF8000ESC\a\001000000] Game Paused\a\001FFFFFF\a\002303030\n"));
   } else {
     string_append(&game->overlap_text, STRING_LITERAL_ARG("\a\001FFFFFF\a\002303030Cube Game v0.0.0\n"));
   }
+
   if (isnan(game->fps))
-    string_snprintf(&game->overlap_text, 64, "FPS: ---.--");
+    string_snprintf(&game->overlap_text, 64, "FPS ---.--");
   else
     string_snprintf(&game->overlap_text, 64, "FPS: %.2lf", game->fps);
+
+  if (game->is_wireframe_mode) {
+    string_append(&game->overlap_text,
+                  STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002303030[\a\001FF8000F3+L\a\001FFFFFF] DEBUG: Wireframe Mode"));
+  }
 
   print(game, (vec2){10.f, frame_height - DEFAULT_FONT_SIZE - 10.f}, frame_width, frame_height,
         game->overlap_text.length, game->overlap_text.buffer);
