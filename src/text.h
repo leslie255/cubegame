@@ -62,9 +62,9 @@ TextPainter text_painter_new(const FontData *font);
 
 void text_painter_cleanup(TextPainter *tp);
 
-void text_painter_set_fg_color(TextPainter *tp, vec4 new_fg_color);
+void text_painter_set_fg_color(TextPainter *tp, const vec4 new_fg_color);
 
-void text_painter_set_bg_color(TextPainter *tp, vec4 new_bg_color);
+void text_painter_set_bg_color(TextPainter *tp, const vec4 new_bg_color);
 
 /// Paint one character.
 void text_paint(TextPainter tp, f32 frame_width, f32 frame_height, vec2 coord, char ch);

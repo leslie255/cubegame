@@ -258,19 +258,67 @@ static inline f32 font_aspect_ratio(const GameState *game) {
   return (f32)game->font->glyph_width / (f32)game->font->glyph_height;
 }
 
-/// Draw a line of text.
-/// `length = 0` for C strings.
-static inline void
-draw_text_line(GameState *game, vec2 pos, f32 frame_width, f32 frame_height, usize length, char s[length]) {
-  if (length == 0) {
-    for (usize i = 0; s[i] != '\0'; ++i) {
-      vec2 pos_ = {pos[0] + (f32)i * DEFAULT_FONT_SIZE * font_aspect_ratio(game), pos[1]};
+static inline u8 hex_digit(char digit) {
+  switch (digit) {
+  case '0' ... '9':
+    return (u8)(digit - '0');
+  case 'A' ... 'F':
+    return (u8)(digit - 'A') + 10;
+  case 'a' ... 'f':
+    return (u8)(digit - 'a') + 10;
+  default:
+    return 0;
+  }
+}
+
+static inline void print(GameState *game, vec2 pos, f32 frame_width, f32 frame_height, usize length, char s[length]) {
+  if (length == 0)
+    length = strlen(s);
+  usize x_counter = 0;
+  usize y_counter = 0;
+  for (usize i = 0; i < length; ++i) {
+    switch (s[i]) {
+    case '\n': {
+      ++y_counter;
+      x_counter = 0;
+    } break;
+    case '\r': {
+      x_counter = 0;
+    } break;
+    case '\a': {
+      if (length - i < 7) {
+        DBG_PRINTF("String is cut short after '\\a'\n");
+        return;
+      }
+      u8 escape_kind = (u8)s[i + 1];
+      u8 r = 0;
+      r += hex_digit(s[i + 2]) * 16;
+      r += hex_digit(s[i + 3]);
+      u8 g = 0;
+      g += hex_digit(s[i + 4]) * 16;
+      g += hex_digit(s[i + 5]);
+      u8 b = 0;
+      b += hex_digit(s[i + 6]) * 16;
+      b += hex_digit(s[i + 7]);
+      i += 7;
+      vec4 color = {(f32)r / 255.f, (f32)g / 255.f, (f32)b / 255.f};
+      if (escape_kind == 0x01) {
+        text_painter_set_fg_color(&game->text_painter, color);
+      } else if (escape_kind == 0x02) {
+        text_painter_set_bg_color(&game->text_painter, color);
+      } else {
+        DBG_PRINTF("Malformed escape code\n");
+        return;
+      }
+    } break;
+    default: {
+      vec2 pos_ = {
+          pos[0] + (f32)x_counter * DEFAULT_FONT_SIZE * font_aspect_ratio(game),
+          pos[1] - (f32)y_counter * DEFAULT_FONT_SIZE,
+      };
       text_paint(game->text_painter, frame_width, frame_height, pos_, s[i]);
-    }
-  } else {
-    for (usize i = 0; i < length; ++i) {
-      vec2 pos_ = {pos[0] + (f32)i * DEFAULT_FONT_SIZE * font_aspect_ratio(game), pos[1]};
-      text_paint(game->text_painter, frame_width, frame_height, pos_, s[i]);
+      ++x_counter;
+    } break;
     }
   }
 }
@@ -279,21 +327,19 @@ draw_text_line(GameState *game, vec2 pos, f32 frame_width, f32 frame_height, usi
 
 static inline void draw_overlap_text(GameState *game, f32 frame_width, f32 frame_height) {
   glDisable(GL_DEPTH_TEST);
-  string_clear(&game->overlap_text);
   if (game->is_paused) {
-    text_painter_set_bg_color(&game->text_painter, (vec4){1.f, 1.f, 1.f, 1.f});
-    text_painter_set_fg_color(&game->text_painter, (vec4){0.f, 0.f, 0.f, 1.f});
-    string_append(&game->overlap_text, STRING_LITERAL_ARG("Game paused [ESC]"));
+    string_append(&game->overlap_text, STRING_LITERAL_ARG("\a\001000000\a\002E0E0E0Game paused [ESC]\a\001FFFFFF\a\002303030\n"));
   } else {
-    text_painter_set_bg_color(&game->text_painter, (vec4){.2f, .2f, .2f, 1.f});
-    text_painter_set_fg_color(&game->text_painter, (vec4){1.f, 1.f, 1.f, 1.f});
-    if (isnan(game->fps))
-      string_snprintf(&game->overlap_text, 64, "FPS: ---.--");
-    else
-      string_snprintf(&game->overlap_text, 64, "FPS: %.2lf", game->fps);
+    string_append(&game->overlap_text, STRING_LITERAL_ARG("\a\001FFFFFF\a\002303030Cube Game v0.0.0\n"));
   }
-  draw_text_line(game, (vec2){10.f, frame_height - DEFAULT_FONT_SIZE - 10.f}, frame_width, frame_height,
-                 game->overlap_text.length, game->overlap_text.buffer);
+  if (isnan(game->fps))
+    string_snprintf(&game->overlap_text, 64, "FPS: ---.--");
+  else
+    string_snprintf(&game->overlap_text, 64, "FPS: %.2lf", game->fps);
+
+  print(game, (vec2){10.f, frame_height - DEFAULT_FONT_SIZE - 10.f}, frame_width, frame_height,
+        game->overlap_text.length, game->overlap_text.buffer);
+
   glEnable(GL_DEPTH_TEST);
 }
 
@@ -301,6 +347,7 @@ void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   glClearColor(.1f, .1f, .1f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   draw_the_3d_square(game, frame_width, frame_height);
+  string_clear(&game->overlap_text);
   draw_overlap_text(game, frame_width, frame_height);
   CHECK_OPENGL_ERROR();
 }

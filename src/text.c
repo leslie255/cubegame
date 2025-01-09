@@ -166,11 +166,11 @@ void text_painter_cleanup(TextPainter *tp) {
   shader_cleanup(&tp->shader);
 }
 
-void text_painter_set_fg_color(TextPainter *tp, vec4 new_fg_color) {
+void text_painter_set_fg_color(TextPainter *tp, const vec4 new_fg_color) {
   memcpy(tp->fg_color, new_fg_color, sizeof(tp->fg_color));
 }
 
-void text_painter_set_bg_color(TextPainter *tp, vec4 new_bg_color) {
+void text_painter_set_bg_color(TextPainter *tp, const vec4 new_bg_color) {
   memcpy(tp->bg_color, new_bg_color, sizeof(tp->bg_color));
 }
 
