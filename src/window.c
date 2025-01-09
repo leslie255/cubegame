@@ -8,6 +8,7 @@ static inline Window *get_window(GLFWwindow *glfw_window) {
 }
 
 static inline void resize_callback(GLFWwindow *glfw_window, int width, int height) {
+  printf("Window resized to %d/%d\n", width, height);
   auto window = get_window(glfw_window);
   glViewport(0, 0, width, height);
   window->width = (u32)width;
@@ -75,6 +76,13 @@ Window *window_init(u32 width, u32 height, const char *name) {
   }));
   glfwSetWindowUserPointer(glfw_window, window);
   update_title_with_fps(window);
+  auto glfw_monitor = glfwGetPrimaryMonitor();
+  ASSERT(glfw_monitor != nullptr);
+  f32 content_scale_x;
+  f32 content_scale_y;
+  glfwGetMonitorContentScale(glfw_monitor, &content_scale_x, &content_scale_y);
+  printf("Content scale (x/y): %f/%f\n", content_scale_x, content_scale_y);
+  resize_callback(glfw_window, (i32)((f32)width * content_scale_x), (i32)((f32)height * content_scale_y));
   return window;
 }
 

@@ -11,15 +11,6 @@
 #include "string.h"
 #include "text.h"
 
-typedef struct ui_test {
-  ShaderProgram shader;
-  const FontData *font;
-  GLuint vao;
-  GLuint ebo;
-  GLuint vbo;
-  GLuint tex;
-} UiTest;
-
 typedef struct game_state {
   /// Shader used for the test square.
   ShaderProgram shader1;
@@ -32,7 +23,8 @@ typedef struct game_state {
   /// Texture object used for the test square.
   GLuint texture1;
 
-  UiTest ui_test;
+  FontData *font;
+  TextPainter text_painter;
 
   f32 camera_pitch;
   f32 camera_yaw;

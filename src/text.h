@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include "string.h"
+#include "shader.h"
 
 /// A font in texture atlas form.
 typedef struct FontData {
@@ -36,7 +37,7 @@ typedef struct FontData {
 
 /// Initializes the pixChicago font.
 /// TODO: Load fonts from font descriptor file.
-FontData *init_pix_chicago_font();
+FontData *font_pix_chicago_init();
 
 void font_cleanup(FontData **font);
 
@@ -47,6 +48,25 @@ bool font_has_char(const FontData *font, char ch);
 /// Behavior is unstable (but not undefined compiler-wise) for characters that is not present in the font.
 /// To check if a character is present or not, use `font_has_char`.
 void font_glyph_coord(const FontData *font, char ch, vec2 start, vec2 end);
+
+typedef struct text_painter {
+  const FontData *font;
+  ShaderProgram shader;
+  GLuint vao;
+  GLuint ebo;
+  GLuint vbo;
+} TextPainter;
+
+TextPainter text_painter_new(const FontData *font);
+
+void text_painter_cleanup(TextPainter *tp);
+
+void text_painter_set_fg_color(TextPainter *tp, vec4 new_fg_color);
+
+void text_painter_set_bg_color(TextPainter *tp, vec4 new_bg_color);
+
+/// Paint one character.
+void text_paint(TextPainter tp, f32 frame_width, f32 frame_height, vec2 coord, char ch);
 
 /// A line of text, and related OpenGL objects.
 typedef struct text_line {

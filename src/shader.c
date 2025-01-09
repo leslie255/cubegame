@@ -45,6 +45,10 @@ shader_init(usize vs_src_len, const char vs_src[vs_src_len], usize fs_src_len, c
   return (ShaderProgram){.gl_handle = gl_handle};
 }
 
+void shader_cleanup(ShaderProgram *shader) {
+  glDeleteProgram(shader->gl_handle);
+}
+
 void shader_use(ShaderProgram shader) {
   glUseProgram(shader.gl_handle);
 }

@@ -12,25 +12,6 @@ constexpr f32 CAMERA_INIT_YAW = -90.f;
       DBG_PRINTF("OpenGL error: %d\n", err);                                                                           \
   })
 
-/// View matrix for UI elements.
-static inline void ui_view_mat(mat4 dest) {
-  // Me when nothing happens: 😱😱😱
-  glm_mat4_identity(dest);
-}
-
-/// Projection matrix for UI elements.
-static inline void ui_proj_mat(f32 screen_width, f32 screen_height, mat4 dest) {
-  glm_mat4_identity(dest);
-  glm_ortho( //
-      /* left   */ 0.0f,
-      /* right  */ screen_width,
-      /* bottom */ 0.0f,
-      /* top    */ screen_height,
-      /* nearZ  */ -1.f,
-      /* farZ   */ +1.f,
-      /* dest   */ dest);
-}
-
 static inline void setup_the_3d_square(GameState *game) {
   constexpr char VERTEX_SHADER[] = //
       "#version 330 core\n"
@@ -134,170 +115,6 @@ static inline void setup_the_3d_square(GameState *game) {
   ASSERT(glGetUniformLocation(game->shader1.gl_handle, "proj") != -1);
 }
 
-static inline void ui_setup_shader(ShaderProgram *shader) {
-  constexpr char VERTEX_SHADER[] = //
-      "#version 330 core\n"
-      "layout (location = 0) in vec2 the_pos;\n"
-      "layout (location = 1) in vec2 the_tex_coord;\n"
-      "out vec2 tex_coord;\n"
-      "uniform mat4 model;\n"
-      "uniform mat4 view;\n"
-      "uniform mat4 proj;\n"
-      "void main() {\n"
-      "  gl_Position = proj * view * model * vec4(the_pos, 0.f, 1.f);\n"
-      "  tex_coord = the_tex_coord;\n"
-      "}\n";
-
-  constexpr char FRAGMENT_SHADER[] = //
-      "#version 330 core\n"
-      "in vec2 tex_coord;\n"
-      "out vec4 frag_color;\n"
-      "uniform vec4 fg_color;\n"
-      "uniform vec4 bg_color;\n"
-      "uniform sampler2D the_texture;\n"
-      "void main() {\n"
-      "  vec4 sample = texture(the_texture, tex_coord);\n"
-      "  frag_color = (sample.a * fg_color) + ((1.f - sample.a) * bg_color);\n"
-      "}\n";
-  *shader = shader_init(sizeof(VERTEX_SHADER), VERTEX_SHADER, sizeof(FRAGMENT_SHADER), FRAGMENT_SHADER);
-  ASSERT(glGetUniformLocation(shader->gl_handle, "model") != -1);
-  ASSERT(glGetUniformLocation(shader->gl_handle, "view") != -1);
-  ASSERT(glGetUniformLocation(shader->gl_handle, "proj") != -1);
-  ASSERT(glGetUniformLocation(shader->gl_handle, "fg_color") != -1);
-  ASSERT(glGetUniformLocation(shader->gl_handle, "bg_color") != -1);
-}
-
-static inline void ui_setup_mesh(const FontData *font, GLuint *vao, GLuint *vbo, GLuint *ebo) {
-  vec2 glyph_start;
-  vec2 glyph_end;
-  font_glyph_coord(font, 'A', glyph_start, glyph_end);
-  DBG_PRINT(font_has_char(font, 'A'));
-  DBG_PRINTF("{%f, %f} ... {%f, %f}\n", glyph_start[0], glyph_start[1], glyph_end[0], glyph_end[1]);
-  const f32 vertices[] = {
-      //                 Coords     Texture
-      /* Top left     */ 0.f,   100.f, glyph_start[0], glyph_start[1],
-      /* Top right    */ 100.f, 100.f, glyph_end[0], glyph_start[1],
-      /* Bottom left  */ 0.f,   0.f,   glyph_start[0], glyph_end[1],
-      /* Bottom right */ 100.f, 0.f,   glyph_end[0], glyph_end[1],
-  };
-
-  constexpr u32 indices[] = {
-      0, 1, 2, //
-      1, 2, 3, //
-  };
-
-  // VAO.
-  glGenVertexArrays(1, vao);
-  glBindVertexArray(*vao);
-  // EBO.
-  glGenBuffers(1, ebo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *ebo);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-  // VBO.
-  glGenBuffers(1, vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, *vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-  glVertexAttribPointer(
-      /* location    */ 0,
-      /* size (vec2) */ 2,
-      /* type        */ GL_FLOAT,
-      /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(f32[4]),
-      /* offset      */ nullptr);
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(
-      /* location    */ 1,
-      /* size (vec2) */ 2,
-      /* type        */ GL_FLOAT,
-      /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(f32[4]),
-      /* offset      */ (void *)sizeof(f32[2]));
-  glEnableVertexAttribArray(1);
-}
-
-static inline void ui_setup_texture(GLuint *tex) {
-  i32 width;
-  i32 height;
-  i32 n_channels;
-  constexpr char tex_path[] = "res/font/pix_chicago.png";
-  auto data = stbi_load(tex_path, &width, &height, &n_channels, 0);
-  ASSERT(data != nullptr);
-  printf("Loaded texture `%s`, dimension: %dx%d, channels: %d\n", tex_path, width, height, n_channels);
-  GLenum format;
-  switch (n_channels) {
-  case 1: {
-    format = GL_RED;
-  } break;
-  case 2: {
-    format = GL_RG;
-  } break;
-  case 3: {
-    format = GL_RGB;
-  } break;
-  case 4: {
-    format = GL_RGBA;
-  } break;
-  default: {
-    format = GL_RGBA;
-  } break;
-  }
-  glGenTextures(1, tex);
-  CHECK_OPENGL_ERROR();
-  glBindTexture(GL_TEXTURE_2D, *tex);
-  glTexImage2D(GL_TEXTURE_2D, 0, (GLint)format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-  stbi_image_free(data);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-  glGenerateMipmap(GL_TEXTURE_2D);
-}
-
-static inline UiTest ui_init() {
-  UiTest ui = {};
-  ui.font = init_pix_chicago_font();
-  ui_setup_shader(&ui.shader);
-  ui_setup_mesh(ui.font, &ui.vao, &ui.vbo, &ui.ebo);
-  ui_setup_texture(&ui.tex);
-  return ui;
-}
-
-static inline void ui_cleanup(UiTest *ui) {
-  glDeleteVertexArrays(1, &ui->vao);
-  glDeleteBuffers(1, &ui->vbo);
-  glDeleteBuffers(1, &ui->ebo);
-  glDeleteTextures(1, &ui->tex);
-  if (IS_DEBUG_MODE)
-    memset(ui, 0, sizeof(*ui));
-}
-
-static inline void ui_draw(UiTest *ui, f32 frame_width, f32 frame_height) {
-  mat4 model_mat = GLM_MAT4_IDENTITY;
-  glm_translated(model_mat, (vec4){10.f, 10.f, 0.f, 0.f});
-  glm_scale(model_mat, (vec4){2.f, 2.f});
-  mat4 view_mat = {};
-  ui_view_mat(view_mat);
-  mat4 proj_mat = {};
-  ui_proj_mat(frame_width, frame_height, proj_mat);
-
-  shader_use(ui->shader);
-
-  auto model = glGetUniformLocation(ui->shader.gl_handle, "model");
-  glUniformMatrix4fv(model, 1, false, (f32 *)model_mat);
-  auto view = glGetUniformLocation(ui->shader.gl_handle, "view");
-  glUniformMatrix4fv(view, 1, false, (f32 *)view_mat);
-  auto proj = glGetUniformLocation(ui->shader.gl_handle, "proj");
-  glUniformMatrix4fv(proj, 1, false, (f32 *)proj_mat);
-  auto fg_color = glGetUniformLocation(ui->shader.gl_handle, "fg_color");
-  glUniform4f(fg_color, 1.f, 1.f, 1.f, 1.f);
-  auto bg_color = glGetUniformLocation(ui->shader.gl_handle, "bg_color");
-  glUniform4f(bg_color, .2f, .2f, .2f, 1.f);
-  glBindVertexArray(ui->vao);
-  glActiveTexture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D, ui->tex);
-  glUniform1i(glGetUniformLocation(ui->shader.gl_handle, "the_texture"), 1);
-  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-}
-
 GameState *game_init() {
   auto game = xalloc(GameState, 1);
   game->is_paused = false;
@@ -308,9 +125,10 @@ GameState *game_init() {
   game->previous_cursor_y = 0.f;
   game->is_wireframe_mode = false;
 
-  setup_the_3d_square(game);
+  game->font = font_pix_chicago_init();
+  game->text_painter = text_painter_new(game->font);
 
-  game->ui_test = ui_init();
+  setup_the_3d_square(game);
 
   game->camera = (Camera){
       .position = {0.f, 0.f, 5.f},
@@ -332,8 +150,9 @@ void game_cleanup(GameState **game_) {
   glDeleteBuffers(1, &game->vbo1);
   glDeleteBuffers(1, &game->ebo1);
   glDeleteTextures(1, &game->texture1);
-  ui_cleanup(&game->ui_test);
-
+  shader_cleanup(&game->shader1);
+  text_painter_cleanup(&game->text_painter);
+  font_cleanup(&game->font);
   xfree(game);
   if (IS_DEBUG_MODE)
     *game_ = nullptr;
@@ -439,6 +258,10 @@ void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   glEnable(GL_DEPTH_TEST);
   draw_the_3d_square(game, frame_width, frame_height);
   glDisable(GL_DEPTH_TEST);
-  ui_draw(&game->ui_test, frame_width, frame_height);
+  char s[] = "Hello, World!";
+  for (usize i = 0; i < sizeof(s) - 1; ++i) {
+    vec2 pos = {10.f + (f32)i * 50.f, 10.f};
+    text_paint(game->text_painter, frame_width, frame_height, pos, s[i]);
+  }
   CHECK_OPENGL_ERROR();
 }
