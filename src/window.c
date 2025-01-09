@@ -38,15 +38,6 @@ static inline void key_callback(GLFWwindow *glfw_window, int key, int scancode, 
     (window->key_callback)(window->game_state, window, key, scancode, action, mods);
 }
 
-constexpr usize TITLE_BUFFER_SIZE = 256;
-static inline void update_title_with_fps(Window *window) {
-  if (isnan(window->fps))
-    snprintf(window->real_title, TITLE_BUFFER_SIZE, "%s (FPS: ---.--)", window->name);
-  else
-    snprintf(window->real_title, TITLE_BUFFER_SIZE, "%s (FPS: %.2lf)", window->name, window->fps);
-  glfwSetWindowTitle(window->glfw_handle, window->real_title);
-}
-
 /// Panics on error.
 Window *window_init(u32 width, u32 height, const char *name) {
   glfwInit();
@@ -69,12 +60,10 @@ Window *window_init(u32 width, u32 height, const char *name) {
       .width = width,
       .height = height,
       .name = name,
-      .real_title = xalloc(char, TITLE_BUFFER_SIZE),
       .previous_seconds = glfwGetTime(),
       .fps = NAN,
   }));
   glfwSetWindowUserPointer(glfw_window, window);
-  update_title_with_fps(window);
   auto glfw_monitor = glfwGetPrimaryMonitor();
   ASSERT(glfw_monitor != nullptr);
   f32 content_scale_x;
@@ -87,7 +76,6 @@ Window *window_init(u32 width, u32 height, const char *name) {
 
 void window_cleanup(Window **window_) {
   auto window = *window_;
-  xfree(window->real_title);
   xfree(window);
   if (IS_DEBUG_MODE)
     window_ = nullptr;
@@ -101,7 +89,6 @@ void window_update_fps(Window *window) {
     window->previous_seconds = current_seconds;
     window->fps = (f64)window->frame_count / elapsed_seconds;
     window->frame_count = 0;
-    update_title_with_fps(window);
   }
 }
 

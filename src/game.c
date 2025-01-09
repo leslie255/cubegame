@@ -128,6 +128,9 @@ GameState *game_init() {
   game->font = default_font();
   game->text_painter = text_painter_new(game->font);
 
+  game->fps = NAN;
+  game->overlap_text = EMPTY_STRING;
+
   setup_the_3d_square(game);
 
   game->camera = (Camera){
@@ -266,26 +269,38 @@ draw_text_line(GameState *game, vec2 pos, f32 frame_width, f32 frame_height, usi
     }
   } else {
     for (usize i = 0; i < length; ++i) {
-      vec2 pos_ = {pos[0] + (f32)i * DEFAULT_FONT_SIZE / font_aspect_ratio(game), pos[1]};
+      vec2 pos_ = {pos[0] + (f32)i * DEFAULT_FONT_SIZE * font_aspect_ratio(game), pos[1]};
       text_paint(game->text_painter, frame_width, frame_height, pos_, s[i]);
     }
   }
 }
 
+#define STRING_LITERAL_ARG(S) sizeof(S) - 1, S
+
+static inline void draw_overlap_text(GameState *game, f32 frame_width, f32 frame_height) {
+  glDisable(GL_DEPTH_TEST);
+  string_clear(&game->overlap_text);
+  if (game->is_paused) {
+    text_painter_set_bg_color(&game->text_painter, (vec4){1.f, 1.f, 1.f, 1.f});
+    text_painter_set_fg_color(&game->text_painter, (vec4){0.f, 0.f, 0.f, 1.f});
+    string_append(&game->overlap_text, STRING_LITERAL_ARG("Game paused [ESC]"));
+  } else {
+    text_painter_set_bg_color(&game->text_painter, (vec4){.2f, .2f, .2f, 1.f});
+    text_painter_set_fg_color(&game->text_painter, (vec4){1.f, 1.f, 1.f, 1.f});
+    if (isnan(game->fps))
+      string_snprintf(&game->overlap_text, 64, "FPS: ---.--");
+    else
+      string_snprintf(&game->overlap_text, 64, "FPS: %.2lf", game->fps);
+  }
+  draw_text_line(game, (vec2){10.f, frame_height - DEFAULT_FONT_SIZE - 10.f}, frame_width, frame_height,
+                 game->overlap_text.length, game->overlap_text.buffer);
+  glEnable(GL_DEPTH_TEST);
+}
+
 void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   glClearColor(.1f, .1f, .1f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  glEnable(GL_DEPTH_TEST);
   draw_the_3d_square(game, frame_width, frame_height);
-  glDisable(GL_DEPTH_TEST);
-  // Testing missing characters:
-  // text_painter_set_fg_color(&game->text_painter, (vec4){1.f, 1.f, 1.f, 1.f});
-  // text_painter_set_bg_color(&game->text_painter, (vec4){0.f, 0.f, 0.f, 1.f});
-  // draw_text_line(game, (vec2){10.f, 10.f}, frame_width, frame_height, 0, "测试");
-  text_painter_set_bg_color(&game->text_painter, (vec4){1.f, 1.f, 1.f, 1.f});
-  text_painter_set_fg_color(&game->text_painter, (vec4){0.f, 0.f, 0.f, 1.f});
-  if (game->is_paused)
-    draw_text_line(game, (vec2){10.f, frame_height - DEFAULT_FONT_SIZE - 10.f}, frame_width, frame_height, 0,
-                   "Game Paused [ESC]");
+  draw_overlap_text(game, frame_width, frame_height);
   CHECK_OPENGL_ERROR();
 }

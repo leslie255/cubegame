@@ -39,6 +39,13 @@ typedef struct game_state {
   bool is_wireframe_mode;
 
   String overlay_text;
+
+  /// FPS of the game.
+  /// Passed in from outside.
+  /// Leave NAN for unknown.
+  f64 fps;
+
+  String overlap_text;
 } GameState;
 
 GameState *game_init();

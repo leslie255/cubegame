@@ -36,7 +36,7 @@ typedef struct FontData {
   bool present_map[256];
 } FontData;
 
-/// Initializes the pixChicago font.
+/// Initializes the default font.
 /// TODO: Load fonts from font descriptor file.
 FontData *default_font();
 

@@ -1,4 +1,5 @@
 #include "string.h"
+#include <stdarg.h>
 
 String string_new_with_capacity(usize capacity) {
   return (String){
@@ -30,12 +31,15 @@ String string_from_c_string(char *c_string) {
 
 void string_cleanup(String *string) {
   xfree(string->buffer);
-  if (IS_DEBUG_MODE) 
+  if (IS_DEBUG_MODE)
     string->buffer = nullptr;
 }
 
 static inline void realloc_the_string(String *string, usize new_capacity) {
-  string->buffer = xrealloc(string->buffer, char, new_capacity);
+  if (string->buffer == nullptr)
+    string->buffer = xalloc(char, new_capacity);
+  else
+    string->buffer = xrealloc(string->buffer, char, new_capacity);
   string->capacity = new_capacity;
 }
 
@@ -64,10 +68,14 @@ void string_push(String *string, char tail) {
   ++string->length;
 }
 
-void string_append(String *string, usize tail_length, char tail[restrict tail_length]) {
+void string_append(String *string, usize tail_length, const char tail[restrict tail_length]) {
   string_reserve(string, tail_length);
   memcpy(&string->buffer[string->length], tail, tail_length);
   string->length += tail_length;
+}
+
+void string_clear(String *string) {
+  string->length = 0;
 }
 
 void string_to_c_string(String *string) {
@@ -81,4 +89,14 @@ void string_fprint(String string, FILE *restrict out) {
 
 void string_print(String string) {
   string_fprint(string, stdout);
+}
+
+[[gnu::format(printf, 3, 4)]]
+void string_snprintf(String *string, usize n, const char *restrict fmt, ...) {
+  string_reserve(string, n);
+  va_list args;
+  va_start(args, fmt);
+  usize growth = vsnprintf(&string->buffer[string->length], n, fmt, args);
+  va_end(args);
+  string->length += growth;
 }

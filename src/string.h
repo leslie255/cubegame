@@ -39,11 +39,17 @@ void string_shrink_to_fit(String *string);
 
 void string_push(String *string, char tail);
 
-void string_append(String *string, usize length, char tail[restrict length]);
+void string_append(String *string, usize length, const char tail[restrict length]);
+
+/// Clear the content but retain the buffer and its capacity.
+void string_clear(String *string);
 
 /// Fuck C strings.
 /// Note that the extra '\0' is past `length`.
 void string_to_c_string(String *string);
+
+[[gnu::format(printf, 3, 4)]]
+void string_snprintf(String *string, usize n, const char *restrict fmt, ...);
 
 void string_fprint(String string, FILE *restrict out);
 

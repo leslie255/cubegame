@@ -36,9 +36,6 @@ struct window {
   /// Used in FPS calculation.
   u32 frame_count;
   /// PRIVATE
-  /// For displaying the "(fps: ---.--)" part in window title.
-  char *real_title;
-  /// PRIVATE
   bool glfw_is_current_context;
 };
 
