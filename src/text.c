@@ -1,15 +1,8 @@
 #include "text.h"
 
-#include "debug_utils.h"
-
 #include <stb/stb_image.h>
 
-#define CHECK_OPENGL_ERROR()                                                                                           \
-  ({                                                                                                                   \
-    GLenum err = glGetError();                                                                                         \
-    if (err != GL_NO_ERROR)                                                                                            \
-      DBG_PRINTF("OpenGL error: %d\n", err);                                                                           \
-  })
+#include "atlas.h"
 
 FontData *default_font() {
   static constexpr char path[] = "res/font/bigblueterminal.png";
@@ -67,25 +60,18 @@ bool font_has_char(const FontData *font, char ch) {
   return font->present_map[(usize)ch];
 }
 
-static inline void normalize_tex_coord(u32 total_width, u32 total_height, u32 x, u32 y, vec2 dest) {
-  dest[0] = (f32)x / (f32)total_width;
-  dest[1] = (f32)y / (f32)total_height;
-}
-
-void font_glyph_coord(const FontData *font, char ch, vec2 start, vec2 end) {
+void font_sample(const FontData *font, char ch, mat3 dest) {
   DEBUG_ASSERT(font->n_glyphs_per_line != 0);
   u32 i = (u32)ch - (u32)font->range_start;
   // Coord of the glyph.
-  u32 x_glyph = i % font->n_glyphs_per_line;
-  u32 y_glyph = i / font->n_glyphs_per_line;
+  u32 x = i % font->n_glyphs_per_line;
+  u32 y = i / font->n_glyphs_per_line;
   // Pixels that the glyph is on.
-  u32 x_start = x_glyph * font->glyph_width;
-  u32 y_start = y_glyph * font->glyph_height;
-  u32 x_end = x_start + font->glyph_width;
-  u32 y_end = y_start + font->glyph_height;
-  // Normalize them.
-  normalize_tex_coord(font->image_width, font->image_height, x_start, y_start, start);
-  normalize_tex_coord(font->image_width, font->image_height, x_end, y_end, end);
+  u32 x_min = x * font->glyph_width;
+  u32 y_min = y * font->glyph_height;
+  u32 x_max = x_min + font->glyph_width;
+  u32 y_max = y_min + font->glyph_height;
+  atlas_mat(font->image_width, font->image_height, x_min, y_min, x_max, y_max, dest);
 }
 
 /// Helper function used in `text_painter_new`.
@@ -201,7 +187,7 @@ void text_paint(TextPainter tp, f32 frame_width, f32 frame_height, vec2 coord, c
   glUniform4f(fg_color, tp.fg_color[0], tp.fg_color[1], tp.fg_color[2], tp.fg_color[3]);
   glUniform4f(bg_color, tp.bg_color[0], tp.bg_color[1], tp.bg_color[2], tp.bg_color[3]);
 
-  f32 text_size = 50.f;
+  f32 text_size = DEFAULT_FONT_SIZE;
   mat4 model_mat = GLM_MAT4_IDENTITY;
   glm_translated(model_mat, (vec4){coord[0], coord[1], 0.f, 0.f});
   glm_scale(model_mat, (vec4){text_size * (f32)tp.font->glyph_width / (f32)tp.font->glyph_height, text_size});
@@ -218,16 +204,11 @@ void text_paint(TextPainter tp, f32 frame_width, f32 frame_height, vec2 coord, c
   glm_mat4_mul(proj_mat, model_mat, model_proj_mat);
   glUniformMatrix4fv(model_proj, 1, false, (f32 *)model_proj_mat);
 
-  vec2 glyph_start;
-  vec2 glyph_end;
-  mat3 tex_trans_mat = GLM_MAT3_IDENTITY;
-  if (font_has_char(tp.font, ch)) {
-    font_glyph_coord(tp.font, ch, glyph_start, glyph_end);
-    vec2 glyph_d;
-    glm_vec2_sub(glyph_end, glyph_start, glyph_d);
-    glm_translate2d(tex_trans_mat, glyph_start);
-    glm_scale2d(tex_trans_mat, glyph_d);
-  }
+  mat3 tex_trans_mat;
+  if (font_has_char(tp.font, ch))
+    font_sample(tp.font, ch, tex_trans_mat);
+  else 
+    glm_mat3_identity(tex_trans_mat);
   glUniformMatrix3fv(tex_trans, 1, false, (f32 *)tex_trans_mat);
 
   glActiveTexture(GL_TEXTURE1);

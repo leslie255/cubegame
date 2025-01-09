@@ -6,6 +6,8 @@
 #include "common.h"
 #include "shader.h"
 
+constexpr f32 DEFAULT_FONT_SIZE = 24.f;
+
 /// A font in texture atlas form.
 typedef struct FontData {
   /// The OpenGL texture.
@@ -43,10 +45,8 @@ void font_cleanup(FontData **font);
 /// Whether a character is present (true) or missing (false) in a font.
 bool font_has_char(const FontData *font, char ch);
 
-/// Position of a glyph in a font atlas, in normalized form.
-/// Behavior is unstable (but not undefined compiler-wise) for characters that is not present in the font.
-/// To check if a character is present or not, use `font_has_char`.
-void font_glyph_coord(const FontData *font, char ch, vec2 start, vec2 end);
+/// Computes a matrix that crops the texture to just the glyph.
+void font_sample(const FontData *font, char ch, mat3 dest);
 
 typedef struct text_painter {
   const FontData *font;

@@ -251,18 +251,22 @@ static inline void draw_the_3d_square(GameState *game, f32 frame_width, f32 fram
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 }
 
+static inline f32 font_aspect_ratio(const GameState *game) {
+  return (f32)game->font->glyph_width / (f32)game->font->glyph_height;
+}
+
 /// Draw a line of text.
 /// `length = 0` for C strings.
 static inline void
 draw_text_line(GameState *game, vec2 pos, f32 frame_width, f32 frame_height, usize length, char s[length]) {
   if (length == 0) {
     for (usize i = 0; s[i] != '\0'; ++i) {
-      vec2 pos_ = {pos[0] + (f32)i * 33.33f, pos[1]};
+      vec2 pos_ = {pos[0] + (f32)i * DEFAULT_FONT_SIZE * font_aspect_ratio(game), pos[1]};
       text_paint(game->text_painter, frame_width, frame_height, pos_, s[i]);
     }
   } else {
     for (usize i = 0; i < length; ++i) {
-      vec2 pos_ = {pos[0] + (f32)i * 33.33f, pos[1]};
+      vec2 pos_ = {pos[0] + (f32)i * DEFAULT_FONT_SIZE / font_aspect_ratio(game), pos[1]};
       text_paint(game->text_painter, frame_width, frame_height, pos_, s[i]);
     }
   }
@@ -281,6 +285,7 @@ void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   text_painter_set_bg_color(&game->text_painter, (vec4){1.f, 1.f, 1.f, 1.f});
   text_painter_set_fg_color(&game->text_painter, (vec4){0.f, 0.f, 0.f, 1.f});
   if (game->is_paused)
-    draw_text_line(game, (vec2){10.f, frame_height - 60.f}, frame_width, frame_height, 0, "Game Paused [ESC]");
+    draw_text_line(game, (vec2){10.f, frame_height - DEFAULT_FONT_SIZE - 10.f}, frame_width, frame_height, 0,
+                   "Game Paused [ESC]");
   CHECK_OPENGL_ERROR();
 }
