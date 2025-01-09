@@ -54,6 +54,8 @@ typedef struct text_painter {
   GLuint vao;
   GLuint ebo;
   GLuint vbo;
+  vec4 bg_color;
+  vec4 fg_color;
 } TextPainter;
 
 TextPainter text_painter_new(const FontData *font);

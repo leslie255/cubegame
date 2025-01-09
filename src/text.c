@@ -181,13 +181,11 @@ void text_painter_cleanup(TextPainter *tp) {
 }
 
 void text_painter_set_fg_color(TextPainter *tp, vec4 new_fg_color) {
-  auto fg_color = glGetUniformLocation(tp->shader.gl_handle, "fg_color");
-  glUniform4f(fg_color, new_fg_color[0], new_fg_color[1], new_fg_color[2], new_fg_color[3]);
+  memcpy(tp->fg_color, new_fg_color, sizeof(tp->fg_color));
 }
 
 void text_painter_set_bg_color(TextPainter *tp, vec4 new_bg_color) {
-  auto bg_color = glGetUniformLocation(tp->shader.gl_handle, "bg_color");
-  glUniform4f(bg_color, new_bg_color[0], new_bg_color[1], new_bg_color[2], new_bg_color[3]);
+  memcpy(tp->bg_color, new_bg_color, sizeof(tp->bg_color));
 }
 
 /// Paint one character.
@@ -200,8 +198,8 @@ void text_paint(TextPainter tp, f32 frame_width, f32 frame_height, vec2 coord, c
 
   shader_use(tp.shader);
 
-  glUniform4f(fg_color, 1.f, 1.f, 1.f, 1.f);
-  glUniform4f(bg_color, .2f, .2f, .2f, 1.f);
+  glUniform4f(fg_color, tp.fg_color[0], tp.fg_color[1], tp.fg_color[2], tp.fg_color[3]);
+  glUniform4f(bg_color, tp.bg_color[0], tp.bg_color[1], tp.bg_color[2], tp.bg_color[3]);
 
   f32 text_size = 50.f;
   mat4 model_mat = GLM_MAT4_IDENTITY;
@@ -222,13 +220,14 @@ void text_paint(TextPainter tp, f32 frame_width, f32 frame_height, vec2 coord, c
 
   vec2 glyph_start;
   vec2 glyph_end;
-  ASSERT(font_has_char(tp.font, ch));
-  font_glyph_coord(tp.font, ch, glyph_start, glyph_end);
   mat3 tex_trans_mat = GLM_MAT3_IDENTITY;
-  vec2 glyph_d;
-  glm_vec2_sub(glyph_end, glyph_start, glyph_d);
-  glm_translate2d(tex_trans_mat, glyph_start);
-  glm_scale2d(tex_trans_mat, glyph_d);
+  if (font_has_char(tp.font, ch)) {
+    font_glyph_coord(tp.font, ch, glyph_start, glyph_end);
+    vec2 glyph_d;
+    glm_vec2_sub(glyph_end, glyph_start, glyph_d);
+    glm_translate2d(tex_trans_mat, glyph_start);
+    glm_scale2d(tex_trans_mat, glyph_d);
+  }
   glUniformMatrix3fv(tex_trans, 1, false, (f32 *)tex_trans_mat);
 
   glActiveTexture(GL_TEXTURE1);

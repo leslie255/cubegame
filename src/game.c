@@ -274,8 +274,13 @@ void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   glEnable(GL_DEPTH_TEST);
   draw_the_3d_square(game, frame_width, frame_height);
   glDisable(GL_DEPTH_TEST);
+  // Testing missing characters:
+  // text_painter_set_fg_color(&game->text_painter, (vec4){1.f, 1.f, 1.f, 1.f});
+  // text_painter_set_bg_color(&game->text_painter, (vec4){0.f, 0.f, 0.f, 1.f});
+  // draw_text_line(game, (vec2){10.f, 10.f}, frame_width, frame_height, 0, "测试");
+  text_painter_set_bg_color(&game->text_painter, (vec4){1.f, 1.f, 1.f, 1.f});
+  text_painter_set_fg_color(&game->text_painter, (vec4){0.f, 0.f, 0.f, 1.f});
   if (game->is_paused)
-    draw_text_line(game, (vec2){10.f, frame_height - 60.f}, frame_width, frame_height, 0,
-                   "GAME PAUSED (ESC)");
+    draw_text_line(game, (vec2){10.f, frame_height - 60.f}, frame_width, frame_height, 0, "Game Paused [ESC]");
   CHECK_OPENGL_ERROR();
 }

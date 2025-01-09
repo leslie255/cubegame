@@ -8,13 +8,12 @@ static inline Window *get_window(GLFWwindow *glfw_window) {
 }
 
 static inline void resize_callback(GLFWwindow *glfw_window, int width, int height) {
-  printf("Window resized to %d/%d\n", width, height);
   auto window = get_window(glfw_window);
   glViewport(0, 0, width, height);
   window->width = (u32)width;
   window->height = (u32)height;
-  if (window->cursor_move_callback != nullptr)
-    (window->cursor_move_callback)(window->game_state, window);
+  if (window->frame_resize_callback != nullptr)
+    (window->frame_resize_callback)(window->game_state, window);
 }
 
 static inline void cursor_position_callback(GLFWwindow *glfw_window, f64 xpos, f64 ypos) {

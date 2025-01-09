@@ -45,9 +45,9 @@ GameState *game_init();
 
 void game_cleanup(GameState **game);
 
-void game_cursor_callback(void *game_, Window *window);
+void game_cursor_callback(void *game, Window *window);
 
-void game_key_callback(void *game_, Window *window, int key, int scancode, int action, int mods);
+void game_key_callback(void *gam_, Window *window, int key, int scancode, int action, int mods);
 
 void game_update_events(GameState *game, Window *window);
 
