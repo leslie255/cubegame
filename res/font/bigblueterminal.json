@@ -1,0 +1,1346 @@
+{
+    "software": {
+        "name": "rTexPacker v4.0",
+        "url": "https://raylibtech.itch.io/rtexpacker"
+    },
+    "atlas": {
+        "imagePath": "bigblueterminal.png",
+        "width": 128,
+        "height": 128,
+        "spriteCount": 95,
+        "isFont": true,
+        "fontSize": 12
+    },
+    "sprites": [
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0020",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 0, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 0, "y": 0, "width": 0, "height": 0 },
+            "char": {
+                "value": 32,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0021",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 8, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 2, "y": 1, "width": 4, "height": 9 },
+            "char": {
+                "value": 33,
+                "offset": { "x": 2, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0022",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 16, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 0, "width": 6, "height": 4 },
+            "char": {
+                "value": 34,
+                "offset": { "x": 1, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0023",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 24, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 35,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0024",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 32, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 0, "width": 7, "height": 11 },
+            "char": {
+                "value": 36,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0025",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 40, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 3, "width": 7, "height": 7 },
+            "char": {
+                "value": 37,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0026",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 48, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 38,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0027",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 56, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 3, "y": 0, "width": 3, "height": 4 },
+            "char": {
+                "value": 39,
+                "offset": { "x": 1, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0028",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 64, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 2, "y": 1, "width": 4, "height": 9 },
+            "char": {
+                "value": 40,
+                "offset": { "x": 2, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0029",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 72, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 2, "y": 1, "width": 4, "height": 9 },
+            "char": {
+                "value": 41,
+                "offset": { "x": 2, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U002A",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 80, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 0, "y": 3, "width": 8, "height": 5 },
+            "char": {
+                "value": 42,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U002B",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 88, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 3, "width": 6, "height": 5 },
+            "char": {
+                "value": 43,
+                "offset": { "x": 1, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U002C",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 96, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 3, "y": 7, "width": 3, "height": 4 },
+            "char": {
+                "value": 44,
+                "offset": { "x": 2, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U002D",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 104, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 5, "width": 7, "height": 1 },
+            "char": {
+                "value": 45,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U002E",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 112, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 3, "y": 8, "width": 2, "height": 2 },
+            "char": {
+                "value": 46,
+                "offset": { "x": 3, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U002F",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 120, "y": 0 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 8 },
+            "char": {
+                "value": 47,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0030",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 0, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 48,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0031",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 8, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 6, "height": 9 },
+            "char": {
+                "value": 49,
+                "offset": { "x": 1, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0032",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 16, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 50,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0033",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 24, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 51,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0034",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 32, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 52,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0035",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 40, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 53,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0036",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 48, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 54,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0037",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 56, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 55,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0038",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 64, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 56,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0039",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 72, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 57,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U003A",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 80, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 3, "y": 2, "width": 2, "height": 7 },
+            "char": {
+                "value": 58,
+                "offset": { "x": 3, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U003B",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 88, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 3, "y": 2, "width": 3, "height": 8 },
+            "char": {
+                "value": 59,
+                "offset": { "x": 2, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U003C",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 96, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 6, "height": 9 },
+            "char": {
+                "value": 60,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U003D",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 104, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 6, "height": 4 },
+            "char": {
+                "value": 61,
+                "offset": { "x": 1, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U003E",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 112, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 6, "height": 9 },
+            "char": {
+                "value": 62,
+                "offset": { "x": 1, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U003F",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 120, "y": 12 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 63,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0040",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 0, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 64,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0041",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 8, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 65,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0042",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 16, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 66,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0043",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 24, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 67,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0044",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 32, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 68,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0045",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 40, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 69,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0046",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 48, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 70,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0047",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 56, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 71,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0048",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 64, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 72,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0049",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 72, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 2, "y": 1, "width": 4, "height": 9 },
+            "char": {
+                "value": 73,
+                "offset": { "x": 2, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U004A",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 80, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 74,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U004B",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 88, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 75,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U004C",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 96, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 76,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U004D",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 104, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 77,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U004E",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 112, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 78,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U004F",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 120, "y": 24 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 79,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0050",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 0, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 80,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0051",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 8, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 10 },
+            "char": {
+                "value": 81,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0052",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 16, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 82,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0053",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 24, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 83,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0054",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 32, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 6, "height": 9 },
+            "char": {
+                "value": 84,
+                "offset": { "x": 1, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0055",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 40, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 85,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0056",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 48, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 86,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0057",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 56, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 87,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0058",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 64, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 88,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0059",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 72, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 6, "height": 9 },
+            "char": {
+                "value": 89,
+                "offset": { "x": 1, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U005A",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 80, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 90,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U005B",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 88, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 2, "y": 1, "width": 4, "height": 9 },
+            "char": {
+                "value": 91,
+                "offset": { "x": 2, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U005C",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 96, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 92,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U005D",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 104, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 2, "y": 1, "width": 4, "height": 9 },
+            "char": {
+                "value": 93,
+                "offset": { "x": 2, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U005E",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 112, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 0, "width": 7, "height": 4 },
+            "char": {
+                "value": 94,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U005F",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 120, "y": 36 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 0, "y": 11, "width": 8, "height": 1 },
+            "char": {
+                "value": 95,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0060",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 0, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 3, "y": 0, "width": 3, "height": 3 },
+            "char": {
+                "value": 96,
+                "offset": { "x": 2, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0061",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 8, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 6 },
+            "char": {
+                "value": 97,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0062",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 16, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 98,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0063",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 24, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 6 },
+            "char": {
+                "value": 99,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0064",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 32, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 100,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0065",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 40, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 6 },
+            "char": {
+                "value": 101,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0066",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 48, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 6, "height": 9 },
+            "char": {
+                "value": 102,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0067",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 56, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 8 },
+            "char": {
+                "value": 103,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0068",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 64, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 104,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0069",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 72, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 2, "y": 1, "width": 4, "height": 9 },
+            "char": {
+                "value": 105,
+                "offset": { "x": 2, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U006A",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 80, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 6, "height": 11 },
+            "char": {
+                "value": 106,
+                "offset": { "x": 1, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U006B",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 88, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 107,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U006C",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 96, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 2, "y": 1, "width": 4, "height": 9 },
+            "char": {
+                "value": 108,
+                "offset": { "x": 2, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U006D",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 104, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 6 },
+            "char": {
+                "value": 109,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U006E",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 112, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 6 },
+            "char": {
+                "value": 110,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U006F",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 120, "y": 48 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 6 },
+            "char": {
+                "value": 111,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0070",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 0, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 8 },
+            "char": {
+                "value": 112,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0071",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 8, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 8 },
+            "char": {
+                "value": 113,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0072",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 16, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 6 },
+            "char": {
+                "value": 114,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0073",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 24, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 6 },
+            "char": {
+                "value": 115,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0074",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 32, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 9 },
+            "char": {
+                "value": 116,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0075",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 40, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 6 },
+            "char": {
+                "value": 117,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0076",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 48, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 6, "height": 6 },
+            "char": {
+                "value": 118,
+                "offset": { "x": 1, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0077",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 56, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 6 },
+            "char": {
+                "value": 119,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0078",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 64, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 6 },
+            "char": {
+                "value": 120,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U0079",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 72, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 8 },
+            "char": {
+                "value": 121,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U007A",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 80, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 4, "width": 7, "height": 6 },
+            "char": {
+                "value": 122,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U007B",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 88, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 6, "height": 9 },
+            "char": {
+                "value": 123,
+                "offset": { "x": 1, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U007C",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 96, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 3, "y": 1, "width": 2, "height": 9 },
+            "char": {
+                "value": 124,
+                "offset": { "x": 3, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U007D",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 104, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 6, "height": 9 },
+            "char": {
+                "value": 125,
+                "offset": { "x": 1, "y": 0 },
+                "advanceX": 8
+            }
+        },
+        {
+            "nameId": "BigBlueTerm437NerdFontMono-Regular-U007E",
+            "origin": { "x": 0, "y": 0 },
+            "position": { "x": 112, "y": 60 },
+            "sourceSize": { "width": 8, "height": 12 },
+            "padding": 0,
+            "trimmed": false,
+            "trimRec": { "x": 1, "y": 1, "width": 7, "height": 2 },
+            "char": {
+                "value": 126,
+                "offset": { "x": 0, "y": 0 },
+                "advanceX": 8
+            }
+        }
+    ]
+}

@@ -4,7 +4,6 @@
 #include <cglm/cglm.h>
 
 #include "common.h"
-#include "string.h"
 #include "shader.h"
 
 /// A font in texture atlas form.
@@ -37,7 +36,7 @@ typedef struct FontData {
 
 /// Initializes the pixChicago font.
 /// TODO: Load fonts from font descriptor file.
-FontData *font_pix_chicago_init();
+FontData *default_font();
 
 void font_cleanup(FontData **font);
 
@@ -67,11 +66,3 @@ void text_painter_set_bg_color(TextPainter *tp, vec4 new_bg_color);
 
 /// Paint one character.
 void text_paint(TextPainter tp, f32 frame_width, f32 frame_height, vec2 coord, char ch);
-
-/// A line of text, and related OpenGL objects.
-typedef struct text_line {
-  String text;
-  GLuint vao;
-  GLuint ebo;
-  GLuint vbo;
-} TextLine;

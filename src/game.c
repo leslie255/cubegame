@@ -125,7 +125,7 @@ GameState *game_init() {
   game->previous_cursor_y = 0.f;
   game->is_wireframe_mode = false;
 
-  game->font = font_pix_chicago_init();
+  game->font = default_font();
   game->text_painter = text_painter_new(game->font);
 
   setup_the_3d_square(game);

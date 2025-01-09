@@ -11,8 +11,8 @@
       DBG_PRINTF("OpenGL error: %d\n", err);                                                                           \
   })
 
-FontData *font_pix_chicago_init() {
-  static constexpr char path[] = "res/font/pix_chicago.png";
+FontData *default_font() {
+  static constexpr char path[] = "res/font/bigblueterminal.png";
   FontData *font = xalloc(FontData, 1);
   memset(font, 0, sizeof(FontData));
   auto data = stbi_load(path, (i32 *)&font->image_width, (i32 *)&font->image_height, (i32 *)&font->image_n_channels, 0);
@@ -46,9 +46,9 @@ FontData *font_pix_chicago_init() {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
   glGenerateMipmap(GL_TEXTURE_2D);
-  font->glyph_width = 10;
-  font->glyph_height = 15;
-  font->n_glyphs_per_line = 12;
+  font->glyph_width = 8;
+  font->glyph_height = 12;
+  font->n_glyphs_per_line = 16;
   font->n_glyphs = 96;
   font->range_start = ' ';
   font->range_end = '~';
