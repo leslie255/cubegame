@@ -133,7 +133,7 @@ void cube_painter_cleanup(CubePainter *cp) {
   glDeleteBuffers(1, &cp->ebo);
 }
 
-void paint_cube(CubePainter *cp, GameState *game, CubeFace faces, Texture texture) {
+void paint_cube(CubePainter *cp, GameState *game, vec3 coord, CubeFace faces, Texture texture) {
   MARK_USED(faces);
 
   mat4 model_mat = {};
@@ -156,7 +156,7 @@ void paint_cube(CubePainter *cp, GameState *game, CubeFace faces, Texture textur
   glBindVertexArray(cp->vao);
 
   glm_mat4_identity(model_mat);
-  glm_translated(model_mat, (vec3){0.f, 0.f, 1.f});
+  glm_translated(model_mat, coord);
   glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cp->ebo);
   glBindBuffer(GL_ARRAY_BUFFER, cp->vbo);
@@ -426,7 +426,12 @@ void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   game->frame_height = frame_height;
   glClearColor(.1f, .1f, .1f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  paint_cube(&game->cube_painter, game, CubeFace_All, game->test_texture);
+  for (u32 x = 0; x < 32; ++x) {
+    for (u32 z = 0; z < 32; ++z) {
+      vec3 coord = {(f32)x, 0.f, (f32)z};
+      paint_cube(&game->cube_painter, game, coord, CubeFace_All, game->test_texture);
+    }
+  }
   string_clear(&game->overlap_text);
   draw_overlap_text(game);
   CHECK_OPENGL_ERROR();

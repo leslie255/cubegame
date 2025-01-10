@@ -88,4 +88,4 @@ void game_update_events(GameState *game, Window *window, f64 frame_time);
 
 void game_frame(GameState *game, f32 frame_width, f32 frame_height);
 
-void paint_cube(CubePainter *cp, GameState *game, CubeFace faces, Texture texture);
+void paint_cube(CubePainter *cp, GameState *game, vec3 coord, CubeFace faces, Texture texture);
