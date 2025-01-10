@@ -19,7 +19,7 @@ struct window {
   const char *name;
   u32 width;
   u32 height;
-  f64 fps;
+  f64 average_fps;
   f64 cursor_x;
   f64 cursor_y;
 

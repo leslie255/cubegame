@@ -61,7 +61,7 @@ Window *window_init(u32 width, u32 height, const char *name) {
       .height = height,
       .name = name,
       .previous_seconds = glfwGetTime(),
-      .fps = NAN,
+      .average_fps = NAN,
   }));
   glfwSetWindowUserPointer(glfw_window, window);
   auto glfw_monitor = glfwGetPrimaryMonitor();
@@ -85,9 +85,9 @@ void window_update_fps(Window *window) {
   f64 current_seconds = glfwGetTime();
   f64 elapsed_seconds = current_seconds - window->previous_seconds;
   ++window->frame_count;
-  if (elapsed_seconds > 1.) {
+  if (elapsed_seconds >= 1.) {
     window->previous_seconds = current_seconds;
-    window->fps = (f64)window->frame_count / elapsed_seconds;
+    window->average_fps = (f64)window->frame_count / elapsed_seconds;
     window->frame_count = 0;
   }
 }

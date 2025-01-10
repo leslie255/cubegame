@@ -13,14 +13,15 @@
 #include "texture.h"
 
 typedef enum cube_face : u8 {
+  CubeFace_All = 0b11111111,
   /// +Y
   CubeFace_Top = 0b000001,
   /// -Y
   CubeFace_Bottom = 0b000010,
-  /// -Z
-  CubeFace_North = 0b000100,
   /// +Z
   CubeFace_South = 0b001000,
+  /// -Z
+  CubeFace_North = 0b000100,
   /// +X
   CubeFace_East = 0b010000,
   /// -X
@@ -31,8 +32,7 @@ typedef struct cube_painter {
   ShaderProgram shader;
   GLuint vao;
   GLuint ebo;
-  GLuint ebo_reversed;
-  GLuint vbo_north_south;
+  GLuint vbo;
 } CubePainter;
 
 CubePainter cube_painter_new();
@@ -63,10 +63,10 @@ typedef struct game_state {
 
   String overlay_text;
 
-  /// FPS of the game.
+  /// Average FPS over the last period of time, for FPS display.
   /// Passed in from outside.
   /// Leave NAN for unknown.
-  f64 fps;
+  f64 display_fps;
 
   String overlap_text;
 
@@ -84,7 +84,7 @@ void game_cursor_callback(void *game, Window *window);
 
 void game_key_callback(void *gam_, Window *window, int key, int scancode, int action, int mods);
 
-void game_update_events(GameState *game, Window *window);
+void game_update_events(GameState *game, Window *window, f64 frame_time);
 
 void game_frame(GameState *game, f32 frame_width, f32 frame_height);
 

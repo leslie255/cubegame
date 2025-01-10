@@ -14,42 +14,56 @@ constexpr f32 CAMERA_INIT_YAW = -90.f;
       DBG_PRINTF("OpenGL error: %d\n", err);                                                                           \
   })
 
-/// Helper function used in `cube_painter_new`.
-static GLuint cp_gen_ebo(u32 indices[6]) {
-  GLuint ebo;
-  glGenBuffers(1, &ebo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32[6]), indices, GL_STATIC_DRAW);
-  return ebo;
-}
-
-/// Helper function used in `cube_painter_new`.
-static GLuint cp_gen_vbo(f32 vertices[20]) {
-  GLuint vbo;
-  // VBO.
-  glGenBuffers(1, &vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(f32[20]), vertices, GL_STATIC_DRAW);
-  glVertexAttribPointer(
-      /* location    */ 0,
-      /* size (vec3) */ 3,
-      /* type        */ GL_FLOAT,
-      /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(f32[5]),
-      /* offset      */ nullptr);
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(
-      /* location    */ 1,
-      /* size (vec3) */ 2,
-      /* type        */ GL_FLOAT,
-      /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(f32[5]),
-      /* offset      */ (void *)sizeof(f32[3]));
-  glEnableVertexAttribArray(1);
-  return vbo;
-}
-
 CubePainter cube_painter_new() {
+  GLfloat vertices[] = {
+      0.f, 0.f, 0.f, 0.0f, 0.0f, // A 0
+      1.f, 0.f, 0.f, 1.0f, 0.0f, // B 1
+      1.f, 1.f, 0.f, 1.0f, 1.0f, // C 2
+      0.f, 1.f, 0.f, 0.0f, 1.0f, // D 3
+      0.f, 0.f, 1.f, 0.0f, 0.0f, // E 4
+      1.f, 0.f, 1.f, 1.0f, 0.0f, // F 5
+      1.f, 1.f, 1.f, 1.0f, 1.0f, // G 6
+      0.f, 1.f, 1.f, 0.0f, 1.0f, // H 7
+
+      0.f, 1.f, 0.f, 0.0f, 0.0f, // D 8
+      0.f, 0.f, 0.f, 1.0f, 0.0f, // A 9
+      0.f, 0.f, 1.f, 1.0f, 1.0f, // E 10
+      0.f, 1.f, 1.f, 0.0f, 1.0f, // H 11
+      1.f, 0.f, 0.f, 0.0f, 0.0f, // B 12
+      1.f, 1.f, 0.f, 1.0f, 0.0f, // C 13
+      1.f, 1.f, 1.f, 1.0f, 1.0f, // G 14
+      1.f, 0.f, 1.f, 0.0f, 1.0f, // F 15
+
+      0.f, 0.f, 0.f, 0.0f, 0.0f, // A 16
+      1.f, 0.f, 0.f, 1.0f, 0.0f, // B 17
+      1.f, 0.f, 1.f, 1.0f, 1.0f, // F 18
+      0.f, 0.f, 1.f, 0.0f, 1.0f, // E 19
+      1.f, 1.f, 0.f, 0.0f, 0.0f, // C 20
+      0.f, 1.f, 0.f, 1.0f, 0.0f, // D 21
+      0.f, 1.f, 1.f, 1.0f, 1.0f, // H 22
+      1.f, 1.f, 1.f, 0.0f, 1.0f, // G 23
+  };
+  // index data
+  GLuint indices[] = {
+      // front and back
+      0, 3, 2, //
+      2, 1, 0, //
+      4, 5, 6, //
+      6, 7, 4, //
+
+      // left and right
+      11, 8, 9,   //
+      9, 10, 11,  //
+      12, 13, 14, //
+      14, 15, 12, //
+
+      // bottom and top
+      16, 17, 18, //
+      18, 19, 16, //
+      20, 21, 22, //
+      22, 23, 20, //
+  };
+
   constexpr char VERTEX_SHADER[] = //
       "#version 330 core\n"
       "layout (location = 0) in vec3 the_pos;\n"
@@ -80,30 +94,42 @@ CubePainter cube_painter_new() {
   glBindVertexArray(cp.vao);
 
   // EBO.
-  cp.ebo = cp_gen_ebo((u32[]){
-      2, 1, 0, //
-      1, 2, 3, //
-  });
-  cp.ebo_reversed = cp_gen_ebo((u32[]){
-      0, 1, 2, //
-      3, 2, 1, //
-  });
+  GLuint ebo;
+  glGenBuffers(1, &ebo);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+  cp.ebo = ebo;
 
   // VBO.
-  cp.vbo_north_south = cp_gen_vbo((f32[]){
-      //                 Coords              Texture
-      /* Top left     */ 0.f, 1.f, 0.f, /**/ 0.f, 0.f,
-      /* Top right    */ 1.f, 1.f, 0.f, /**/ 1.f, 0.f,
-      /* Bottom left  */ 0.f, 0.f, 0.f, /**/ 0.f, 1.f,
-      /* Bottom right */ 1.f, 0.f, 0.f, /**/ 1.f, 1.f,
-  });
+  GLuint vbo;
+  // VBO.
+  glGenBuffers(1, &vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+  glVertexAttribPointer(
+      /* location    */ 0,
+      /* size (vec3) */ 3,
+      /* type        */ GL_FLOAT,
+      /* normalized? */ GL_FALSE,
+      /* stride      */ sizeof(f32[5]),
+      /* offset      */ nullptr);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(
+      /* location    */ 1,
+      /* size (vec3) */ 2,
+      /* type        */ GL_FLOAT,
+      /* normalized? */ GL_FALSE,
+      /* stride      */ sizeof(f32[5]),
+      /* offset      */ (void *)sizeof(f32[3]));
+  glEnableVertexAttribArray(1);
+  cp.vbo = vbo;
 
   return cp;
 }
 
 void cube_painter_cleanup(CubePainter *cp) {
   glDeleteVertexArrays(1, &cp->vao);
-  glDeleteBuffers(1, &cp->vbo_north_south);
+  glDeleteBuffers(1, &cp->vbo);
   glDeleteBuffers(1, &cp->ebo);
 }
 
@@ -127,24 +153,16 @@ void paint_cube(CubePainter *cp, GameState *game, CubeFace faces, Texture textur
   glActiveTexture(GL_TEXTURE0);
   glUniform1i(glGetUniformLocation(cp->shader.gl_handle, "the_texture"), 0);
 
-  if (faces & CubeFace_North) {
-    glm_mat4_identity(model_mat);
-    glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
-    glBindVertexArray(cp->vao);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cp->ebo_reversed);
-    glBindBuffer(GL_ARRAY_BUFFER, cp->vbo_north_south);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-  }
+  glBindVertexArray(cp->vao);
 
-  if (faces & CubeFace_South) {
-    glm_mat4_identity(model_mat);
-    glm_translated(model_mat, (vec4){0.f, 0.f, 1.f, 0.f});
-    glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
-    glBindVertexArray(cp->vao);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cp->ebo);
-    glBindBuffer(GL_ARRAY_BUFFER, cp->vbo_north_south);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-  }
+  glm_mat4_identity(model_mat);
+  glm_translated(model_mat, (vec3){0.f, 0.f, 1.f});
+  glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cp->ebo);
+  glBindBuffer(GL_ARRAY_BUFFER, cp->vbo);
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+  glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, nullptr);
 }
 
 GameState *game_init() {
@@ -175,7 +193,6 @@ GameState *game_init() {
   game->test_texture = texture_load_from_file("res/texture/test_texture.png", true);
   game->cube_painter = cube_painter_new();
 
-  game->fps = NAN;
   game->overlap_text = EMPTY_STRING;
 
   glEnable(GL_CULL_FACE);
@@ -247,28 +264,36 @@ void game_key_callback(void *game_, Window *window, int key, int scancode, int a
   }
 }
 
-void game_update_events(GameState *game, Window *window) {
-  if (!game->is_paused) {
-    vec3 camera_movement = {};
-    if (glfwGetKey(window->glfw_handle, GLFW_KEY_W) == GLFW_PRESS)
-      camera_movement[2] += 0.05f;
-    if (glfwGetKey(window->glfw_handle, GLFW_KEY_S) == GLFW_PRESS)
-      camera_movement[2] -= 0.05f;
-    if (glfwGetKey(window->glfw_handle, GLFW_KEY_A) == GLFW_PRESS)
-      camera_movement[0] -= 0.05f;
-    if (glfwGetKey(window->glfw_handle, GLFW_KEY_D) == GLFW_PRESS)
-      camera_movement[0] += 0.05f;
-    if (glfwGetKey(window->glfw_handle, GLFW_KEY_R) == GLFW_PRESS)
-      camera_movement[1] -= 0.05f;
-    if (glfwGetKey(window->glfw_handle, GLFW_KEY_SPACE) == GLFW_PRESS)
-      camera_movement[1] += 0.05f;
-    if (glfwGetKey(window->glfw_handle, GLFW_KEY_C) == GLFW_PRESS)
-      game->camera.fov = glm_rad(30.f);
-    else
-      game->camera.fov = glm_rad(90.f);
-    if (camera_movement[0] != 0 || camera_movement[1] != 0 || camera_movement[2] != 0)
-      camera_move(&game->camera, camera_movement);
-  }
+void game_update_events(GameState *game, Window *window, f64 frame_time) {
+  if (game->is_paused)
+    return;
+
+  // Movement.
+  vec3 camera_movement = {};
+  auto control_down = false;
+  control_down |= glfwGetKey(window->glfw_handle, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS;
+  control_down |= glfwGetKey(window->glfw_handle, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_W) == GLFW_PRESS)
+    camera_movement[2] += (control_down ? 8.f : 4.f) * (f32)frame_time;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_S) == GLFW_PRESS)
+    camera_movement[2] -= 4.f * (f32)frame_time;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_A) == GLFW_PRESS)
+    camera_movement[0] -= 4.f * (f32)frame_time;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_D) == GLFW_PRESS)
+    camera_movement[0] += 4.f * (f32)frame_time;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_R) == GLFW_PRESS)
+    camera_movement[1] -= 4.f * (f32)frame_time;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_SPACE) == GLFW_PRESS)
+    camera_movement[1] += 4.f * (f32)frame_time;
+  if (camera_movement[0] != 0.f || camera_movement[1] != 0.f || camera_movement[2] != 0.f)
+    camera_move(&game->camera, camera_movement);
+
+  // Zoom.
+  auto is_sprinting = camera_movement[2] > 0 && control_down;
+  if (glfwGetKey(window->glfw_handle, GLFW_KEY_C) == GLFW_PRESS)
+    game->camera.fov = glm_rad(30.f * (is_sprinting ? 1.1f : 1.f));
+  else
+    game->camera.fov = glm_rad(90.f * (is_sprinting ? 1.1f : 1.f));
 }
 
 static inline f32 font_aspect_ratio(const GameState *game) {
@@ -349,10 +374,10 @@ static inline void draw_overlap_text(GameState *game) {
     string_append(&game->overlap_text, STRING_LITERAL_ARG("\a\001FFFFFF\a\002303030Cube Game v0.0.0\n"));
   }
 
-  if (isnan(game->fps))
+  if (isnan(game->display_fps) || isinf(game->display_fps))
     string_snprintf(&game->overlap_text, 64, "FPS ---.--\n");
   else
-    string_snprintf(&game->overlap_text, 64, "FPS: %.2lf\n", game->fps);
+    string_snprintf(&game->overlap_text, 64, "FPS: %.2lf\n", game->display_fps);
 
   string_snprintf(&game->overlap_text, 64, "Camera XYZ: %f, %f, %f", game->camera.position[0], game->camera.position[1],
                   game->camera.position[2]);
@@ -393,7 +418,7 @@ void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   game->frame_height = frame_height;
   glClearColor(.1f, .1f, .1f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  paint_cube(&game->cube_painter, game, CubeFace_North | CubeFace_South, game->test_texture);
+  paint_cube(&game->cube_painter, game, CubeFace_All, game->test_texture);
   string_clear(&game->overlap_text);
   draw_overlap_text(game);
   CHECK_OPENGL_ERROR();

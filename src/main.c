@@ -21,13 +21,19 @@ i32 main() {
 
   window_disable_cursor(window);
 
+  f64 previous_time = glfwGetTime();
   while (!glfwWindowShouldClose(window->glfw_handle)) {
     glfwSwapBuffers(window->glfw_handle);
     glfwPollEvents();
-    game_update_events(game, window);
-    game->fps = window->fps;
     game_frame(game, (f32)window->width, (f32)window->height);
+
     window_update_fps(window);
+    game->display_fps = window->average_fps;
+
+    f64 current_time = glfwGetTime();
+    f64 frame_time = current_time - previous_time;
+    previous_time = current_time;
+    game_update_events(game, window, frame_time);
   }
 
   glfwTerminate();
