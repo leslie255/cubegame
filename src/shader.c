@@ -1,9 +1,9 @@
 #include "shader.h"
 
 /// Panic on compile failure.
-static inline GLuint compile_shader(usize length, const char source[length], GLenum shader_type) {
-  auto shader = glCreateShader(shader_type);
-  glShaderSource(shader, 1, REF((const char *)&source[0]), REF((GLint)length));
+static inline GLuint compile_shader(ShaderSouce source) {
+  auto shader = glCreateShader(source.type);
+  glShaderSource(shader, 1, REF((const char *)&source.source[0]), REF((GLint)source.length));
   glCompileShader(shader);
   GLint success = 0;
   glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
@@ -32,23 +32,25 @@ static inline bool link_shader_program(GLuint program) {
   return success;
 }
 
-ShaderProgram
-shader_init(usize vs_src_len, const char vs_src[vs_src_len], usize fs_src_len, const char fs_src[fs_src_len]) {
-  GLuint vertex_shader = compile_shader(vs_src_len, vs_src, GL_VERTEX_SHADER);
-  GLuint fragment_shader = compile_shader(fs_src_len, fs_src, GL_FRAGMENT_SHADER);
-  GLuint gl_handle = glCreateProgram();
-  glAttachShader(gl_handle, vertex_shader);
-  glAttachShader(gl_handle, fragment_shader);
-  link_shader_program(gl_handle);
-  glDeleteShader(vertex_shader);
-  glDeleteShader(fragment_shader);
-  return (ShaderProgram){.gl_handle = gl_handle};
+ShaderProgram shader_init(usize n_sources, const ShaderSouce sources[n_sources]) {
+  GLuint shader_program = glCreateProgram();
+  GLuint *compiled_shaders = alloca(sizeof(GLuint[n_sources]));
+  for (usize i = 0; i < n_sources; ++i) {
+    GLuint shader = compile_shader(sources[i]);
+    compiled_shaders[i] = shader;
+    glAttachShader(shader_program, shader);
+  }
+  link_shader_program(shader_program);
+  for (usize i = 0; i < n_sources; ++i)
+    glDeleteShader(compiled_shaders[i]);
+  return (ShaderProgram){.gl = shader_program};
 }
 
 void shader_cleanup(ShaderProgram *shader) {
-  glDeleteProgram(shader->gl_handle);
+  glDeleteProgram(shader->gl);
 }
 
 void shader_use(ShaderProgram shader) {
-  glUseProgram(shader.gl_handle);
+  glUseProgram(shader.gl);
 }
+

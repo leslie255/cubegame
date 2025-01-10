@@ -1,11 +1,11 @@
 #include "game.h"
 #include "debug_utils.h"
 #include "text.h"
+#include "atlas.h"
+#include "block.h"
 
 constexpr f32 CAMERA_INIT_PITCH = 0.f;
 constexpr f32 CAMERA_INIT_YAW = -90.f;
-
-#define STRING_LITERAL_ARG(S) sizeof(S) - 1, S
 
 #define CHECK_OPENGL_ERROR()                                                                                           \
   ({                                                                                                                   \
@@ -16,32 +16,30 @@ constexpr f32 CAMERA_INIT_YAW = -90.f;
 
 CubePainter cube_painter_new() {
   GLfloat vertices[] = {
-      0.f, 0.f, 0.f, 0.0f, 1.0f, // A 0
-      1.f, 0.f, 0.f, 1.0f, 1.0f, // B 1
-      1.f, 1.f, 0.f, 1.0f, 0.0f, // C 2
-      0.f, 1.f, 0.f, 0.0f, 0.0f, // D 3
-      0.f, 0.f, 1.f, 0.0f, 1.0f, // E 4
-      1.f, 0.f, 1.f, 1.0f, 1.0f, // F 5
-      1.f, 1.f, 1.f, 1.0f, 0.0f, // G 6
-      0.f, 1.f, 1.f, 0.0f, 0.0f, // H 7
-
-      0.f, 1.f, 0.f, 0.0f, 1.0f, // D 8
-      0.f, 0.f, 0.f, 1.0f, 1.0f, // A 9
-      0.f, 0.f, 1.f, 1.0f, 0.0f, // E 10
-      0.f, 1.f, 1.f, 0.0f, 0.0f, // H 11
-      1.f, 0.f, 0.f, 0.0f, 1.0f, // B 12
-      1.f, 1.f, 0.f, 1.0f, 1.0f, // C 13
-      1.f, 1.f, 1.f, 1.0f, 0.0f, // G 14
-      1.f, 0.f, 1.f, 0.0f, 0.0f, // F 15
-
-      0.f, 0.f, 0.f, 0.0f, 1.0f, // A 16
-      1.f, 0.f, 0.f, 1.0f, 1.0f, // B 17
-      1.f, 0.f, 1.f, 1.0f, 0.0f, // F 18
-      0.f, 0.f, 1.f, 0.0f, 0.0f, // E 19
-      1.f, 1.f, 0.f, 0.0f, 1.0f, // C 20
-      0.f, 1.f, 0.f, 1.0f, 1.0f, // D 21
-      0.f, 1.f, 1.f, 1.0f, 0.0f, // H 22
-      1.f, 1.f, 1.f, 0.0f, 0.0f, // G 23
+      0.f, 0.f, 0.f, 0.0f, 1.f, // A 0
+      1.f, 0.f, 0.f, 1.0f, 1.f, // B 1
+      1.f, 1.f, 0.f, 1.0f, 0.f, // C 2
+      0.f, 1.f, 0.f, 0.0f, 0.f, // D 3
+      0.f, 0.f, 1.f, 0.0f, 1.f, // E 4
+      1.f, 0.f, 1.f, 1.0f, 1.f, // F 5
+      1.f, 1.f, 1.f, 1.0f, 0.f, // G 6
+      0.f, 1.f, 1.f, 0.0f, 0.f, // H 7
+      0.f, 1.f, 0.f, 0.0f, 0.f, // D 8
+      0.f, 0.f, 0.f, 1.0f, 0.f, // A 9
+      0.f, 0.f, 1.f, 1.0f, 1.f, // E 10
+      0.f, 1.f, 1.f, 0.0f, 1.f, // H 11
+      1.f, 0.f, 0.f, 0.0f, 0.f, // B 12
+      1.f, 1.f, 0.f, 1.0f, 0.f, // C 13
+      1.f, 1.f, 1.f, 1.0f, 1.f, // G 14
+      1.f, 0.f, 1.f, 0.0f, 1.f, // F 15
+      0.f, 0.f, 0.f, 0.0f, 1.f, // A 16
+      1.f, 0.f, 0.f, 1.0f, 1.f, // B 17
+      1.f, 0.f, 1.f, 1.0f, 0.f, // F 18
+      0.f, 0.f, 1.f, 0.0f, 0.f, // E 19
+      1.f, 1.f, 0.f, 0.0f, 1.f, // C 20
+      0.f, 1.f, 0.f, 1.0f, 1.f, // D 21
+      0.f, 1.f, 1.f, 1.0f, 0.f, // H 22
+      1.f, 1.f, 1.f, 0.0f, 0.f, // G 23
   };
   // index data
   GLuint indices[] = {
@@ -57,7 +55,7 @@ CubePainter cube_painter_new() {
       12, 13, 14, //
       14, 15, 12, //
 
-      // bottom and top
+      // // bottom and top
       16, 17, 18, //
       18, 19, 16, //
       20, 21, 22, //
@@ -67,27 +65,32 @@ CubePainter cube_painter_new() {
   constexpr char VERTEX_SHADER[] = //
       "#version 330 core\n"
       "layout (location = 0) in vec3 the_pos;\n"
-      "layout (location = 1) in vec2 the_tex_coord;\n"
-      "out vec2 tex_coord;\n"
+      "layout (location = 1) in vec2 in_tex_coord;\n"
+      "uniform mat3 tex_trans;\n"
+      "out vec2 vert_tex_coord;\n"
       "uniform mat4 model;\n"
       "uniform mat4 view;\n"
       "uniform mat4 proj;\n"
       "void main() {\n"
       "  gl_Position = proj * view * model * vec4(the_pos, 1.f);\n"
-      "  tex_coord = the_tex_coord;\n"
+      "  vert_tex_coord = (tex_trans * vec3(in_tex_coord, 1.f)).xy;\n"
       "}\n";
 
   constexpr char FRAGMENT_SHADER[] = //
       "#version 330 core\n"
-      "in vec2 tex_coord;\n"
+      "in vec2 vert_tex_coord;\n"
       "out vec4 frag_color;\n"
       "uniform sampler2D the_texture;\n"
       "void main() {\n"
-      "  frag_color = texture(the_texture, tex_coord);\n"
+      "  frag_color = texture(the_texture, vert_tex_coord);\n"
       "}\n";
 
   CubePainter cp = {};
-  cp.shader = shader_init(STRING_LITERAL_ARG(VERTEX_SHADER), STRING_LITERAL_ARG(FRAGMENT_SHADER));
+  cp.shader = shader_init(ARR_ARG(((ShaderSouce[]){
+      {GL_VERTEX_SHADER, STRING_LITERAL_ARG(VERTEX_SHADER)},
+      // {GL_GEOMETRY_SHADER, STRING_LITERAL_ARG(GEOMETRY_SHADER)},
+      {GL_FRAGMENT_SHADER, STRING_LITERAL_ARG(FRAGMENT_SHADER)},
+  })));
 
   // VAO.
   glGenVertexArrays(1, &cp.vao);
@@ -133,7 +136,19 @@ void cube_painter_cleanup(CubePainter *cp) {
   glDeleteBuffers(1, &cp->ebo);
 }
 
-void paint_cube(CubePainter *cp, GameState *game, vec3 coord, CubeFace faces, Texture texture) {
+SET_UNIFORM_FUNC(model, mat4);
+SET_UNIFORM_FUNC(view, mat4);
+SET_UNIFORM_FUNC(proj, mat4);
+SET_UNIFORM_FUNC(tex_trans, mat3);
+
+void cube_paint( //
+    CubePainter *cp,
+    GameState *game,
+    vec3 coord,
+    CubeFace faces,
+    Texture texture,
+    u32 offset_x,
+    u32 offset_y) {
   MARK_USED(faces);
 
   mat4 model_mat = {};
@@ -142,22 +157,23 @@ void paint_cube(CubePainter *cp, GameState *game, vec3 coord, CubeFace faces, Te
   mat4 proj_mat = {};
   camera_proj_mat(game->camera, game->frame_width / game->frame_height, proj_mat);
 
+  mat3 tex_trans_mat = {};
+  atlas_mat(texture.width, texture.height, offset_x, offset_y, offset_x + 16, offset_y + 16, tex_trans_mat);
+
   shader_use(cp->shader);
 
-  auto uniform_model = glGetUniformLocation(cp->shader.gl_handle, "model");
-  auto uniform_view = glGetUniformLocation(cp->shader.gl_handle, "view");
-  auto uniform_proj = glGetUniformLocation(cp->shader.gl_handle, "proj");
-  glUniformMatrix4fv(uniform_view, 1, false, (f32 *)view_mat);
-  glUniformMatrix4fv(uniform_proj, 1, false, (f32 *)proj_mat);
+  set_uniform_tex_trans(cp->shader, tex_trans_mat);
+  set_uniform_view(cp->shader, view_mat);
+  set_uniform_proj(cp->shader, proj_mat);
   glBindTexture(GL_TEXTURE_2D, texture.gl);
   glActiveTexture(GL_TEXTURE0);
-  glUniform1i(glGetUniformLocation(cp->shader.gl_handle, "the_texture"), 0);
+  glUniform1i(glGetUniformLocation(cp->shader.gl, "the_texture"), 0);
 
   glBindVertexArray(cp->vao);
 
   glm_mat4_identity(model_mat);
   glm_translated(model_mat, coord);
-  glUniformMatrix4fv(uniform_model, 1, false, (f32 *)model_mat);
+  set_uniform_model(cp->shader, model_mat);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cp->ebo);
   glBindBuffer(GL_ARRAY_BUFFER, cp->vbo);
   glEnableVertexAttribArray(0);
@@ -191,9 +207,19 @@ GameState *game_init() {
   glm_normalize(game->camera.direction);
 
   game->test_texture = texture_load_from_file("res/texture/test_texture.png", true);
+  game->texture_atlas = texture_load_from_file("res/texture/texture_atlas.png", true);
   game->cube_painter = cube_painter_new();
 
   game->overlap_text = EMPTY_STRING;
+
+  game->test_chunk = chunk_alloc();
+  memset(game->test_chunk->blocks, 0, sizeof(game->test_chunk->blocks));
+  for (usize z = 0; z < 32; ++z) {
+    for (usize x = 0; x < 32; ++x) {
+      BlockId block_id = (z < 16 && x < 8) ? BLOCKID_GRASS : BLOCKID_DIRT;
+      game->test_chunk->blocks[0][z][x].id = block_id;
+    }
+  }
 
   glEnable(GL_CULL_FACE);
   glCullFace(GL_BACK);
@@ -205,6 +231,7 @@ void game_cleanup(GameState **game_) {
   auto game = *game_;
   text_painter_cleanup(&game->text_painter);
   font_cleanup(&game->font);
+  chunk_cleanup(&game->test_chunk);
   xfree(game);
   if (IS_DEBUG_MODE)
     *game_ = nullptr;
@@ -374,6 +401,7 @@ static inline void print(GameState *game, vec2 pos, usize length, char s[length]
 }
 
 static inline void draw_overlap_text(GameState *game) {
+  string_clear(&game->overlap_text);
   if (game->is_paused) {
     string_append(
         &game->overlap_text,
@@ -421,18 +449,33 @@ static inline void draw_overlap_text(GameState *game) {
     glEnable(GL_CULL_FACE);
 }
 
+static inline void render_chunk(GameState *game, const ChunkData *chunk) {
+  for (u32 y = 0; y < 32; ++y) {
+    for (u32 z = 0; z < 32; ++z) {
+      for (u32 x = 0; x < 32; ++x) {
+        vec3 coord = {(f32)x, (f32)y, (f32)z};
+        BlockId block_id = chunk->blocks[y][z][x].id;
+        if (!block_is_solid(block_id))
+          continue;
+        u32 texture_offset_x;
+        u32 texture_offset_y;
+        block_texture_atlast_coord(block_id, &texture_offset_x, &texture_offset_y);
+        cube_paint(&game->cube_painter, game, coord, CubeFace_All, game->texture_atlas, texture_offset_x,
+                   texture_offset_y);
+      }
+    }
+  }
+}
+
 void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   game->frame_width = frame_width;
   game->frame_height = frame_height;
   glClearColor(.1f, .1f, .1f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  for (u32 x = 0; x < 32; ++x) {
-    for (u32 z = 0; z < 32; ++z) {
-      vec3 coord = {(f32)x, 0.f, (f32)z};
-      paint_cube(&game->cube_painter, game, coord, CubeFace_All, game->test_texture);
-    }
-  }
-  string_clear(&game->overlap_text);
+  u32 texture_offset_x;
+  u32 texture_offset_y;
+  block_texture_atlast_coord(BLOCKID_TEST, &texture_offset_x, &texture_offset_y);
+  render_chunk(game, game->test_chunk);
   draw_overlap_text(game);
   CHECK_OPENGL_ERROR();
 }

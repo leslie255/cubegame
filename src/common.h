@@ -10,6 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define STRING_LITERAL_ARG(S) sizeof(S) - 1, S
+
+#define ARR_ARG(ARR) (sizeof(ARR) / sizeof(ARR[0])), (typeof(ARR[0]) *)(&ARR[0])
+
 // C23's `auto` doesn't work with GNU's cleanup attribute :(
 #define auto __auto_type
 

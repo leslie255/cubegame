@@ -11,6 +11,7 @@
 #include "string.h"
 #include "text.h"
 #include "texture.h"
+#include "chunk.h"
 
 typedef enum cube_face : u8 {
   CubeFace_All = 0b11111111,
@@ -42,6 +43,7 @@ void cube_painter_cleanup(CubePainter *cp);
 typedef struct game_state {
   /// Texture object used for the test square.
   Texture test_texture;
+  Texture texture_atlas;
 
   FontData *font;
   TextPainter text_painter;
@@ -51,6 +53,8 @@ typedef struct game_state {
   Camera camera;
 
   CubePainter cube_painter;
+
+  ChunkData *test_chunk;
 
   bool is_paused;
 
@@ -88,4 +92,11 @@ void game_update_events(GameState *game, Window *window, f64 frame_time);
 
 void game_frame(GameState *game, f32 frame_width, f32 frame_height);
 
-void paint_cube(CubePainter *cp, GameState *game, vec3 coord, CubeFace faces, Texture texture);
+void cube_paint( //
+    CubePainter *cp,
+    GameState *game,
+    vec3 coord,
+    CubeFace faces,
+    Texture texture,
+    u32 offset_x,
+    u32 offset_y);

@@ -72,11 +72,15 @@ static inline void tp_setup_shader(TextPainter *tp) {
       "  frag_color = (sample.a * fg_color) + ((1.f - sample.a) * bg_color);\n"
       "}\n";
 
-  tp->shader = shader_init(sizeof(VERTEX_SHADER), VERTEX_SHADER, sizeof(FRAGMENT_SHADER), FRAGMENT_SHADER);
-  ASSERT(glGetUniformLocation(tp->shader.gl_handle, "model_proj") != -1);
-  ASSERT(glGetUniformLocation(tp->shader.gl_handle, "tex_trans") != -1);
-  ASSERT(glGetUniformLocation(tp->shader.gl_handle, "fg_color") != -1);
-  ASSERT(glGetUniformLocation(tp->shader.gl_handle, "bg_color") != -1);
+  tp->shader = shader_init(ARR_ARG(((ShaderSouce[]){
+      {GL_VERTEX_SHADER, STRING_LITERAL_ARG(VERTEX_SHADER)},
+      {GL_FRAGMENT_SHADER, STRING_LITERAL_ARG(FRAGMENT_SHADER)},
+  })));
+
+  ASSERT(glGetUniformLocation(tp->shader.gl, "model_proj") != -1);
+  ASSERT(glGetUniformLocation(tp->shader.gl, "tex_trans") != -1);
+  ASSERT(glGetUniformLocation(tp->shader.gl, "fg_color") != -1);
+  ASSERT(glGetUniformLocation(tp->shader.gl, "bg_color") != -1);
 }
 
 /// Helper function used in `text_painter_new`.
@@ -147,11 +151,11 @@ void text_painter_set_bg_color(TextPainter *tp, const vec4 new_bg_color) {
 
 /// Paint one character.
 void text_paint(TextPainter tp, f32 frame_width, f32 frame_height, vec2 coord, char ch) {
-  auto model_proj = glGetUniformLocation(tp.shader.gl_handle, "model_proj");
-  auto tex_trans = glGetUniformLocation(tp.shader.gl_handle, "tex_trans");
-  auto fg_color = glGetUniformLocation(tp.shader.gl_handle, "fg_color");
-  auto bg_color = glGetUniformLocation(tp.shader.gl_handle, "bg_color");
-  auto the_texture = glGetUniformLocation(tp.shader.gl_handle, "the_texture");
+  auto model_proj = glGetUniformLocation(tp.shader.gl, "model_proj");
+  auto tex_trans = glGetUniformLocation(tp.shader.gl, "tex_trans");
+  auto fg_color = glGetUniformLocation(tp.shader.gl, "fg_color");
+  auto bg_color = glGetUniformLocation(tp.shader.gl, "bg_color");
+  auto the_texture = glGetUniformLocation(tp.shader.gl, "the_texture");
 
   shader_use(tp.shader);
 

@@ -15,4 +15,3 @@ Texture texture_load_from_file(char path[], bool log);
 
 void texture_cleanup(Texture *texture);
 
-
