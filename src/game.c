@@ -332,18 +332,26 @@ static inline void print(GameState *game, vec2 pos, usize length, char s[length]
         DBG_PRINTF("String is cut short after '\\a'\n");
         return;
       }
+      vec4 color = {};
       u8 escape_kind = (u8)s[i + 1];
-      u8 r = 0;
-      r += hex_digit(s[i + 2]) * 16;
-      r += hex_digit(s[i + 3]);
-      u8 g = 0;
-      g += hex_digit(s[i + 4]) * 16;
-      g += hex_digit(s[i + 5]);
-      u8 b = 0;
-      b += hex_digit(s[i + 6]) * 16;
-      b += hex_digit(s[i + 7]);
-      i += 7;
-      vec4 color = {(f32)r / 255.f, (f32)g / 255.f, (f32)b / 255.f};
+      if (s[i + 2] == 'X' || s[i + 2] == 'x') {
+        i += 2;
+      } else {
+        u8 r = 0;
+        r += hex_digit(s[i + 2]) * 16;
+        r += hex_digit(s[i + 3]);
+        u8 g = 0;
+        g += hex_digit(s[i + 4]) * 16;
+        g += hex_digit(s[i + 5]);
+        u8 b = 0;
+        b += hex_digit(s[i + 6]) * 16;
+        b += hex_digit(s[i + 7]);
+        i += 7;
+        color[0] = (f32)r / 255.f;
+        color[1] = (f32)g / 255.f;
+        color[2] = (f32)b / 255.f;
+        color[3] = 1.f;
+      }
       if (escape_kind == 0x01) {
         text_painter_set_fg_color(&game->text_painter, color);
       } else if (escape_kind == 0x02) {
@@ -367,11 +375,11 @@ static inline void print(GameState *game, vec2 pos, usize length, char s[length]
 
 static inline void draw_overlap_text(GameState *game) {
   if (game->is_paused) {
-    string_append(&game->overlap_text,
-                  STRING_LITERAL_ARG(
-                      "\a\001000000\a\002E0E0E0[\a\001FF8000ESC\a\001000000] Game Paused\a\001FFFFFF\a\002303030\n"));
+    string_append(
+        &game->overlap_text,
+        STRING_LITERAL_ARG("\a\001000000\a\002E0E0E0[\a\001FF8000ESC\a\001000000] Game Paused\a\001FFFFFF\a\002X\n"));
   } else {
-    string_append(&game->overlap_text, STRING_LITERAL_ARG("\a\001FFFFFF\a\002303030Cube Game v0.0.0\n"));
+    string_append(&game->overlap_text, STRING_LITERAL_ARG("\a\001FFFFFF\a\002XCube Game v0.0.0\n"));
   }
 
   if (isnan(game->display_fps) || isinf(game->display_fps))
@@ -384,13 +392,13 @@ static inline void draw_overlap_text(GameState *game) {
 
   if (game->is_wireframe_mode) {
     string_append(&game->overlap_text,
-                  STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002303030[\a\001FF8000F3+L\a\001FFFFFF] DEBUG: Wireframe Mode"));
+                  STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002X[\a\001FF8000F3+L\a\001FFFFFF] DEBUG: Wireframe Mode"));
   }
 
   if (game->disable_gl_face_culling) {
-    string_append(&game->overlap_text,
-                  STRING_LITERAL_ARG(
-                      "\n\a\001FFFFFF\a\002303030[\a\001FF8000F3+F\a\001FFFFFF] DEBUG: Disable OpenGL Face Culling"));
+    string_append(
+        &game->overlap_text,
+        STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002X[\a\001FF8000F3+F\a\001FFFFFF] DEBUG: Disable OpenGL Face Culling"));
   }
 
   vec2 pos = {

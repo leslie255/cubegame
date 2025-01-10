@@ -16,7 +16,8 @@ Texture texture_load_from_file(char path[], bool log) {
   auto texture_data = stbi_load(path, (i32 *)&texture.width, (i32 *)&texture.height, (i32 *)&texture.n_channels, 0);
   ASSERT(texture_data != nullptr);
   if (log)
-    printf("Loaded texture, dimension: %dx%d, channels: %d\n", texture.width, texture.height, texture.n_channels);
+    printf("Loaded texture `%s`, dimension: %dx%d, channels: %d\n", path, texture.width, texture.height,
+           texture.n_channels);
   glGenTextures(1, &texture.gl);
   glBindTexture(GL_TEXTURE_2D, texture.gl);
   CHECK_OPENGL_ERROR();

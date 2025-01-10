@@ -67,6 +67,8 @@ static inline void tp_setup_shader(TextPainter *tp) {
       "uniform sampler2D the_texture;\n"
       "void main() {\n"
       "  vec4 sample = texture(the_texture, tex_coord);\n"
+      "  if (sample.a < 0.1f && bg_color.a < 0.1f)\n"
+      "    discard;\n"
       "  frag_color = (sample.a * fg_color) + ((1.f - sample.a) * bg_color);\n"
       "}\n";
 
