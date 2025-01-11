@@ -12,6 +12,7 @@
 #include "text.h"
 #include "texture.h"
 #include "chunk.h"
+#include "mesh.h"
 
 typedef enum cube_face : u8 {
   CubeFace_All = 0b11111111,
@@ -31,9 +32,7 @@ typedef enum cube_face : u8 {
 
 typedef struct cube_painter {
   ShaderProgram shader;
-  GLuint vao;
-  GLuint ebo;
-  GLuint vbo;
+  LoadedMesh cube_mesh;
 } CubePainter;
 
 CubePainter cube_painter_new();

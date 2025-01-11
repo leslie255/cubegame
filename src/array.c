@@ -4,7 +4,7 @@ OpaqueArray array_new_with_capacity(TypeLayout type, usize capacity) {
   return (OpaqueArray){
       .length = 0,
       .capacity = capacity,
-      .items = aligned_alloc(type.align, capacity * type.size),
+      .items = xalloc_(capacity * type.size),
   };
 }
 
@@ -13,8 +13,9 @@ void array_cleanup(TypeLayout type, OpaqueArray *array) {
   xfree(array->items);
 }
 
-OpaqueArray array_from(TypeLayout type, usize length, void *items) {
+OpaqueArray array_from(TypeLayout type, usize length, const void *items) {
   OpaqueArray array = array_new_with_capacity(type, length);
+  array.length = length;
   memcpy(array.items, items, length * type.size);
   return array;
 }

@@ -15,14 +15,26 @@ typedef struct mesh {
 } Mesh;
 
 typedef struct loaded_mesh {
-  Mesh data;
+  Mesh mesh;
   GLuint vao;
   GLuint vbo;
   GLuint ebo;
+  /// Number of vertex attribute pointers.
+  usize n_attrib_pointers;
 } LoadedMesh;
 
-LoadedMesh load_mesh(Mesh mesh);
+typedef struct vertex_attrib_format {
+  i32 size;
+  GLenum type;
+  bool normalized;
+  i32 stride;
+  i32 offset;
+} VertexAttribFormat;
+
+LoadedMesh load_mesh(Mesh mesh, usize n_attrib_pointers, const VertexAttribFormat attrib_pointers[n_attrib_pointers]);
+
+void mesh_draw(LoadedMesh mesh);
 
 void reload_mesh(LoadedMesh *loaded_mesh);
 
-void unload_mesh(LoadedMesh *loaded_mesh);
+void loaded_mesh_cleanup(LoadedMesh *loaded_mesh);

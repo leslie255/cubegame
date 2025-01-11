@@ -48,7 +48,7 @@ static inline f32 absf(f32 f) {
     (x < y) ? x : y;                                                                                                   \
   })
 
-#define MARK_USED(X) ((void)(sizeof(X))) // `sizeof` to prevent evaluation.
+#define MARK_USED(X) ((void)(X))
 
 #define PUT_ON_HEAP(X) ((typeof(X) *restrict)memcpy(malloc(sizeof(X)), &X, sizeof(X)))
 

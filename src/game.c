@@ -3,11 +3,12 @@
 #include "text.h"
 #include "atlas.h"
 #include "block.h"
+#include "mesh.h"
 
 constexpr f32 CAMERA_INIT_PITCH = 0.f;
 constexpr f32 CAMERA_INIT_YAW = -90.f;
 
-static constexpr GLfloat vertices[] = {
+static constexpr GLfloat CUBE_VERTICES[] = {
     0.f, 0.f, 0.f, 0.0f, 1.f, // A 0
     1.f, 0.f, 0.f, 1.0f, 1.f, // B 1
     1.f, 1.f, 0.f, 1.0f, 0.f, // C 2
@@ -34,14 +35,18 @@ static constexpr GLfloat vertices[] = {
     1.f, 1.f, 1.f, 0.0f, 0.f, // G 23
 };
 
-// index data
-static constexpr GLuint indices[] = {
-    0, 3, 2, //
-    2, 1, 0, //
-    4, 5, 6, //
-    6, 7, 4, //
-    11, 8, 9,   //
-    9, 10, 11,  //
+static constexpr VertexAttribFormat CUBE_VERTICES_FORMAT[] = {
+    {.size = 3, .type = GL_FLOAT, .normalized = false, .stride = sizeof(f32[5]), .offset = 0},
+    {.size = 2, .type = GL_FLOAT, .normalized = false, .stride = sizeof(f32[5]), .offset = sizeof(f32[3])},
+};
+
+static constexpr GLuint CUBE_INDICES[] = {
+    0,  3,  2,  //
+    2,  1,  0,  //
+    4,  5,  6,  //
+    6,  7,  4,  //
+    11, 8,  9,  //
+    9,  10, 11, //
     12, 13, 14, //
     14, 15, 12, //
     16, 17, 18, //
@@ -49,6 +54,29 @@ static constexpr GLuint indices[] = {
     20, 21, 22, //
     22, 23, 20, //
 };
+
+constexpr char VERTEX_SHADER[] = //
+    "#version 330 core\n"
+    "layout (location = 0) in vec3 the_pos;\n"
+    "layout (location = 1) in vec2 in_tex_coord;\n"
+    "uniform mat3 tex_trans;\n"
+    "out vec2 vert_tex_coord;\n"
+    "uniform mat4 model;\n"
+    "uniform mat4 view;\n"
+    "uniform mat4 proj;\n"
+    "void main() {\n"
+    "  gl_Position = proj * view * model * vec4(the_pos, 1.f);\n"
+    "  vert_tex_coord = (tex_trans * vec3(in_tex_coord, 1.f)).xy;\n"
+    "}\n";
+
+constexpr char FRAGMENT_SHADER[] = //
+    "#version 330 core\n"
+    "in vec2 vert_tex_coord;\n"
+    "out vec4 frag_color;\n"
+    "uniform sampler2D the_texture;\n"
+    "void main() {\n"
+    "  frag_color = texture(the_texture, vert_tex_coord);\n"
+    "}\n";
 
 #define CHECK_OPENGL_ERROR()                                                                                           \
   ({                                                                                                                   \
@@ -58,78 +86,24 @@ static constexpr GLuint indices[] = {
   })
 
 CubePainter cube_painter_new() {
-  constexpr char VERTEX_SHADER[] = //
-      "#version 330 core\n"
-      "layout (location = 0) in vec3 the_pos;\n"
-      "layout (location = 1) in vec2 in_tex_coord;\n"
-      "uniform mat3 tex_trans;\n"
-      "out vec2 vert_tex_coord;\n"
-      "uniform mat4 model;\n"
-      "uniform mat4 view;\n"
-      "uniform mat4 proj;\n"
-      "void main() {\n"
-      "  gl_Position = proj * view * model * vec4(the_pos, 1.f);\n"
-      "  vert_tex_coord = (tex_trans * vec3(in_tex_coord, 1.f)).xy;\n"
-      "}\n";
-
-  constexpr char FRAGMENT_SHADER[] = //
-      "#version 330 core\n"
-      "in vec2 vert_tex_coord;\n"
-      "out vec4 frag_color;\n"
-      "uniform sampler2D the_texture;\n"
-      "void main() {\n"
-      "  frag_color = texture(the_texture, vert_tex_coord);\n"
-      "}\n";
 
   CubePainter cp = {};
   cp.shader = shader_init(ARR_ARG(((ShaderSouce[]){
       {GL_VERTEX_SHADER, STRING_LITERAL_ARG(VERTEX_SHADER)},
-      // {GL_GEOMETRY_SHADER, STRING_LITERAL_ARG(GEOMETRY_SHADER)},
       {GL_FRAGMENT_SHADER, STRING_LITERAL_ARG(FRAGMENT_SHADER)},
   })));
 
-  // VAO.
-  glGenVertexArrays(1, &cp.vao);
-  glBindVertexArray(cp.vao);
-
-  // EBO.
-  GLuint ebo;
-  glGenBuffers(1, &ebo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-  cp.ebo = ebo;
-
-  // VBO.
-  GLuint vbo;
-  // VBO.
-  glGenBuffers(1, &vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-  glVertexAttribPointer(
-      /* location    */ 0,
-      /* size (vec3) */ 3,
-      /* type        */ GL_FLOAT,
-      /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(f32[5]),
-      /* offset      */ nullptr);
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(
-      /* location    */ 1,
-      /* size (vec3) */ 2,
-      /* type        */ GL_FLOAT,
-      /* normalized? */ GL_FALSE,
-      /* stride      */ sizeof(f32[5]),
-      /* offset      */ (void *)sizeof(f32[3]));
-  glEnableVertexAttribArray(1);
-  cp.vbo = vbo;
+  Mesh cube_mesh = {
+      .vertices = vertices_array_from(ARR_ARG(CUBE_VERTICES)),
+      .indices = indices_array_from(ARR_ARG(CUBE_INDICES)),
+  };
+  cp.cube_mesh = load_mesh(cube_mesh, ARR_ARG(CUBE_VERTICES_FORMAT));
 
   return cp;
 }
 
 void cube_painter_cleanup(CubePainter *cp) {
-  glDeleteVertexArrays(1, &cp->vao);
-  glDeleteBuffers(1, &cp->vbo);
-  glDeleteBuffers(1, &cp->ebo);
+  loaded_mesh_cleanup(&cp->cube_mesh);
 }
 
 SET_UNIFORM_FUNC(model, mat4);
@@ -158,6 +132,10 @@ void cube_paint( //
 
   shader_use(cp->shader);
 
+  glm_mat4_identity(model_mat);
+  glm_translated(model_mat, coord);
+  set_uniform_model(cp->shader, model_mat);
+
   set_uniform_tex_trans(cp->shader, tex_trans_mat);
   set_uniform_view(cp->shader, view_mat);
   set_uniform_proj(cp->shader, proj_mat);
@@ -165,16 +143,7 @@ void cube_paint( //
   glActiveTexture(GL_TEXTURE0);
   glUniform1i(glGetUniformLocation(cp->shader.gl, "the_texture"), 0);
 
-  glBindVertexArray(cp->vao);
-
-  glm_mat4_identity(model_mat);
-  glm_translated(model_mat, coord);
-  set_uniform_model(cp->shader, model_mat);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cp->ebo);
-  glBindBuffer(GL_ARRAY_BUFFER, cp->vbo);
-  glEnableVertexAttribArray(0);
-  glEnableVertexAttribArray(1);
-  glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, nullptr);
+  mesh_draw(cp->cube_mesh);
 }
 
 GameState *game_init() {

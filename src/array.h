@@ -19,7 +19,7 @@ OpaqueArray array_new_with_capacity(TypeLayout type, usize capacity);
 
 void array_cleanup(TypeLayout type, OpaqueArray *array);
 
-OpaqueArray array_from(TypeLayout type, usize length, void *items);
+OpaqueArray array_from(TypeLayout type, usize length, const void *items);
 
 OpaqueArray array_clone(TypeLayout type, OpaqueArray array);
 
@@ -66,7 +66,7 @@ void array_remove(TypeLayout type, OpaqueArray *array, usize index);
   }                                                                                                                    \
                                                                                                                        \
   [[gnu::flatten]]                                                                                                     \
-  static inline CamelCaseName snake_case_name##_from(usize length, void *items) {                                      \
+  static inline CamelCaseName snake_case_name##_from(usize length, const TYPE *items) {                                \
     return ARRAY_DOWNCAST(CamelCaseName, array_from(TYPE_LAYOUT(TYPE), length, items));                                \
   }                                                                                                                    \
                                                                                                                        \
