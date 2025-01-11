@@ -36,10 +36,7 @@ void string_cleanup(String *string) {
 }
 
 static inline void realloc_the_string(String *string, usize new_capacity) {
-  if (string->buffer == nullptr)
-    string->buffer = xalloc(char, new_capacity);
-  else
-    string->buffer = xrealloc(string->buffer, char, new_capacity);
+  string->buffer = xrealloc(string->buffer, char, new_capacity);
   string->capacity = new_capacity;
 }
 

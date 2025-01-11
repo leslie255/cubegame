@@ -48,7 +48,7 @@ static inline f32 absf(f32 f) {
     (x < y) ? x : y;                                                                                                   \
   })
 
-#define MARK_USED(X) ({ [[maybe_unused]] auto _ = (X); })
+#define MARK_USED(X) ((void)(sizeof(X))) // `sizeof` to prevent evaluation.
 
 #define PUT_ON_HEAP(X) ((typeof(X) *restrict)memcpy(malloc(sizeof(X)), &X, sizeof(X)))
 
@@ -128,7 +128,11 @@ constexpr bool IS_DEBUG_MODE = false;
     x;                                                                                                                 \
   })
 
-#define PTR_CAST(TY, X) (*(TY *)&(X))
+#define PTR_CAST(TY, X)                                                                                                \
+  ({                                                                                                                   \
+    auto X_ = X;                                                                                                       \
+    *(TY *)&X_;                                                                                                        \
+  })
 
 #define FIXME(...) (printf("[%s@%s:%d] FIXME:", __FUNCTION__, __FILE__, __LINE__), printf(__VA_ARGS__), printf("\n"))
 

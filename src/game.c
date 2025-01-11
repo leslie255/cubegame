@@ -7,6 +7,49 @@
 constexpr f32 CAMERA_INIT_PITCH = 0.f;
 constexpr f32 CAMERA_INIT_YAW = -90.f;
 
+static constexpr GLfloat vertices[] = {
+    0.f, 0.f, 0.f, 0.0f, 1.f, // A 0
+    1.f, 0.f, 0.f, 1.0f, 1.f, // B 1
+    1.f, 1.f, 0.f, 1.0f, 0.f, // C 2
+    0.f, 1.f, 0.f, 0.0f, 0.f, // D 3
+    0.f, 0.f, 1.f, 0.0f, 1.f, // E 4
+    1.f, 0.f, 1.f, 1.0f, 1.f, // F 5
+    1.f, 1.f, 1.f, 1.0f, 0.f, // G 6
+    0.f, 1.f, 1.f, 0.0f, 0.f, // H 7
+    0.f, 1.f, 0.f, 0.0f, 0.f, // D 8
+    0.f, 0.f, 0.f, 1.0f, 0.f, // A 9
+    0.f, 0.f, 1.f, 1.0f, 1.f, // E 10
+    0.f, 1.f, 1.f, 0.0f, 1.f, // H 11
+    1.f, 0.f, 0.f, 0.0f, 0.f, // B 12
+    1.f, 1.f, 0.f, 1.0f, 0.f, // C 13
+    1.f, 1.f, 1.f, 1.0f, 1.f, // G 14
+    1.f, 0.f, 1.f, 0.0f, 1.f, // F 15
+    0.f, 0.f, 0.f, 0.0f, 1.f, // A 16
+    1.f, 0.f, 0.f, 1.0f, 1.f, // B 17
+    1.f, 0.f, 1.f, 1.0f, 0.f, // F 18
+    0.f, 0.f, 1.f, 0.0f, 0.f, // E 19
+    1.f, 1.f, 0.f, 0.0f, 1.f, // C 20
+    0.f, 1.f, 0.f, 1.0f, 1.f, // D 21
+    0.f, 1.f, 1.f, 1.0f, 0.f, // H 22
+    1.f, 1.f, 1.f, 0.0f, 0.f, // G 23
+};
+
+// index data
+static constexpr GLuint indices[] = {
+    0, 3, 2, //
+    2, 1, 0, //
+    4, 5, 6, //
+    6, 7, 4, //
+    11, 8, 9,   //
+    9, 10, 11,  //
+    12, 13, 14, //
+    14, 15, 12, //
+    16, 17, 18, //
+    18, 19, 16, //
+    20, 21, 22, //
+    22, 23, 20, //
+};
+
 #define CHECK_OPENGL_ERROR()                                                                                           \
   ({                                                                                                                   \
     GLenum err = glGetError();                                                                                         \
@@ -15,53 +58,6 @@ constexpr f32 CAMERA_INIT_YAW = -90.f;
   })
 
 CubePainter cube_painter_new() {
-  GLfloat vertices[] = {
-      0.f, 0.f, 0.f, 0.0f, 1.f, // A 0
-      1.f, 0.f, 0.f, 1.0f, 1.f, // B 1
-      1.f, 1.f, 0.f, 1.0f, 0.f, // C 2
-      0.f, 1.f, 0.f, 0.0f, 0.f, // D 3
-      0.f, 0.f, 1.f, 0.0f, 1.f, // E 4
-      1.f, 0.f, 1.f, 1.0f, 1.f, // F 5
-      1.f, 1.f, 1.f, 1.0f, 0.f, // G 6
-      0.f, 1.f, 1.f, 0.0f, 0.f, // H 7
-      0.f, 1.f, 0.f, 0.0f, 0.f, // D 8
-      0.f, 0.f, 0.f, 1.0f, 0.f, // A 9
-      0.f, 0.f, 1.f, 1.0f, 1.f, // E 10
-      0.f, 1.f, 1.f, 0.0f, 1.f, // H 11
-      1.f, 0.f, 0.f, 0.0f, 0.f, // B 12
-      1.f, 1.f, 0.f, 1.0f, 0.f, // C 13
-      1.f, 1.f, 1.f, 1.0f, 1.f, // G 14
-      1.f, 0.f, 1.f, 0.0f, 1.f, // F 15
-      0.f, 0.f, 0.f, 0.0f, 1.f, // A 16
-      1.f, 0.f, 0.f, 1.0f, 1.f, // B 17
-      1.f, 0.f, 1.f, 1.0f, 0.f, // F 18
-      0.f, 0.f, 1.f, 0.0f, 0.f, // E 19
-      1.f, 1.f, 0.f, 0.0f, 1.f, // C 20
-      0.f, 1.f, 0.f, 1.0f, 1.f, // D 21
-      0.f, 1.f, 1.f, 1.0f, 0.f, // H 22
-      1.f, 1.f, 1.f, 0.0f, 0.f, // G 23
-  };
-  // index data
-  GLuint indices[] = {
-      // front and back
-      0, 3, 2, //
-      2, 1, 0, //
-      4, 5, 6, //
-      6, 7, 4, //
-
-      // left and right
-      11, 8, 9,   //
-      9, 10, 11,  //
-      12, 13, 14, //
-      14, 15, 12, //
-
-      // // bottom and top
-      16, 17, 18, //
-      18, 19, 16, //
-      20, 21, 22, //
-      22, 23, 20, //
-  };
-
   constexpr char VERTEX_SHADER[] = //
       "#version 330 core\n"
       "layout (location = 0) in vec3 the_pos;\n"
@@ -216,9 +212,21 @@ GameState *game_init() {
   memset(game->test_chunk->blocks, 0, sizeof(game->test_chunk->blocks));
   for (usize z = 0; z < 32; ++z) {
     for (usize x = 0; x < 32; ++x) {
+      game->test_chunk->blocks[0][z][x].id = BLOCKID_STONE;
+      game->test_chunk->blocks[1][z][x].id = BLOCKID_STONE;
+      game->test_chunk->blocks[2][z][x].id = BLOCKID_DIRT;
       BlockId block_id = (z < 16 && x < 8) ? BLOCKID_GRASS : BLOCKID_DIRT;
-      game->test_chunk->blocks[0][z][x].id = block_id;
+      game->test_chunk->blocks[3][z][x].id = block_id;
+      if (x == 8 && 5 <= z && z <= 7)
+        game->test_chunk->blocks[4][z][x].id = BLOCKID_GRASS;
     }
+  }
+  game->test_chunk->blocks[31][4][16].id = BLOCKID_TEST;
+  for (usize y = 0; y < 32; ++y) {
+    game->test_chunk->blocks[y][31][31].id = BLOCKID_TEST;
+    game->test_chunk->blocks[y][0][31].id = BLOCKID_TEST;
+    game->test_chunk->blocks[y][31][0].id = BLOCKID_TEST;
+    game->test_chunk->blocks[y][0][0].id = BLOCKID_TEST;
   }
 
   glEnable(GL_CULL_FACE);
