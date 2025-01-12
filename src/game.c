@@ -1,7 +1,6 @@
 #include "game.h"
 #include "debug_utils.h"
 #include "text.h"
-#include "atlas.h"
 #include "block.h"
 #include "mesh.h"
 
@@ -12,14 +11,13 @@ constexpr char VERTEX_SHADER[] = //
     "#version 330 core\n"
     "layout (location = 0) in vec3 the_pos;\n"
     "layout (location = 1) in vec2 in_tex_coord;\n"
-    "uniform mat3 tex_trans;\n"
     "out vec2 vert_tex_coord;\n"
     "uniform mat4 model;\n"
     "uniform mat4 view;\n"
     "uniform mat4 proj;\n"
     "void main() {\n"
     "  gl_Position = proj * view * model * vec4(the_pos, 1.f);\n"
-    "  vert_tex_coord = (tex_trans * vec3(in_tex_coord, 1.f)).xy;\n"
+    "  vert_tex_coord = vec3(in_tex_coord, 1.f).xy;\n"
     "}\n";
 
 constexpr char FRAGMENT_SHADER[] = //
@@ -41,7 +39,6 @@ constexpr char FRAGMENT_SHADER[] = //
 SET_UNIFORM_FUNC(model, mat4);
 SET_UNIFORM_FUNC(view, mat4);
 SET_UNIFORM_FUNC(proj, mat4);
-SET_UNIFORM_FUNC(tex_trans, mat3);
 
 GameState *game_init() {
   auto game = xalloc(GameState, 1);
@@ -80,35 +77,36 @@ GameState *game_init() {
   game->test_chunk = chunk_alloc();
   memset(game->test_chunk->blocks, 0, sizeof(game->test_chunk->blocks));
 
-  // game->test_chunk->blocks[31][31][31].id = BLOCKID_TEST;
+  game->test_chunk->blocks[0][0][0].id = BlockId_GRASS;
 
   for (usize z = 0; z < 32; ++z) {
     for (usize x = 0; x < 32; ++x) {
-      game->test_chunk->blocks[0][z][x].id = BLOCKID_STONE;
-      game->test_chunk->blocks[1][z][x].id = BLOCKID_STONE;
-      game->test_chunk->blocks[2][z][x].id = BLOCKID_DIRT;
-      BlockId block_id = (z < 16 && x < 8) ? BLOCKID_GRASS : BLOCKID_DIRT;
+      game->test_chunk->blocks[0][z][x].id = BlockId_STONE;
+      game->test_chunk->blocks[1][z][x].id = BlockId_STONE;
+      game->test_chunk->blocks[2][z][x].id = BlockId_DIRT;
+      BlockId block_id = (z < 16 && x < 8) ? BlockId_GRASS : BlockId_DIRT;
       game->test_chunk->blocks[3][z][x].id = block_id;
       if (x == 8 && 5 <= z && z <= 7)
-        game->test_chunk->blocks[4][z][x].id = BLOCKID_GRASS;
+        game->test_chunk->blocks[4][z][x].id = BlockId_GRASS;
     }
   }
-  game->test_chunk->blocks[31][4][16].id = BLOCKID_TEST;
-  for (usize y = 0; y < 32; ++y) {
-    for (usize z = 0; z < 32; ++z) {
-      for (usize x = 0; x < 32; ++x) {
-        auto is_edge_x = x == 0 || x == 31;
-        auto is_edge_y = y == 0 || y == 31;
-        auto is_edge_z = z == 0 || z == 31;
-        if ((is_edge_x && is_edge_y) || (is_edge_y && is_edge_z) || (is_edge_z && is_edge_x))
-          game->test_chunk->blocks[y][z][x].id = BLOCKID_TEST;
+
+  for (u32 y = 7; y <= 10; ++y) {
+    for (u32 z = 3; z <= 5; ++z) {
+      for (u32 x = 3; x <= 5; ++x) {
+        game->test_chunk->blocks[y][z][x].id = BlockId_LEAVES;
       }
     }
+  }
+
+  for (u32 y = 4; y< 9;++y) {
+        game->test_chunk->blocks[y][4][4].id = BlockId_LOG;
   }
 
   game->chunk_builder = chunk_builder_new(game->texture_atlas);
   game->chunk_mesh = mesh_init((VerticesArray){}, (IndicesArray){}, (VertexAttribFormatArray){});
   build_chunk(&game->chunk_builder, &game->chunk_mesh, game->test_chunk, game->texture_atlas);
+  // fprint_mesh_data(stdout, game->chunk_mesh);
 
   glEnable(GL_CULL_FACE);
   glCullFace(GL_BACK);
@@ -309,6 +307,7 @@ static inline void draw_overlap_text(GameState *game) {
 
   if (isnan(game->display_fps) || isinf(game->display_fps))
     string_snprintf(&game->overlap_text, 64, "FPS ---.--\n");
+
   else
     string_snprintf(&game->overlap_text, 64, "FPS: %.2lf\n", game->display_fps);
 
@@ -352,22 +351,23 @@ void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   glClearColor(.1f, .1f, .1f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  mat4 model_mat = {};
+  shader_use(game->shader);
+
+  mat4 model_mat = GLM_MAT4_IDENTITY;
+  set_uniform_model(game->shader, model_mat);
+
   mat4 view_mat = {};
   camera_view_mat(game->camera, view_mat);
+  set_uniform_view(game->shader, view_mat);
+
   mat4 proj_mat = {};
   camera_proj_mat(game->camera, game->frame_width / game->frame_height, proj_mat);
-  mat3 tex_trans_mat = {};
-  atlas_mat(game->texture_atlas.width, game->texture_atlas.height, 0, 0, 16, 16, tex_trans_mat);
-  shader_use(game->shader);
-  glm_mat4_identity(model_mat);
-  set_uniform_model(game->shader, model_mat);
-  set_uniform_tex_trans(game->shader, tex_trans_mat);
-  set_uniform_view(game->shader, view_mat);
   set_uniform_proj(game->shader, proj_mat);
+
   glBindTexture(GL_TEXTURE_2D, game->texture_atlas.gl);
   glActiveTexture(GL_TEXTURE0);
   glUniform1i(glGetUniformLocation(game->shader.gl, "the_texture"), 0);
+
   mesh_draw(game->chunk_mesh);
 
   draw_overlap_text(game);

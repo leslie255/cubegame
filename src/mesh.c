@@ -100,6 +100,8 @@ void mesh_cleanup(Mesh *mesh) {
 }
 
 void mesh_draw(Mesh mesh) {
-  glBindVertexArray(mesh.vao);
-  glDrawElements(GL_TRIANGLES, (GLsizei)mesh.indices.length, GL_UNSIGNED_INT, nullptr);
+  if (mesh.vao != 0) {
+    glBindVertexArray(mesh.vao);
+    glDrawElements(GL_TRIANGLES, (GLsizei)mesh.indices.length, GL_UNSIGNED_INT, nullptr);
+  }
 }

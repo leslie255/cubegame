@@ -22,20 +22,10 @@ void chunk_cleanup(ChunkData **chunk);
 typedef struct quad {
   vec3 coord;
   vec2 size;
-  u32 texture_x;
-  u32 texture_y;
+  BlockTexture texture;
 } Quad;
 
 DEF_ARRAY(QuadArray, quad_array, Quad);
-
-typedef enum cube_direction : usize {
-  Direction_North = 0,
-  Direction_South,
-  Direction_East,
-  Direction_West,
-  Direction_Up,
-  Direction_Down,
-} CubeDirection;
 
 /// State used for chunk building.
 typedef struct chunk_builder {

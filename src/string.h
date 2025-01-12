@@ -4,6 +4,19 @@
 
 constexpr usize STRING_INIT_CAPACITY = 64;
 
+typedef struct static_string {
+  usize length;
+  /// Must have a trailing `'\0'` past `length`.
+  const char *string;
+} StaticString;
+
+/// Define a `StaticString` with a literal.
+#define STATIC_STRING(S)                                                                                               \
+  ((StaticString){                                                                                                     \
+      .length = sizeof(S),                                                                                             \
+      .string = S,                                                                                                     \
+  })
+
 typedef struct string {
   usize capacity;
   usize length;
