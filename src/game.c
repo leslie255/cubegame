@@ -182,14 +182,6 @@ GameState *game_init() {
 
   // game->test_chunk->blocks[31][31][31].id = BLOCKID_TEST;
 
-  // for (usize y = 0; y < 32; ++y) {
-  //   for (usize z = 0; z < 32; ++z) {
-  //     for (usize x = 0; x < 32; ++x) {
-  //       game->test_chunk->blocks[y][z][x].id = BLOCKID_TEST;
-  //     }
-  //   }
-  // }
-
   for (usize z = 0; z < 32; ++z) {
     for (usize x = 0; x < 32; ++x) {
       game->test_chunk->blocks[0][z][x].id = BLOCKID_STONE;
@@ -214,10 +206,9 @@ GameState *game_init() {
     }
   }
 
-  game->chunk_builder = chunk_builder_new();
+  game->chunk_builder = chunk_builder_new(game->texture_atlas);
   game->chunk_mesh = mesh_init((VerticesArray){}, (IndicesArray){}, (VertexAttribFormatArray){});
   build_chunk(&game->chunk_builder, &game->chunk_mesh, game->test_chunk, game->texture_atlas);
-  // fprint_mesh_data(stdout, game->chunk_mesh);
 
   glEnable(GL_CULL_FACE);
   glCullFace(GL_BACK);

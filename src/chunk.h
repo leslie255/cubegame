@@ -41,10 +41,10 @@ typedef enum cube_direction : usize {
 typedef struct chunk_builder {
   /// Indexed with `CubeDirection`.
   QuadArray quads[6];
-  Texture texture;
+  Texture texture_atlas;
 } ChunkBuilder;
 
-ChunkBuilder chunk_builder_new();
+ChunkBuilder chunk_builder_new(Texture texture_atlas);
 
 void chunk_builder_cleanup(ChunkBuilder *cb);
 

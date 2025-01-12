@@ -1,4 +1,5 @@
 #include "chunk.h"
+#include "atlas.h"
 
 static constexpr GLfloat CUBE_VERTICES[] = {
     0.f, 0.f, 0.f, 0.0f, 0.f, // A 0
@@ -46,9 +47,10 @@ void chunk_cleanup(ChunkData **chunk) {
     *chunk = nullptr;
 }
 
-ChunkBuilder chunk_builder_new() {
+ChunkBuilder chunk_builder_new(Texture texture_atlas) {
   return (ChunkBuilder){
       .quads = {},
+      .texture_atlas = texture_atlas,
   };
 }
 
@@ -57,14 +59,21 @@ void chunk_builder_cleanup(ChunkBuilder *cb) {
     quad_array_cleanup(&cb->quads[i]);
 }
 
-static inline void add_face(Mesh *mesh, Quad quad, const u32 face_indices[6]) {
+static inline void add_face(ChunkBuilder *chunk_builder, Mesh *mesh, Quad quad, const u32 face_indices[6]) {
+  vec2 texture_coord;
+  atlas_normalize(                         //
+      chunk_builder->texture_atlas.width,  //
+      chunk_builder->texture_atlas.height, //
+      quad.texture_x * 16,                 //
+      quad.texture_y * 16,                 //
+      texture_coord);
   auto old_length = (u32)mesh->vertices.length / 5;
   for (usize i = 0; i < 6; ++i) {
     vertices_array_push(&mesh->vertices, CUBE_VERTICES[face_indices[i] * 5 + 0] + quad.coord[0]);
     vertices_array_push(&mesh->vertices, CUBE_VERTICES[face_indices[i] * 5 + 1] + quad.coord[1]);
     vertices_array_push(&mesh->vertices, CUBE_VERTICES[face_indices[i] * 5 + 2] + quad.coord[2]);
-    vertices_array_push(&mesh->vertices, CUBE_VERTICES[face_indices[i] * 5 + 3]);
-    vertices_array_push(&mesh->vertices, CUBE_VERTICES[face_indices[i] * 5 + 4]);
+    vertices_array_push(&mesh->vertices, CUBE_VERTICES[face_indices[i] * 5 + 3] + texture_coord[0]);
+    vertices_array_push(&mesh->vertices, CUBE_VERTICES[face_indices[i] * 5 + 4] + texture_coord[1]);
   }
   indices_array_push(&mesh->indices, old_length + 0);
   indices_array_push(&mesh->indices, old_length + 1);
@@ -75,12 +84,9 @@ static inline void add_face(Mesh *mesh, Quad quad, const u32 face_indices[6]) {
 }
 
 /// Assembles quads of one direction into a mesh.
-static inline void assemble_quads( //
-    Mesh *mesh,                    //
-    QuadArray quads,               //
-    const u32 face_indices[6]) {
+static inline void assemble_quads(ChunkBuilder *chunk_builder, Mesh *mesh, QuadArray quads, const u32 face_indices[6]) {
   for (usize i_quad = 0; i_quad < quads.length; ++i_quad) {
-    add_face(mesh, quads.items[i_quad], face_indices);
+    add_face(chunk_builder, mesh, quads.items[i_quad], face_indices);
   }
 }
 
@@ -103,7 +109,7 @@ static inline bool has_solid_neighbor(const ChunkData *chunk_data, u32 x, u32 y,
 }
 
 void build_chunk(ChunkBuilder *chunk_builder, Mesh *mesh, const ChunkData *chunk_data, Texture texture) {
-  chunk_builder->texture = texture;
+  chunk_builder->texture_atlas = texture;
   for (u32 y = 0; y < 32; ++y) {
     for (u32 z = 0; z < 32; ++z) {
       for (u32 x = 0; x < 32; ++x) {
@@ -129,7 +135,7 @@ void build_chunk(ChunkBuilder *chunk_builder, Mesh *mesh, const ChunkData *chunk
   vertex_attrib_format_array_append(&mesh->vertex_attrib_pointers, ARR_ARG(CUBE_VERTICES_FORMAT));
 
   for (usize i = 0; i < 6; ++i) {
-    assemble_quads(mesh, chunk_builder->quads[i], CUBE_INDICES[i]);
+    assemble_quads(chunk_builder, mesh, chunk_builder->quads[i], CUBE_INDICES[i]);
   }
 
   mesh_update(mesh);
