@@ -30,15 +30,6 @@ typedef enum cube_face : u8 {
   CubeFace_West = 0b100000,
 } CubeFace;
 
-typedef struct cube_painter {
-  ShaderProgram shader;
-  Mesh cube_mesh;
-} CubePainter;
-
-CubePainter cube_painter_new();
-
-void cube_painter_cleanup(CubePainter *cp);
-
 typedef struct game_state {
   /// Texture object used for the test square.
   Texture test_texture;
@@ -51,7 +42,7 @@ typedef struct game_state {
   f32 camera_yaw;
   Camera camera;
 
-  CubePainter cube_painter;
+  ShaderProgram shader;
 
   ChunkData *test_chunk;
   Mesh chunk_mesh;
@@ -92,12 +83,3 @@ void game_key_callback(void *gam_, Window *window, int key, int scancode, int ac
 void game_update_events(GameState *game, Window *window, f64 frame_time);
 
 void game_frame(GameState *game, f32 frame_width, f32 frame_height);
-
-void cube_paint( //
-    CubePainter *cp,
-    GameState *game,
-    vec3 coord,
-    CubeFace faces,
-    Texture texture,
-    u32 offset_x,
-    u32 offset_y);

@@ -8,54 +8,6 @@
 constexpr f32 CAMERA_INIT_PITCH = 0.f;
 constexpr f32 CAMERA_INIT_YAW = -90.f;
 
-static constexpr GLfloat CUBE_VERTICES[] = {
-    0.f, 0.f, 0.f, 0.0f, 0.f, // A 0
-    1.f, 0.f, 0.f, 1.0f, 0.f, // B 1
-    1.f, 1.f, 0.f, 1.0f, 1.f, // C 2
-    0.f, 1.f, 0.f, 0.0f, 1.f, // D 3
-    0.f, 0.f, 1.f, 0.0f, 0.f, // E 4
-    1.f, 0.f, 1.f, 1.0f, 0.f, // F 5
-    1.f, 1.f, 1.f, 1.0f, 1.f, // G 6
-    0.f, 1.f, 1.f, 0.0f, 1.f, // H 7
-    0.f, 1.f, 0.f, 0.0f, 1.f, // D 8
-    0.f, 0.f, 0.f, 1.0f, 1.f, // A 9
-    0.f, 0.f, 1.f, 1.0f, 0.f, // E 10
-    0.f, 1.f, 1.f, 0.0f, 0.f, // H 11
-    1.f, 0.f, 0.f, 0.0f, 1.f, // B 12
-    1.f, 1.f, 0.f, 1.0f, 1.f, // C 13
-    1.f, 1.f, 1.f, 1.0f, 0.f, // G 14
-    1.f, 0.f, 1.f, 0.0f, 0.f, // F 15
-    0.f, 0.f, 0.f, 0.0f, 0.f, // A 16
-    1.f, 0.f, 0.f, 1.0f, 0.f, // B 17
-    1.f, 0.f, 1.f, 1.0f, 1.f, // F 18
-    0.f, 0.f, 1.f, 0.0f, 1.f, // E 19
-    1.f, 1.f, 0.f, 0.0f, 0.f, // C 20
-    0.f, 1.f, 0.f, 1.0f, 0.f, // D 21
-    0.f, 1.f, 1.f, 1.0f, 1.f, // H 22
-    1.f, 1.f, 1.f, 0.0f, 1.f, // G 23
-};
-
-static constexpr VertexAttribFormat CUBE_VERTICES_FORMAT[] = {
-    {.size = 3, .type = GL_FLOAT, .normalized = false, .stride = sizeof(f32[5]), .offset = 0},
-    {.size = 2, .type = GL_FLOAT, .normalized = false, .stride = sizeof(f32[5]), .offset = sizeof(f32[3])},
-};
-
-static constexpr GLuint CUBE_INDICES[] = {
-    // North
-    0, 3, 2, 2, 1, 0,
-    // South
-    4, 5, 6, 6, 7, 4,
-    // West
-    11, 8, 9, 9, 10, 11,
-    // East
-    12, 13, 14, 14, 15, 12,
-    // Down
-    16, 17, 18, 18, 19, 16,
-    // Up
-    20, 21, 22, 22, 23, 20,
-    //
-};
-
 constexpr char VERTEX_SHADER[] = //
     "#version 330 core\n"
     "layout (location = 0) in vec3 the_pos;\n"
@@ -86,65 +38,10 @@ constexpr char FRAGMENT_SHADER[] = //
       DBG_PRINTF("OpenGL error: %d\n", err);                                                                           \
   })
 
-CubePainter cube_painter_new() {
-
-  CubePainter cp = {};
-  cp.shader = shader_init(ARR_ARG(((ShaderSouce[]){
-      {GL_VERTEX_SHADER, STRING_LITERAL_ARG(VERTEX_SHADER)},
-      {GL_FRAGMENT_SHADER, STRING_LITERAL_ARG(FRAGMENT_SHADER)},
-  })));
-
-  auto cube_vertices = vertices_array_from(ARR_ARG(CUBE_VERTICES));
-  auto cube_indices = indices_array_from(ARR_ARG(CUBE_INDICES));
-  auto vertices_format = vertex_attrib_format_array_from(ARR_ARG(CUBE_VERTICES_FORMAT));
-  cp.cube_mesh = mesh_init(cube_vertices, cube_indices, vertices_format);
-
-  return cp;
-}
-
-void cube_painter_cleanup(CubePainter *cp) {
-  mesh_cleanup(&cp->cube_mesh);
-}
-
 SET_UNIFORM_FUNC(model, mat4);
 SET_UNIFORM_FUNC(view, mat4);
 SET_UNIFORM_FUNC(proj, mat4);
 SET_UNIFORM_FUNC(tex_trans, mat3);
-
-void cube_paint( //
-    CubePainter *cp,
-    GameState *game,
-    vec3 coord,
-    CubeFace faces,
-    Texture texture,
-    u32 offset_x,
-    u32 offset_y) {
-  MARK_USED(faces);
-
-  mat4 model_mat = {};
-  mat4 view_mat = {};
-  camera_view_mat(game->camera, view_mat);
-  mat4 proj_mat = {};
-  camera_proj_mat(game->camera, game->frame_width / game->frame_height, proj_mat);
-
-  mat3 tex_trans_mat = {};
-  atlas_mat(texture.width, texture.height, offset_x, offset_y, offset_x + 16, offset_y + 16, tex_trans_mat);
-
-  shader_use(cp->shader);
-
-  glm_mat4_identity(model_mat);
-  glm_translated(model_mat, coord);
-  set_uniform_model(cp->shader, model_mat);
-
-  set_uniform_tex_trans(cp->shader, tex_trans_mat);
-  set_uniform_view(cp->shader, view_mat);
-  set_uniform_proj(cp->shader, proj_mat);
-  glBindTexture(GL_TEXTURE_2D, texture.gl);
-  glActiveTexture(GL_TEXTURE0);
-  glUniform1i(glGetUniformLocation(cp->shader.gl, "the_texture"), 0);
-
-  mesh_draw(cp->cube_mesh);
-}
 
 GameState *game_init() {
   auto game = xalloc(GameState, 1);
@@ -171,9 +68,12 @@ GameState *game_init() {
   glm_normalize(game->camera.up);
   glm_normalize(game->camera.direction);
 
-  game->test_texture = texture_load_from_file("res/texture/test_texture.png", true);
   game->texture_atlas = texture_load_from_file("res/texture/texture_atlas.png", true);
-  game->cube_painter = cube_painter_new();
+
+  game->shader = shader_init(ARR_ARG(((ShaderSouce[]){
+      {GL_VERTEX_SHADER, STRING_LITERAL_ARG(VERTEX_SHADER)},
+      {GL_FRAGMENT_SHADER, STRING_LITERAL_ARG(FRAGMENT_SHADER)},
+  })));
 
   game->overlap_text = EMPTY_STRING;
 
@@ -459,15 +359,15 @@ void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   camera_proj_mat(game->camera, game->frame_width / game->frame_height, proj_mat);
   mat3 tex_trans_mat = {};
   atlas_mat(game->texture_atlas.width, game->texture_atlas.height, 0, 0, 16, 16, tex_trans_mat);
-  shader_use(game->cube_painter.shader);
+  shader_use(game->shader);
   glm_mat4_identity(model_mat);
-  set_uniform_model(game->cube_painter.shader, model_mat);
-  set_uniform_tex_trans(game->cube_painter.shader, tex_trans_mat);
-  set_uniform_view(game->cube_painter.shader, view_mat);
-  set_uniform_proj(game->cube_painter.shader, proj_mat);
+  set_uniform_model(game->shader, model_mat);
+  set_uniform_tex_trans(game->shader, tex_trans_mat);
+  set_uniform_view(game->shader, view_mat);
+  set_uniform_proj(game->shader, proj_mat);
   glBindTexture(GL_TEXTURE_2D, game->texture_atlas.gl);
   glActiveTexture(GL_TEXTURE0);
-  glUniform1i(glGetUniformLocation(game->cube_painter.shader.gl, "the_texture"), 0);
+  glUniform1i(glGetUniformLocation(game->shader.gl, "the_texture"), 0);
   mesh_draw(game->chunk_mesh);
 
   draw_overlap_text(game);
