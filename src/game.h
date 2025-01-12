@@ -32,7 +32,7 @@ typedef enum cube_face : u8 {
 
 typedef struct cube_painter {
   ShaderProgram shader;
-  LoadedMesh cube_mesh;
+  Mesh cube_mesh;
 } CubePainter;
 
 CubePainter cube_painter_new();

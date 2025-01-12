@@ -93,17 +93,16 @@ CubePainter cube_painter_new() {
       {GL_FRAGMENT_SHADER, STRING_LITERAL_ARG(FRAGMENT_SHADER)},
   })));
 
-  Mesh cube_mesh = {
-      .vertices = vertices_array_from(ARR_ARG(CUBE_VERTICES)),
-      .indices = indices_array_from(ARR_ARG(CUBE_INDICES)),
-  };
-  cp.cube_mesh = load_mesh(cube_mesh, ARR_ARG(CUBE_VERTICES_FORMAT));
+  auto cube_vertices = vertices_array_from(ARR_ARG(CUBE_VERTICES));
+  auto cube_indices = indices_array_from(ARR_ARG(CUBE_INDICES));
+  auto vertices_format = vertex_attrib_format_array_from(ARR_ARG(CUBE_VERTICES_FORMAT));
+  cp.cube_mesh = mesh_init(cube_vertices, cube_indices, vertices_format);
 
   return cp;
 }
 
 void cube_painter_cleanup(CubePainter *cp) {
-  loaded_mesh_cleanup(&cp->cube_mesh);
+  mesh_cleanup(&cp->cube_mesh);
 }
 
 SET_UNIFORM_FUNC(model, mat4);
@@ -192,10 +191,15 @@ GameState *game_init() {
   }
   game->test_chunk->blocks[31][4][16].id = BLOCKID_TEST;
   for (usize y = 0; y < 32; ++y) {
-    game->test_chunk->blocks[y][31][31].id = BLOCKID_TEST;
-    game->test_chunk->blocks[y][0][31].id = BLOCKID_TEST;
-    game->test_chunk->blocks[y][31][0].id = BLOCKID_TEST;
-    game->test_chunk->blocks[y][0][0].id = BLOCKID_TEST;
+    for (usize z = 0; z < 32; ++z) {
+      for (usize x = 0; x < 32; ++x) {
+        auto is_edge_x = x == 0 || x == 31;
+        auto is_edge_y = y == 0 || y == 31;
+        auto is_edge_z = z == 0 || z == 31;
+        if ((is_edge_x && is_edge_y) || (is_edge_y && is_edge_z) || (is_edge_z && is_edge_x))
+          game->test_chunk->blocks[y][z][x].id = BLOCKID_TEST;
+      }
+    }
   }
 
   glEnable(GL_CULL_FACE);
@@ -384,7 +388,10 @@ static inline void draw_overlap_text(GameState *game) {
         &game->overlap_text,
         STRING_LITERAL_ARG("\a\001000000\a\002E0E0E0[\a\001FF8000ESC\a\001000000] Game Paused\a\001FFFFFF\a\002X\n"));
   } else {
-    string_append(&game->overlap_text, STRING_LITERAL_ARG("\a\001FFFFFF\a\002XCube Game v0.0.0\n"));
+    string_append(&game->overlap_text, STRING_LITERAL_ARG("\a\001FFFFFF\a\002XCube Game v0.0.0"));
+    if (IS_DEBUG_MODE)
+      string_append(&game->overlap_text, STRING_LITERAL_ARG(" (DEBUG BUILD)"));
+    string_push(&game->overlap_text, '\n');
   }
 
   if (isnan(game->display_fps) || isinf(game->display_fps))
@@ -449,9 +456,6 @@ void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   game->frame_height = frame_height;
   glClearColor(.1f, .1f, .1f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  u32 texture_offset_x;
-  u32 texture_offset_y;
-  block_texture_atlast_coord(BLOCKID_TEST, &texture_offset_x, &texture_offset_y);
   render_chunk(game, game->test_chunk);
   draw_overlap_text(game);
   CHECK_OPENGL_ERROR();

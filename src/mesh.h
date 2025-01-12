@@ -9,20 +9,6 @@
 DEF_ARRAY(VerticesArray, vertices_array, f32);
 DEF_ARRAY(IndicesArray, indices_array, u32);
 
-typedef struct mesh {
-  IndicesArray indices;
-  VerticesArray vertices;
-} Mesh;
-
-typedef struct loaded_mesh {
-  Mesh mesh;
-  GLuint vao;
-  GLuint vbo;
-  GLuint ebo;
-  /// Number of vertex attribute pointers.
-  usize n_attrib_pointers;
-} LoadedMesh;
-
 typedef struct vertex_attrib_format {
   i32 size;
   GLenum type;
@@ -31,10 +17,25 @@ typedef struct vertex_attrib_format {
   i32 offset;
 } VertexAttribFormat;
 
-LoadedMesh load_mesh(Mesh mesh, usize n_attrib_pointers, const VertexAttribFormat attrib_pointers[n_attrib_pointers]);
+DEF_ARRAY(VertexAttribFormatArray, vertex_attrib_format_array, VertexAttribFormat);
 
-void mesh_draw(LoadedMesh mesh);
+typedef struct mesh {
+  IndicesArray indices;
+  VerticesArray vertices;
+  VertexAttribFormatArray vertex_attrib_pointers;
+  GLuint vao;
+  GLuint vbo;
+  GLuint ebo;
+} Mesh;
 
-void reload_mesh(LoadedMesh *loaded_mesh);
+Mesh mesh_init( //
+    VerticesArray vertices,
+    IndicesArray indices,
+    VertexAttribFormatArray vertex_attrib_pointers);
 
-void loaded_mesh_cleanup(LoadedMesh *loaded_mesh);
+/// Update the new data to GPU.
+void mesh_update(Mesh *mesh);
+
+void mesh_cleanup(Mesh *mesh);
+
+void mesh_draw(Mesh mesh);
