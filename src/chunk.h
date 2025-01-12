@@ -3,6 +3,7 @@
 #include "common.h"
 #include "block.h"
 #include "mesh.h"
+#include "texture.h"
 
 #include <cglm/cglm.h>
 
@@ -18,12 +19,35 @@ ChunkData *chunk_alloc();
 
 void chunk_cleanup(ChunkData **chunk);
 
-typedef struct chunk_mesh {
-  Mesh mesh;
-} ChunkMesh;
+typedef struct quad {
+  vec3 coord;
+  vec2 size;
+  u32 texture_x;
+  u32 texture_y;
+} Quad;
 
-ChunkMesh chunk_mesh_new();
+DEF_ARRAY(QuadArray, quad_array, Quad);
 
-void chunk_mesh_cleanup(ChunkMesh *chunk_mesh);
+typedef enum cube_direction : usize {
+  Direction_North = 0,
+  Direction_South,
+  Direction_East,
+  Direction_West,
+  Direction_Up,
+  Direction_Down,
+} CubeDirection;
 
-Mesh build_chunk(ChunkMesh *chunk_mesh, const ChunkData *chunk_data);
+/// State used for chunk building.
+typedef struct chunk_builder {
+  /// Indexed with `CubeDirection`.
+  QuadArray quads[6];
+  Texture texture;
+} ChunkBuilder;
+
+ChunkBuilder chunk_builder_new();
+
+void chunk_builder_cleanup(ChunkBuilder *cb);
+
+static inline void chunk_builder_clear_quads(ChunkBuilder *cb);
+
+void build_chunk(ChunkBuilder *cb, Mesh *mesh, const ChunkData *chunk_data, Texture texture);

@@ -28,6 +28,8 @@ typedef struct mesh {
   GLuint ebo;
 } Mesh;
 
+void fprint_mesh_data(FILE *out, Mesh mesh);
+
 Mesh mesh_init( //
     VerticesArray vertices,
     IndicesArray indices,

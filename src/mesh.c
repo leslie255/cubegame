@@ -1,5 +1,39 @@
 #include "mesh.h"
 
+void fprint_mesh_data(FILE *out, Mesh mesh) {
+  fprintf(out, "VERTEX FORMAT:\n");
+  for (usize i = 0; i < mesh.vertex_attrib_pointers.length; ++i) {
+    auto va_pointer = mesh.vertex_attrib_pointers.items[i];
+    fprintf(                                                                      //
+        out,                                                                      //
+        "location=%zu:\tsize=%d,type=0x%04X,normalized=%s,stride=%d,offset=%d\n", //
+        i,                                                                        //
+        va_pointer.size,                                                          //
+        va_pointer.type,                                                          //
+        va_pointer.normalized ? "true" : "false",                                 //
+        va_pointer.stride,                                                        //
+        va_pointer.offset);
+  }
+  fprintf(out, "VERTICES (%zu):\n", mesh.vertices.length);
+  usize vertices_per_line = (usize)mesh.vertex_attrib_pointers.items[0].stride / sizeof(f32);
+  for (usize i = 0; i < mesh.vertices.length; ++i) {
+    auto vertex = mesh.vertices.items[i];
+    auto should_line_break = false;
+    if (mesh.vertex_attrib_pointers.length > 0) {
+      should_line_break = (i + 1) % vertices_per_line == 0;
+    }
+    fprintf(out, "%f%c", vertex, should_line_break ? '\n' : ' ');
+  }
+  usize indices_per_line = 3;
+  fprintf(out, "\nINDICES (%zu):\n", mesh.indices.length);
+  for (usize i = 0; i < mesh.indices.length; ++i) {
+    auto index = mesh.indices.items[i];
+    auto should_line_break = false;
+    should_line_break = (i + 1) % indices_per_line == 0;
+    fprintf(out, "%u%c", index, should_line_break ? '\n' : ' ');
+  }
+}
+
 Mesh mesh_init( //
     VerticesArray vertices,
     IndicesArray indices,
@@ -63,14 +97,6 @@ void mesh_cleanup(Mesh *mesh) {
   vertices_array_cleanup(&mesh->vertices);
   indices_array_cleanup(&mesh->indices);
   vertex_attrib_format_array_cleanup(&mesh->vertex_attrib_pointers);
-  if (IS_DEBUG_MODE) {
-    mesh->vertices = (VerticesArray){};
-    mesh->indices = (IndicesArray){};
-    mesh->vertex_attrib_pointers = (VertexAttribFormatArray){};
-    mesh->vao = 0;
-    mesh->vbo = 0;
-    mesh->ebo = 0;
-  }
 }
 
 void mesh_draw(Mesh mesh) {

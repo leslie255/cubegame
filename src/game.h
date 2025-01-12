@@ -54,6 +54,8 @@ typedef struct game_state {
   CubePainter cube_painter;
 
   ChunkData *test_chunk;
+  Mesh chunk_mesh;
+  ChunkBuilder chunk_builder;
 
   bool is_paused;
 

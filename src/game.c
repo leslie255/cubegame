@@ -9,30 +9,30 @@ constexpr f32 CAMERA_INIT_PITCH = 0.f;
 constexpr f32 CAMERA_INIT_YAW = -90.f;
 
 static constexpr GLfloat CUBE_VERTICES[] = {
-    0.f, 0.f, 0.f, 0.0f, 1.f, // A 0
-    1.f, 0.f, 0.f, 1.0f, 1.f, // B 1
-    1.f, 1.f, 0.f, 1.0f, 0.f, // C 2
-    0.f, 1.f, 0.f, 0.0f, 0.f, // D 3
-    0.f, 0.f, 1.f, 0.0f, 1.f, // E 4
-    1.f, 0.f, 1.f, 1.0f, 1.f, // F 5
-    1.f, 1.f, 1.f, 1.0f, 0.f, // G 6
-    0.f, 1.f, 1.f, 0.0f, 0.f, // H 7
-    0.f, 1.f, 0.f, 0.0f, 0.f, // D 8
-    0.f, 0.f, 0.f, 1.0f, 0.f, // A 9
-    0.f, 0.f, 1.f, 1.0f, 1.f, // E 10
-    0.f, 1.f, 1.f, 0.0f, 1.f, // H 11
-    1.f, 0.f, 0.f, 0.0f, 0.f, // B 12
-    1.f, 1.f, 0.f, 1.0f, 0.f, // C 13
-    1.f, 1.f, 1.f, 1.0f, 1.f, // G 14
-    1.f, 0.f, 1.f, 0.0f, 1.f, // F 15
-    0.f, 0.f, 0.f, 0.0f, 1.f, // A 16
-    1.f, 0.f, 0.f, 1.0f, 1.f, // B 17
-    1.f, 0.f, 1.f, 1.0f, 0.f, // F 18
-    0.f, 0.f, 1.f, 0.0f, 0.f, // E 19
-    1.f, 1.f, 0.f, 0.0f, 1.f, // C 20
-    0.f, 1.f, 0.f, 1.0f, 1.f, // D 21
-    0.f, 1.f, 1.f, 1.0f, 0.f, // H 22
-    1.f, 1.f, 1.f, 0.0f, 0.f, // G 23
+    0.f, 0.f, 0.f, 0.0f, 0.f, // A 0
+    1.f, 0.f, 0.f, 1.0f, 0.f, // B 1
+    1.f, 1.f, 0.f, 1.0f, 1.f, // C 2
+    0.f, 1.f, 0.f, 0.0f, 1.f, // D 3
+    0.f, 0.f, 1.f, 0.0f, 0.f, // E 4
+    1.f, 0.f, 1.f, 1.0f, 0.f, // F 5
+    1.f, 1.f, 1.f, 1.0f, 1.f, // G 6
+    0.f, 1.f, 1.f, 0.0f, 1.f, // H 7
+    0.f, 1.f, 0.f, 0.0f, 1.f, // D 8
+    0.f, 0.f, 0.f, 1.0f, 1.f, // A 9
+    0.f, 0.f, 1.f, 1.0f, 0.f, // E 10
+    0.f, 1.f, 1.f, 0.0f, 0.f, // H 11
+    1.f, 0.f, 0.f, 0.0f, 1.f, // B 12
+    1.f, 1.f, 0.f, 1.0f, 1.f, // C 13
+    1.f, 1.f, 1.f, 1.0f, 0.f, // G 14
+    1.f, 0.f, 1.f, 0.0f, 0.f, // F 15
+    0.f, 0.f, 0.f, 0.0f, 0.f, // A 16
+    1.f, 0.f, 0.f, 1.0f, 0.f, // B 17
+    1.f, 0.f, 1.f, 1.0f, 1.f, // F 18
+    0.f, 0.f, 1.f, 0.0f, 1.f, // E 19
+    1.f, 1.f, 0.f, 0.0f, 0.f, // C 20
+    0.f, 1.f, 0.f, 1.0f, 0.f, // D 21
+    0.f, 1.f, 1.f, 1.0f, 1.f, // H 22
+    1.f, 1.f, 1.f, 0.0f, 1.f, // G 23
 };
 
 static constexpr VertexAttribFormat CUBE_VERTICES_FORMAT[] = {
@@ -41,18 +41,19 @@ static constexpr VertexAttribFormat CUBE_VERTICES_FORMAT[] = {
 };
 
 static constexpr GLuint CUBE_INDICES[] = {
-    0,  3,  2,  //
-    2,  1,  0,  //
-    4,  5,  6,  //
-    6,  7,  4,  //
-    11, 8,  9,  //
-    9,  10, 11, //
-    12, 13, 14, //
-    14, 15, 12, //
-    16, 17, 18, //
-    18, 19, 16, //
-    20, 21, 22, //
-    22, 23, 20, //
+    // North
+    0, 3, 2, 2, 1, 0,
+    // South
+    4, 5, 6, 6, 7, 4,
+    // West
+    11, 8, 9, 9, 10, 11,
+    // East
+    12, 13, 14, 14, 15, 12,
+    // Down
+    16, 17, 18, 18, 19, 16,
+    // Up
+    20, 21, 22, 22, 23, 20,
+    //
 };
 
 constexpr char VERTEX_SHADER[] = //
@@ -178,6 +179,17 @@ GameState *game_init() {
 
   game->test_chunk = chunk_alloc();
   memset(game->test_chunk->blocks, 0, sizeof(game->test_chunk->blocks));
+
+  // game->test_chunk->blocks[31][31][31].id = BLOCKID_TEST;
+
+  // for (usize y = 0; y < 32; ++y) {
+  //   for (usize z = 0; z < 32; ++z) {
+  //     for (usize x = 0; x < 32; ++x) {
+  //       game->test_chunk->blocks[y][z][x].id = BLOCKID_TEST;
+  //     }
+  //   }
+  // }
+
   for (usize z = 0; z < 32; ++z) {
     for (usize x = 0; x < 32; ++x) {
       game->test_chunk->blocks[0][z][x].id = BLOCKID_STONE;
@@ -202,6 +214,11 @@ GameState *game_init() {
     }
   }
 
+  game->chunk_builder = chunk_builder_new();
+  game->chunk_mesh = mesh_init((VerticesArray){}, (IndicesArray){}, (VertexAttribFormatArray){});
+  build_chunk(&game->chunk_builder, &game->chunk_mesh, game->test_chunk, game->texture_atlas);
+  // fprint_mesh_data(stdout, game->chunk_mesh);
+
   glEnable(GL_CULL_FACE);
   glCullFace(GL_BACK);
 
@@ -210,9 +227,14 @@ GameState *game_init() {
 
 void game_cleanup(GameState **game_) {
   auto game = *game_;
-  text_painter_cleanup(&game->text_painter);
+  texture_cleanup(&game->test_texture);
+  texture_cleanup(&game->texture_atlas);
   font_cleanup(&game->font);
+  text_painter_cleanup(&game->text_painter);
   chunk_cleanup(&game->test_chunk);
+  chunk_builder_cleanup(&game->chunk_builder);
+  mesh_cleanup(&game->chunk_mesh);
+  string_cleanup(&game->overlap_text);
   xfree(game);
   if (IS_DEBUG_MODE)
     *game_ = nullptr;
@@ -433,30 +455,30 @@ static inline void draw_overlap_text(GameState *game) {
     glEnable(GL_CULL_FACE);
 }
 
-static inline void render_chunk(GameState *game, const ChunkData *chunk) {
-  for (u32 y = 0; y < 32; ++y) {
-    for (u32 z = 0; z < 32; ++z) {
-      for (u32 x = 0; x < 32; ++x) {
-        vec3 coord = {(f32)x, (f32)y, (f32)z};
-        BlockId block_id = chunk->blocks[y][z][x].id;
-        if (!block_is_solid(block_id))
-          continue;
-        u32 texture_offset_x;
-        u32 texture_offset_y;
-        block_texture_atlast_coord(block_id, &texture_offset_x, &texture_offset_y);
-        cube_paint(&game->cube_painter, game, coord, CubeFace_All, game->texture_atlas, texture_offset_x,
-                   texture_offset_y);
-      }
-    }
-  }
-}
-
 void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   game->frame_width = frame_width;
   game->frame_height = frame_height;
   glClearColor(.1f, .1f, .1f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  render_chunk(game, game->test_chunk);
+
+  mat4 model_mat = {};
+  mat4 view_mat = {};
+  camera_view_mat(game->camera, view_mat);
+  mat4 proj_mat = {};
+  camera_proj_mat(game->camera, game->frame_width / game->frame_height, proj_mat);
+  mat3 tex_trans_mat = {};
+  atlas_mat(game->texture_atlas.width, game->texture_atlas.height, 0, 0, 16, 16, tex_trans_mat);
+  shader_use(game->cube_painter.shader);
+  glm_mat4_identity(model_mat);
+  set_uniform_model(game->cube_painter.shader, model_mat);
+  set_uniform_tex_trans(game->cube_painter.shader, tex_trans_mat);
+  set_uniform_view(game->cube_painter.shader, view_mat);
+  set_uniform_proj(game->cube_painter.shader, proj_mat);
+  glBindTexture(GL_TEXTURE_2D, game->texture_atlas.gl);
+  glActiveTexture(GL_TEXTURE0);
+  glUniform1i(glGetUniformLocation(game->cube_painter.shader.gl, "the_texture"), 0);
+  mesh_draw(game->chunk_mesh);
+
   draw_overlap_text(game);
   CHECK_OPENGL_ERROR();
 }
