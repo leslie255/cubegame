@@ -77,8 +77,10 @@ void chunk_to_world_coord(ivec3 chunk_id, ivec3 chunk_local_coord, ivec3 dest_wo
 void world_set_block(WorldData *world, ivec3 coord, BlockId block_id) {
   ivec3 chunk_id;
   ivec3 chunk_local_coord;
-  if (!world_to_chunk_coord(coord, chunk_id, chunk_local_coord))
+  if (!world_to_chunk_coord(coord, chunk_id, chunk_local_coord)) {
     printf("[DEBUG] `world_set_block` called with out-of-world coord {%d, %d, %d}\n", coord[0], coord[1], coord[2]);
+    return;
+  }
   ChunkData *chunk = *world_get_chunk(world, chunk_id);
   Tile *tile = &chunk->blocks[chunk_local_coord[1]][chunk_local_coord[2]][chunk_local_coord[0]];
   tile->id = block_id;
