@@ -29,4 +29,6 @@ void chunk_to_world_coord(ivec3 chunk_id, ivec3 chunk_local_coord, ivec3 dest_wo
 
 void world_set_block(WorldData *world, ivec3 coord, BlockId block_id);
 
+BlockId world_get_block(const WorldData *world, ivec3 coord, bool *is_in_world);
+
 void world_gen(WorldData *world);

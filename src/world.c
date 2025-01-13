@@ -32,6 +32,15 @@ ChunkData **world_get_chunk(WorldData *world, ivec3 chunk_id) {
   return &world->chunks[i_y][i_z][i_x];
 }
 
+ChunkData *world_get_chunk_const(const WorldData *world, ivec3 chunk_id) {
+  usize i_x = (usize)(chunk_id[0] + (WORLD_SIZE_X / 2));
+  usize i_y = (usize)(chunk_id[1] + (WORLD_SIZE_Y / 2));
+  usize i_z = (usize)(chunk_id[2] + (WORLD_SIZE_Z / 2));
+  if (i_x > WORLD_SIZE_X && i_y > WORLD_SIZE_Y && i_z > WORLD_SIZE_Z)
+    PANIC_PRINTF("Chunk {%d, %d, %d} does not exist\n", chunk_id[0], chunk_id[1], chunk_id[2]);
+  return world->chunks[i_y][i_z][i_x];
+}
+
 i32 mod_with_sign(i32 x, i32 y) {
   i32 result = x % y;
   return result < 0 ? result + y : result;
@@ -78,7 +87,9 @@ void world_set_block(WorldData *world, ivec3 coord, BlockId block_id) {
   ivec3 chunk_id;
   ivec3 chunk_local_coord;
   if (!world_to_chunk_coord(coord, chunk_id, chunk_local_coord)) {
-    printf("[DEBUG] `world_set_block` called with out-of-world coord {%d, %d, %d}\n", coord[0], coord[1], coord[2]);
+    printf(                                                           //
+        "[DEBUG] `%s` called with out-of-world coord {%d, %d, %d}\n", //
+        __func__, coord[0], coord[1], coord[2]);
     return;
   }
   ChunkData *chunk = *world_get_chunk(world, chunk_id);
@@ -86,28 +97,77 @@ void world_set_block(WorldData *world, ivec3 coord, BlockId block_id) {
   tile->id = block_id;
 }
 
+BlockId world_get_block(const WorldData *world, ivec3 coord, bool *is_in_world) {
+  ivec3 chunk_id;
+  ivec3 chunk_local_coord;
+  if (world_to_chunk_coord(coord, chunk_id, chunk_local_coord)) {
+    *is_in_world = true;
+  } else {
+    printf(                                                           //
+        "[DEBUG] `%s` called with out-of-world coord {%d, %d, %d}\n", //
+        __func__, coord[0], coord[1], coord[2]);
+    *is_in_world = false;
+    return BlockId_AIR;
+  }
+  ChunkData *chunk = world_get_chunk_const(world, chunk_id);
+  return chunk->blocks[chunk_local_coord[1]][chunk_local_coord[2]][chunk_local_coord[0]].id;
+}
+
 static inline void gen_tree(WorldData *world, ivec3 pos) {
+  i32 height = rand() % 3 + 2;
+
   // Leaves.
-  for (i32 y = pos[1] + 2; y <= pos[1] + 6; ++y) {
-    for (i32 z = pos[2] - 1; z <= pos[2] + 1; ++z) {
-      for (i32 x = pos[0] - 1; x <= pos[0] + 1; ++x) {
+  for (i32 y = pos[1] + height; y <= pos[1] + height + 3; ++y) {
+    for (i32 z = pos[2] - 2; z <= pos[2] + 2; ++z) {
+      for (i32 x = pos[0] - 2; x <= pos[0] + 2; ++x) {
         world_set_block(world, (ivec3){x, y, z}, BlockId_LEAVES);
       }
     }
   }
+  for (i32 z = pos[2] - 1; z <= pos[2] + 1; ++z) {
+    for (i32 x = pos[0] - 1; x <= pos[0] + 1; ++x) {
+      world_set_block(world, (ivec3){x, pos[1] + height + 4, z}, BlockId_LEAVES);
+    }
+  }
 
   // Trunk.
-  for (i32 y = pos[1]; y <= pos[1] + 5; ++y) {
+  for (i32 y = pos[1]; y <= pos[1] + height + 2; ++y) {
     world_set_block(world, (ivec3){pos[0], y, pos[2]}, BlockId_LOG);
   }
+}
+
+static inline void gen_sand_patch(WorldData *world, ivec3 pos) {
+  i32 radius = rand() % 20 + 6;
+  for (i32 z = pos[2] - radius; z <= pos[2] + radius; ++z) {
+    for (i32 x = pos[0] - radius; x <= pos[0] + radius; ++x) {
+      auto dz = z - pos[2];
+      auto dx = x - pos[0];
+      if (dz * dz + dx * dx < radius)
+        world_set_block(world, (ivec3){x, pos[1], z}, BlockId_SAND);
+    }
+  }
+  if (rand() % 100 < 75) {
+    pos[0] = pos[0] + rand() % radius * 2 - radius / 2;
+    pos[2] = pos[2] + rand() % radius * 2 - radius / 2;
+    gen_sand_patch(world, pos);
+  }
+}
+
+static inline bool block_is(const WorldData *world, ivec3 pos, BlockId block_id) {
+  bool is_in_range;
+  auto block = world_get_block(world, pos, &is_in_range);
+  if (is_in_range)
+    return block == block_id;
+  else
+    return false;
 }
 
 void world_gen(WorldData *world) {
   for (i32 z = -256; z < 256; ++z) {
     for (i32 x = -256; x < 256; ++x) {
-      world_set_block(world, (ivec3){x, 0, z}, BlockId_STONE);
-      world_set_block(world, (ivec3){x, 1, z}, BlockId_STONE);
-      world_set_block(world, (ivec3){x, 2, z}, BlockId_STONE);
+      for (i32 y = -32; y <= 2; ++y) {
+        world_set_block(world, (ivec3){x, y, z}, BlockId_STONE);
+      }
       world_set_block(world, (ivec3){x, 3, z}, BlockId_DIRT);
       world_set_block(world, (ivec3){x, 4, z}, BlockId_DIRT);
       world_set_block(world, (ivec3){x, 5, z}, BlockId_DIRT);
@@ -115,11 +175,16 @@ void world_gen(WorldData *world) {
     }
   }
   srand(0);
-  for (usize i = 0; i < 100; ++i) {
-    gen_tree(world, (ivec3){
-                        rand() % 500 - 250,
-                        7,
-                        rand() % 500 - 250,
-                    });
+
+  for (usize i = 0; i < 70; ++i) {
+    ivec3 pos = {rand() % 500 - 250, 6, rand() % 500 - 250};
+    gen_sand_patch(world, pos);
+  }
+
+  for (usize i = 0; i < 500; ++i) {
+    ivec3 pos = {rand() % 510 - 254, 7, rand() % 510 - 254};
+    ivec3 pos_below = {pos[0], pos[1] - 1, pos[2]};
+    if (block_is(world, pos_below, BlockId_GRASS))
+      gen_tree(world, pos);
   }
 }

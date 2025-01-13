@@ -56,7 +56,10 @@ GameState *game_init() {
   game->world = world_alloc();
   memset(game->chunk_meshes, 0, sizeof(game->chunk_meshes));
   game->chunk_builder = chunk_builder_new(game->texture_atlas);
+
   world_gen(game->world);
+  printf("[INFO] Worldgen finished\n");
+
   for (i32 y = -(WORLD_SIZE_Y / 2); y < (WORLD_SIZE_Y / 2); ++y) {
     for (i32 z = -(WORLD_SIZE_Z / 2); z < (WORLD_SIZE_Z / 2); ++z) {
       for (i32 x = -(WORLD_SIZE_X / 2); x < (WORLD_SIZE_X / 2); ++x) {
@@ -68,6 +71,8 @@ GameState *game_init() {
       }
     }
   }
+
+  printf("[INFO] Chunk building finished\n");
 
   game->camera_pitch = CAMERA_INIT_PITCH;
   game->camera_yaw = CAMERA_INIT_YAW;
@@ -278,9 +283,9 @@ static inline void print(GameState *game, vec2 pos, usize length, char s[length]
 static inline void draw_overlay_text(GameState *game) {
   string_clear(&game->overlay_text);
   if (game->is_paused) {
-    string_append(
-        &game->overlay_text,
-        STRING_LITERAL_ARG("\a\001000000\a\002E0E0E0[\a\001FF8000ESC\a\001000000] Game Paused\a\001FFFFFF\a\002808080\n"));
+    string_append(&game->overlay_text,
+                  STRING_LITERAL_ARG(
+                      "\a\001000000\a\002E0E0E0[\a\001FF8000ESC\a\001000000] Game Paused\a\001FFFFFF\a\002808080\n"));
   } else {
     string_append(&game->overlay_text, STRING_LITERAL_ARG("\a\001FFFFFF\a\002808080Cube Game v0.0.0"));
     if (IS_DEBUG_MODE)
@@ -294,18 +299,27 @@ static inline void draw_overlay_text(GameState *game) {
   else
     string_snprintf(&game->overlay_text, 64, "FPS: %.2lf\n", game->display_fps);
 
-  string_snprintf(&game->overlay_text, 64, "Camera XYZ: %f, %f, %f", game->camera.position[0], game->camera.position[1],
-                  game->camera.position[2]);
+  string_snprintf(&game->overlay_text, 64, "Camera XYZ: %f, %f, %f\n", game->camera.position[0],
+                  game->camera.position[1], game->camera.position[2]);
+
+  string_snprintf(&game->overlay_text, 64, "Camera Pitch/Yaw: %fdeg, %fdeg\n", game->camera_pitch, game->camera_yaw);
+
+  const char *facing;
+  if (absf(game->camera.direction[0]) > absf(game->camera.direction[2])) 
+    facing = (game->camera.direction[0] > 0) ? "East (+X)" : "West (-X)";
+  else
+    facing = (game->camera.direction[2] > 0) ? "South (+Z)" : "North (-Z)";
+  string_snprintf(&game->overlay_text, 64, "Camera Facing: %s\n", facing);
 
   if (game->is_wireframe_mode) {
     string_append(&game->overlay_text,
-                  STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002808080[\a\001FF8000F3+L\a\001FFFFFF] DEBUG: Wireframe Mode"));
+                  STRING_LITERAL_ARG("\a\001FFFFFF\a\002808080[\a\001FF8000F3+L\a\001FFFFFF] DEBUG: Wireframe Mode\n"));
   }
 
   if (game->disable_gl_face_culling) {
-    string_append(
-        &game->overlay_text,
-        STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002808080[\a\001FF8000F3+F\a\001FFFFFF] DEBUG: Disable OpenGL Face Culling"));
+    string_append(&game->overlay_text,
+                  STRING_LITERAL_ARG(
+                      "\a\001FFFFFF\a\002808080[\a\001FF8000F3+F\a\001FFFFFF] DEBUG: Disable OpenGL Face Culling\n"));
   }
 
   vec2 pos = {
