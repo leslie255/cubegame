@@ -72,7 +72,7 @@ GameState *game_init() {
   game->camera_pitch = CAMERA_INIT_PITCH;
   game->camera_yaw = CAMERA_INIT_YAW;
   game->camera = (Camera){
-      .position = {0.f, 3.f, 0.f},
+      .position = {0.f, 9.f, 0.f},
       .direction = {0.f, 0.f, -1.f},
       .up = {0.f, 1.f, 0.f},
       .fov = glm_rad(90.f),
@@ -299,13 +299,13 @@ static inline void draw_overlay_text(GameState *game) {
 
   if (game->is_wireframe_mode) {
     string_append(&game->overlay_text,
-                  STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002X[\a\001FF8000F3+L\a\001FFFFFF] DEBUG: Wireframe Mode"));
+                  STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002808080[\a\001FF8000F3+L\a\001FFFFFF] DEBUG: Wireframe Mode"));
   }
 
   if (game->disable_gl_face_culling) {
     string_append(
         &game->overlay_text,
-        STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002X[\a\001FF8000F3+F\a\001FFFFFF] DEBUG: Disable OpenGL Face Culling"));
+        STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002808080[\a\001FF8000F3+F\a\001FFFFFF] DEBUG: Disable OpenGL Face Culling"));
   }
 
   vec2 pos = {
