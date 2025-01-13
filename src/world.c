@@ -37,7 +37,19 @@ i32 mod_with_sign(i32 x, i32 y) {
   return result < 0 ? result + y : result;
 }
 
-void world_to_chunk_coord(ivec3 world_coord, ivec3 dest_chunk_id, ivec3 dest_chunk_local_coord) {
+/// Min is inclusive, max is exclusive.
+static inline i32 is_between(i32 x, i32 min, i32 max) {
+  return min <= x && x < max;
+}
+
+[[nodiscard]]
+bool world_to_chunk_coord(ivec3 world_coord, ivec3 dest_chunk_id, ivec3 dest_chunk_local_coord) {
+  if (!is_between(world_coord[0], -WORLD_SIZE_X * 32 / 2, WORLD_SIZE_X * 32 / 2) ||
+      !is_between(world_coord[1], -WORLD_SIZE_Y * 32 / 2, WORLD_SIZE_Y * 32 / 2) ||
+      !is_between(world_coord[1], -WORLD_SIZE_Z * 32 / 2, WORLD_SIZE_Z * 32 / 2)) {
+    return false;
+  }
+
   dest_chunk_id[0] = world_coord[0] / 32;
   dest_chunk_id[1] = world_coord[1] / 32;
   dest_chunk_id[2] = world_coord[2] / 32;
@@ -52,6 +64,8 @@ void world_to_chunk_coord(ivec3 world_coord, ivec3 dest_chunk_id, ivec3 dest_chu
   dest_chunk_local_coord[0] = (world_coord[0] % 32 + 32) % 32;
   dest_chunk_local_coord[1] = (world_coord[1] % 32 + 32) % 32;
   dest_chunk_local_coord[2] = (world_coord[2] % 32 + 32) % 32;
+
+  return true;
 }
 
 void chunk_to_world_coord(ivec3 chunk_id, ivec3 chunk_local_coord, ivec3 dest_world_coord) {
@@ -63,7 +77,8 @@ void chunk_to_world_coord(ivec3 chunk_id, ivec3 chunk_local_coord, ivec3 dest_wo
 void world_set_block(WorldData *world, ivec3 coord, BlockId block_id) {
   ivec3 chunk_id;
   ivec3 chunk_local_coord;
-  world_to_chunk_coord(coord, chunk_id, chunk_local_coord);
+  if (!world_to_chunk_coord(coord, chunk_id, chunk_local_coord))
+    printf("[DEBUG] `world_set_block` called with out-of-world coord {%d, %d, %d}\n", coord[0], coord[1], coord[2]);
   ChunkData *chunk = *world_get_chunk(world, chunk_id);
   Tile *tile = &chunk->blocks[chunk_local_coord[1]][chunk_local_coord[2]][chunk_local_coord[0]];
   tile->id = block_id;
@@ -87,7 +102,7 @@ static inline void gen_tree(WorldData *world, ivec3 pos) {
 
 void world_gen(WorldData *world) {
   for (i32 z = -256; z < 256; ++z) {
-    for (i32 x = -265; x < 256; ++x) {
+    for (i32 x = -256; x < 256; ++x) {
       world_set_block(world, (ivec3){x, 0, z}, BlockId_STONE);
       world_set_block(world, (ivec3){x, 1, z}, BlockId_STONE);
       world_set_block(world, (ivec3){x, 2, z}, BlockId_STONE);

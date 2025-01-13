@@ -22,7 +22,8 @@ void world_cleanup(WorldData **world);
 
 ChunkData **world_get_chunk(WorldData *world, ivec3 chunk_id);
 
-void world_to_chunk_coord(ivec3 world_coord, ivec3 dest_chunk_id, ivec3 dest_chunk_local_coord);
+[[nodiscard]]
+bool world_to_chunk_coord(ivec3 world_coord, ivec3 dest_chunk_id, ivec3 dest_chunk_local_coord);
 
 void chunk_to_world_coord(ivec3 chunk_id, ivec3 chunk_local_coord, ivec3 dest_world_coord);
 

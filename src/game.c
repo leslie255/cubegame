@@ -72,7 +72,7 @@ GameState *game_init() {
   game->camera_pitch = CAMERA_INIT_PITCH;
   game->camera_yaw = CAMERA_INIT_YAW;
   game->camera = (Camera){
-      .position = {0.f, 9.f, 0.f},
+      .position = {0.f, 8.7f, 0.f},
       .direction = {0.f, 0.f, -1.f},
       .up = {0.f, 1.f, 0.f},
       .fov = glm_rad(90.f),
