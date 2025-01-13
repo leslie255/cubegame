@@ -38,5 +38,5 @@ bin/%.o: src/%.c src/%.h $(UTIL_HEADERS)
 bin/main.o: src/main.c $(UTIL_HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-bin/game: bin/main.o bin/game.o bin/window.o bin/shader.o bin/camera.o bin/chunk.o bin/block.o bin/string.o bin/text.o bin/atlas.o bin/texture.o bin/mesh.o bin/array.o
+bin/game: bin/main.o bin/game.o bin/window.o bin/shader.o bin/camera.o bin/chunk.o bin/block.o bin/string.o bin/text.o bin/atlas.o bin/texture.o bin/mesh.o bin/array.o bin/world.o
 	$(CC) $(LDFLAGS) $^ -o $@

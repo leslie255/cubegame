@@ -30,6 +30,8 @@ typedef struct mesh {
 
 void fprint_mesh_data(FILE *out, Mesh mesh);
 
+Mesh mesh_init_empty();
+
 Mesh mesh_init( //
     VerticesArray vertices,
     IndicesArray indices,

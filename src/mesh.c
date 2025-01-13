@@ -15,23 +15,28 @@ void fprint_mesh_data(FILE *out, Mesh mesh) {
         va_pointer.offset);
   }
   fprintf(out, "VERTICES (%zu):\n", mesh.vertices.length);
-  usize vertices_per_line = (usize)mesh.vertex_attrib_pointers.items[0].stride / sizeof(f32);
-  for (usize i = 0; i < mesh.vertices.length; ++i) {
-    auto vertex = mesh.vertices.items[i];
-    auto should_line_break = false;
-    if (mesh.vertex_attrib_pointers.length > 0) {
+  if (mesh.vertices.length != 0) {
+    usize vertices_per_line = (usize)mesh.vertex_attrib_pointers.items[0].stride / sizeof(f32);
+    for (usize i = 0; i < mesh.vertices.length; ++i) {
+      auto vertex = mesh.vertices.items[i];
+      auto should_line_break = false;
       should_line_break = (i + 1) % vertices_per_line == 0;
+      fprintf(out, "%f%c", vertex, should_line_break ? '\n' : ' ');
     }
-    fprintf(out, "%f%c", vertex, should_line_break ? '\n' : ' ');
   }
+
   usize indices_per_line = 3;
-  fprintf(out, "\nINDICES (%zu):\n", mesh.indices.length);
+  fprintf(out, "INDICES (%zu):\n", mesh.indices.length);
   for (usize i = 0; i < mesh.indices.length; ++i) {
     auto index = mesh.indices.items[i];
     auto should_line_break = false;
     should_line_break = (i + 1) % indices_per_line == 0;
     fprintf(out, "%u%c", index, should_line_break ? '\n' : ' ');
   }
+}
+
+Mesh mesh_init_empty() {
+  return (Mesh){};
 }
 
 Mesh mesh_init( //

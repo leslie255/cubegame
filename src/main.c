@@ -1,4 +1,5 @@
 #include "common.h"
+#include "debug_utils.h"
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -23,9 +24,10 @@ i32 main() {
 
   f64 previous_time = glfwGetTime();
   while (!glfwWindowShouldClose(window->glfw_handle)) {
+    game_frame(game, (f32)window->width, (f32)window->height);
+
     glfwSwapBuffers(window->glfw_handle);
     glfwPollEvents();
-    game_frame(game, (f32)window->width, (f32)window->height);
 
     window_update_fps(window);
     game->display_fps = window->average_fps;

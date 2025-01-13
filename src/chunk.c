@@ -1,4 +1,5 @@
 #include "chunk.h"
+#include "debug_utils.h"
 
 static constexpr GLfloat CUBE_VERTICES[] = {
     // North
@@ -59,8 +60,6 @@ ChunkData *chunk_alloc() {
 
 void chunk_cleanup(ChunkData **chunk) {
   xfree(*chunk);
-  if (IS_DEBUG_MODE)
-    *chunk = nullptr;
 }
 
 ChunkBuilder chunk_builder_new(Texture texture_atlas) {

@@ -1,7 +1,6 @@
 #include "game.h"
 #include "debug_utils.h"
 #include "text.h"
-#include "block.h"
 #include "mesh.h"
 
 constexpr f32 CAMERA_INIT_PITCH = 0.f;
@@ -42,71 +41,53 @@ SET_UNIFORM_FUNC(proj, mat4);
 
 GameState *game_init() {
   auto game = xalloc(GameState, 1);
-  game->is_paused = false;
-  game->camera_pitch = CAMERA_INIT_PITCH;
-  game->camera_yaw = CAMERA_INIT_YAW;
-  game->cursor_has_moved_before = false;
-  game->previous_cursor_x = 0.f;
-  game->previous_cursor_y = 0.f;
-  game->is_wireframe_mode = false;
-  game->disable_gl_face_culling = false;
-
-  game->font = default_font();
-  game->text_painter = text_painter_new(game->font);
-
-  game->camera = (Camera){
-      .position = {0.f, 0.f, 5.f},
-      .direction = {0.f, 0.f, -1.f},
-      .up = {0.f, 1.f, 0.f},
-      .fov = glm_rad(90.f),
-      .near_plane_dist = 0.1f,
-      .far_plane_dist = 100.f,
-  };
-  glm_normalize(game->camera.up);
-  glm_normalize(game->camera.direction);
 
   game->texture_atlas = texture_load_from_file("res/texture/texture_atlas.png", true);
+
+  game->font = default_font();
+  game->overlay_text = EMPTY_STRING;
+  game->text_painter = text_painter_new(game->font);
 
   game->shader = shader_init(ARR_ARG(((ShaderSouce[]){
       {GL_VERTEX_SHADER, STRING_LITERAL_ARG(VERTEX_SHADER)},
       {GL_FRAGMENT_SHADER, STRING_LITERAL_ARG(FRAGMENT_SHADER)},
   })));
 
-  game->overlap_text = EMPTY_STRING;
-
-  game->test_chunk = chunk_alloc();
-  memset(game->test_chunk->blocks, 0, sizeof(game->test_chunk->blocks));
-
-  game->test_chunk->blocks[0][0][0].id = BlockId_GRASS;
-
-  for (usize z = 0; z < 32; ++z) {
-    for (usize x = 0; x < 32; ++x) {
-      game->test_chunk->blocks[0][z][x].id = BlockId_STONE;
-      game->test_chunk->blocks[1][z][x].id = BlockId_STONE;
-      game->test_chunk->blocks[2][z][x].id = BlockId_DIRT;
-      BlockId block_id = (z < 16 && x < 8) ? BlockId_GRASS : BlockId_DIRT;
-      game->test_chunk->blocks[3][z][x].id = block_id;
-      if (x == 8 && 5 <= z && z <= 7)
-        game->test_chunk->blocks[4][z][x].id = BlockId_GRASS;
-    }
-  }
-
-  for (u32 y = 7; y <= 10; ++y) {
-    for (u32 z = 3; z <= 5; ++z) {
-      for (u32 x = 3; x <= 5; ++x) {
-        game->test_chunk->blocks[y][z][x].id = BlockId_LEAVES;
+  game->world = world_alloc();
+  memset(game->chunk_meshes, 0, sizeof(game->chunk_meshes));
+  game->chunk_builder = chunk_builder_new(game->texture_atlas);
+  world_gen(game->world);
+  for (i32 y = -(WORLD_SIZE_Y / 2); y < (WORLD_SIZE_Y / 2); ++y) {
+    for (i32 z = -(WORLD_SIZE_Z / 2); z < (WORLD_SIZE_Z / 2); ++z) {
+      for (i32 x = -(WORLD_SIZE_X / 2); x < (WORLD_SIZE_X / 2); ++x) {
+        ivec3 chunk_id = {x, y, z};
+        auto chunk_data = *world_get_chunk(game->world, chunk_id);
+        auto chunk_mesh = &game->chunk_meshes[y + WORLD_SIZE_Y / 2][z + WORLD_SIZE_Z / 2][x + WORLD_SIZE_X / 2];
+        *chunk_mesh = mesh_init_empty();
+        build_chunk(&game->chunk_builder, chunk_mesh, chunk_data, game->texture_atlas);
       }
     }
   }
 
-  for (u32 y = 4; y< 9;++y) {
-        game->test_chunk->blocks[y][4][4].id = BlockId_LOG;
-  }
+  game->camera_pitch = CAMERA_INIT_PITCH;
+  game->camera_yaw = CAMERA_INIT_YAW;
+  game->camera = (Camera){
+      .position = {0.f, 3.f, 0.f},
+      .direction = {0.f, 0.f, -1.f},
+      .up = {0.f, 1.f, 0.f},
+      .fov = glm_rad(90.f),
+      .near_plane_dist = 0.1f,
+      .far_plane_dist = 500.f,
+  };
+  glm_normalize(game->camera.up);
+  glm_normalize(game->camera.direction);
 
-  game->chunk_builder = chunk_builder_new(game->texture_atlas);
-  game->chunk_mesh = mesh_init((VerticesArray){}, (IndicesArray){}, (VertexAttribFormatArray){});
-  build_chunk(&game->chunk_builder, &game->chunk_mesh, game->test_chunk, game->texture_atlas);
-  // fprint_mesh_data(stdout, game->chunk_mesh);
+  game->is_paused = false;
+  game->cursor_has_moved_before = false;
+  game->previous_cursor_x = 0.f;
+  game->previous_cursor_y = 0.f;
+  game->is_wireframe_mode = false;
+  game->disable_gl_face_culling = false;
 
   glEnable(GL_CULL_FACE);
   glCullFace(GL_BACK);
@@ -116,17 +97,19 @@ GameState *game_init() {
 
 void game_cleanup(GameState **game_) {
   auto game = *game_;
-  texture_cleanup(&game->test_texture);
   texture_cleanup(&game->texture_atlas);
   font_cleanup(&game->font);
+  string_cleanup(&game->overlay_text);
   text_painter_cleanup(&game->text_painter);
-  chunk_cleanup(&game->test_chunk);
+  shader_cleanup(&game->shader);
+  world_cleanup(&game->world);
   chunk_builder_cleanup(&game->chunk_builder);
-  mesh_cleanup(&game->chunk_mesh);
-  string_cleanup(&game->overlap_text);
+  for (usize y = 0; y < WORLD_SIZE_Y; ++y)
+    for (usize z = 0; z < WORLD_SIZE_Z; ++z)
+      for (usize x = 0; x < WORLD_SIZE_X; ++x)
+        mesh_cleanup(&game->chunk_meshes[y][z][x]);
+
   xfree(game);
-  if (IS_DEBUG_MODE)
-    *game_ = nullptr;
 }
 
 void game_cursor_callback(void *game_, Window *window) {
@@ -193,17 +176,17 @@ void game_update_events(GameState *game, Window *window, f64 frame_time) {
   control_down |= glfwGetKey(window->glfw_handle, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS;
   control_down |= glfwGetKey(window->glfw_handle, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
   if (glfwGetKey(window->glfw_handle, GLFW_KEY_W) == GLFW_PRESS)
-    camera_movement[2] += (control_down ? 8.f : 4.f) * (f32)frame_time;
+    camera_movement[2] += (control_down ? 15.f : 5.f) * (f32)frame_time;
   if (glfwGetKey(window->glfw_handle, GLFW_KEY_S) == GLFW_PRESS)
-    camera_movement[2] -= 4.f * (f32)frame_time;
+    camera_movement[2] -= 5.f * (f32)frame_time;
   if (glfwGetKey(window->glfw_handle, GLFW_KEY_A) == GLFW_PRESS)
-    camera_movement[0] -= 4.f * (f32)frame_time;
+    camera_movement[0] -= 5.f * (f32)frame_time;
   if (glfwGetKey(window->glfw_handle, GLFW_KEY_D) == GLFW_PRESS)
-    camera_movement[0] += 4.f * (f32)frame_time;
+    camera_movement[0] += 5.f * (f32)frame_time;
   if (glfwGetKey(window->glfw_handle, GLFW_KEY_R) == GLFW_PRESS)
-    camera_movement[1] -= 4.f * (f32)frame_time;
+    camera_movement[1] -= 5.f * (f32)frame_time;
   if (glfwGetKey(window->glfw_handle, GLFW_KEY_SPACE) == GLFW_PRESS)
-    camera_movement[1] += 4.f * (f32)frame_time;
+    camera_movement[1] += 5.f * (f32)frame_time;
   if (camera_movement[0] != 0.f || camera_movement[1] != 0.f || camera_movement[2] != 0.f)
     camera_move(&game->camera, camera_movement);
 
@@ -293,35 +276,35 @@ static inline void print(GameState *game, vec2 pos, usize length, char s[length]
 }
 
 static inline void draw_overlap_text(GameState *game) {
-  string_clear(&game->overlap_text);
+  string_clear(&game->overlay_text);
   if (game->is_paused) {
     string_append(
-        &game->overlap_text,
+        &game->overlay_text,
         STRING_LITERAL_ARG("\a\001000000\a\002E0E0E0[\a\001FF8000ESC\a\001000000] Game Paused\a\001FFFFFF\a\002X\n"));
   } else {
-    string_append(&game->overlap_text, STRING_LITERAL_ARG("\a\001FFFFFF\a\002XCube Game v0.0.0"));
+    string_append(&game->overlay_text, STRING_LITERAL_ARG("\a\001FFFFFF\a\002XCube Game v0.0.0"));
     if (IS_DEBUG_MODE)
-      string_append(&game->overlap_text, STRING_LITERAL_ARG(" (DEBUG BUILD)"));
-    string_push(&game->overlap_text, '\n');
+      string_append(&game->overlay_text, STRING_LITERAL_ARG(" (DEBUG BUILD)"));
+    string_push(&game->overlay_text, '\n');
   }
 
   if (isnan(game->display_fps) || isinf(game->display_fps))
-    string_snprintf(&game->overlap_text, 64, "FPS ---.--\n");
+    string_snprintf(&game->overlay_text, 64, "FPS ---.--\n");
 
   else
-    string_snprintf(&game->overlap_text, 64, "FPS: %.2lf\n", game->display_fps);
+    string_snprintf(&game->overlay_text, 64, "FPS: %.2lf\n", game->display_fps);
 
-  string_snprintf(&game->overlap_text, 64, "Camera XYZ: %f, %f, %f", game->camera.position[0], game->camera.position[1],
+  string_snprintf(&game->overlay_text, 64, "Camera XYZ: %f, %f, %f", game->camera.position[0], game->camera.position[1],
                   game->camera.position[2]);
 
   if (game->is_wireframe_mode) {
-    string_append(&game->overlap_text,
+    string_append(&game->overlay_text,
                   STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002X[\a\001FF8000F3+L\a\001FFFFFF] DEBUG: Wireframe Mode"));
   }
 
   if (game->disable_gl_face_culling) {
     string_append(
-        &game->overlap_text,
+        &game->overlay_text,
         STRING_LITERAL_ARG("\n\a\001FFFFFF\a\002X[\a\001FF8000F3+F\a\001FFFFFF] DEBUG: Disable OpenGL Face Culling"));
   }
 
@@ -336,7 +319,7 @@ static inline void draw_overlap_text(GameState *game) {
   if (game->is_wireframe_mode)
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-  print(game, pos, game->overlap_text.length, game->overlap_text.buffer);
+  print(game, pos, game->overlay_text.length, game->overlay_text.buffer);
 
   glEnable(GL_DEPTH_TEST);
   if (game->is_wireframe_mode)
@@ -348,13 +331,15 @@ static inline void draw_overlap_text(GameState *game) {
 void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   game->frame_width = frame_width;
   game->frame_height = frame_height;
-  glClearColor(.1f, .1f, .1f, 1.f);
+
+  glClearColor(.8f, .95f, 1.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   shader_use(game->shader);
 
-  mat4 model_mat = GLM_MAT4_IDENTITY;
-  set_uniform_model(game->shader, model_mat);
+  glBindTexture(GL_TEXTURE_2D, game->texture_atlas.gl);
+  glActiveTexture(GL_TEXTURE0);
+  glUniform1i(glGetUniformLocation(game->shader.gl, "the_texture"), 0);
 
   mat4 view_mat = {};
   camera_view_mat(game->camera, view_mat);
@@ -364,11 +349,19 @@ void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
   camera_proj_mat(game->camera, game->frame_width / game->frame_height, proj_mat);
   set_uniform_proj(game->shader, proj_mat);
 
-  glBindTexture(GL_TEXTURE_2D, game->texture_atlas.gl);
-  glActiveTexture(GL_TEXTURE0);
-  glUniform1i(glGetUniformLocation(game->shader.gl, "the_texture"), 0);
+  for (i32 y = -(WORLD_SIZE_Y / 2); y < (WORLD_SIZE_Y / 2); ++y) {
+    for (i32 z = -(WORLD_SIZE_Z / 2); z < (WORLD_SIZE_Z / 2); ++z) {
+      for (i32 x = -(WORLD_SIZE_X / 2); x < (WORLD_SIZE_X / 2); ++x) {
+        mat4 model_mat = GLM_MAT4_IDENTITY;
+        glm_translated(model_mat, (vec3){(f32)x * 32.f, (f32)y * 32.f, (f32)z * 32.f});
+        set_uniform_model(game->shader, model_mat);
+        auto chunk_mesh = game->chunk_meshes[y + WORLD_SIZE_Y / 2][z + WORLD_SIZE_Z / 2][x + WORLD_SIZE_X / 2];
+        mesh_draw(chunk_mesh);
+      }
+    }
+  }
 
-  mesh_draw(game->chunk_mesh);
+  CHECK_OPENGL_ERROR();
 
   draw_overlap_text(game);
   CHECK_OPENGL_ERROR();

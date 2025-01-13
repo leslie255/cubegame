@@ -13,6 +13,7 @@
 #include "texture.h"
 #include "chunk.h"
 #include "mesh.h"
+#include "world.h"
 
 typedef enum cube_face : u8 {
   CubeFace_All = 0b11111111,
@@ -31,40 +32,30 @@ typedef enum cube_face : u8 {
 } CubeFace;
 
 typedef struct game_state {
-  /// Texture object used for the test square.
-  Texture test_texture;
   Texture texture_atlas;
-
   FontData *font;
+  String overlay_text;
   TextPainter text_painter;
+  ShaderProgram shader;
+  WorldData *world;
+  ChunkBuilder chunk_builder;
+  Mesh chunk_meshes[WORLD_SIZE_Y][WORLD_SIZE_Z][WORLD_SIZE_X];
 
   f32 camera_pitch;
   f32 camera_yaw;
   Camera camera;
 
-  ShaderProgram shader;
-
-  ChunkData *test_chunk;
-  Mesh chunk_mesh;
-  ChunkBuilder chunk_builder;
-
   bool is_paused;
-
   bool cursor_has_moved_before;
   f64 previous_cursor_x;
   f64 previous_cursor_y;
-
   bool is_wireframe_mode;
   bool disable_gl_face_culling;
-
-  String overlay_text;
 
   /// Average FPS over the last period of time, for FPS display.
   /// Passed in from outside.
   /// Leave NAN for unknown.
   f64 display_fps;
-
-  String overlap_text;
 
   /// Updated when `game_frame` is called with `frame_width` being one of its parameter.
   f32 frame_width;
