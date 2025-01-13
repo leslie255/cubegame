@@ -275,14 +275,14 @@ static inline void print(GameState *game, vec2 pos, usize length, char s[length]
   }
 }
 
-static inline void draw_overlap_text(GameState *game) {
+static inline void draw_overlay_text(GameState *game) {
   string_clear(&game->overlay_text);
   if (game->is_paused) {
     string_append(
         &game->overlay_text,
-        STRING_LITERAL_ARG("\a\001000000\a\002E0E0E0[\a\001FF8000ESC\a\001000000] Game Paused\a\001FFFFFF\a\002X\n"));
+        STRING_LITERAL_ARG("\a\001000000\a\002E0E0E0[\a\001FF8000ESC\a\001000000] Game Paused\a\001FFFFFF\a\002808080\n"));
   } else {
-    string_append(&game->overlay_text, STRING_LITERAL_ARG("\a\001FFFFFF\a\002XCube Game v0.0.0"));
+    string_append(&game->overlay_text, STRING_LITERAL_ARG("\a\001FFFFFF\a\002808080Cube Game v0.0.0"));
     if (IS_DEBUG_MODE)
       string_append(&game->overlay_text, STRING_LITERAL_ARG(" (DEBUG BUILD)"));
     string_push(&game->overlay_text, '\n');
@@ -363,6 +363,6 @@ void game_frame(GameState *game, f32 frame_width, f32 frame_height) {
 
   CHECK_OPENGL_ERROR();
 
-  draw_overlap_text(game);
+  draw_overlay_text(game);
   CHECK_OPENGL_ERROR();
 }

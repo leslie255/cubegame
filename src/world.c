@@ -69,23 +69,23 @@ void world_set_block(WorldData *world, ivec3 coord, BlockId block_id) {
   tile->id = block_id;
 }
 
+static inline void gen_tree(WorldData *world, ivec3 pos) {
+  // Leaves.
+  for (i32 y = pos[1] + 2; y <= pos[1] + 6; ++y) {
+    for (i32 z = pos[2] - 1; z <= pos[2] + 1; ++z) {
+      for (i32 x = pos[0] - 1; x <= pos[0] + 1; ++x) {
+        world_set_block(world, (ivec3){x, y, z}, BlockId_LEAVES);
+      }
+    }
+  }
+
+  // Trunk.
+  for (i32 y = pos[1]; y <= pos[1] + 5; ++y) {
+    world_set_block(world, (ivec3){pos[0], y, pos[2]}, BlockId_LOG);
+  }
+}
+
 void world_gen(WorldData *world) {
-  // world_set_block(world, (ivec3){0, 0, 0}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){31, 0, 0}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){0, 0, 31}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){31, 0, 31}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){0, 31, 0}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){31, 31, 0}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){0, 31, 31}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){31, 31, 31}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){32, 0, 32}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){63, 0, 32}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){32, 0, 63}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){63, 0, 63}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){32, 31, 32}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){63, 31, 32}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){32, 31, 63}, BlockId_GRASS);
-  // world_set_block(world, (ivec3){63, 31, 63}, BlockId_GRASS);
   for (i32 z = -256; z < 256; ++z) {
     for (i32 x = -265; x < 256; ++x) {
       world_set_block(world, (ivec3){x, 0, z}, BlockId_STONE);
@@ -96,5 +96,13 @@ void world_gen(WorldData *world) {
       world_set_block(world, (ivec3){x, 5, z}, BlockId_DIRT);
       world_set_block(world, (ivec3){x, 6, z}, BlockId_GRASS);
     }
+  }
+  srand(0);
+  for (usize i = 0; i < 100; ++i) {
+    gen_tree(world, (ivec3){
+                        rand() % 500 - 250,
+                        7,
+                        rand() % 500 - 250,
+                    });
   }
 }
