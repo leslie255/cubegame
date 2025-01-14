@@ -2,7 +2,7 @@
 
 **Voxel Game in OpenGL**
 
-![cube_game_demo](https://github.com/user-attachments/assets/dd7be324-5655-4398-88b0-c37dd57949c7)
+![terrain_demo](https://github.com/user-attachments/assets/65f9dba4-b4fa-4737-8014-496b5de3bef6)
 
 ## TODOs
 
