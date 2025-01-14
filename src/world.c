@@ -113,8 +113,42 @@ BlockId world_get_block(const WorldData *world, ivec3 coord, bool *is_in_world) 
   return chunk->blocks[chunk_local_coord[1]][chunk_local_coord[2]][chunk_local_coord[0]].id;
 }
 
-static inline void gen_tree(WorldData *world, ivec3 pos) {
-  i32 height = rand() % 3 + 2;
+static inline bool block_is(const WorldData *world, ivec3 pos, BlockId block_id) {
+  bool is_in_range;
+  auto block = world_get_block(world, pos, &is_in_range);
+  if (is_in_range)
+    return block == block_id;
+  else
+    return false;
+}
+
+static inline i32 rand_in(i32 min, i32 max) {
+  return rand() % (max - min) + min;
+}
+
+static inline void wave_sampler(f32 amp, f32 scale, vec2 offset, ivec2 in, vec2 out_acc) {
+  out_acc[0] += sinf(((f32)in[0] + offset[0]) * (scale)) * (amp / 2.f);
+  out_acc[1] += sinf(((f32)in[1] + offset[1]) * (scale)) * (amp / 2.f);
+}
+
+static inline i32 terrain_height_at(ivec2 pos) {
+  vec2 out = {};
+  // Just some random values I cooked up.
+  wave_sampler(1.3f, 0.51784f, (vec2){0.8f, 0.1f}, pos, out);
+  wave_sampler(1.9f, 0.2472f, (vec2){2.8f, 7.4f}, pos, out);
+  wave_sampler(-1.f, 0.397f, (vec2){6.3f, 1.4f}, pos, out);
+  wave_sampler(-2.f, 0.12f, (vec2){4.9f, 4.2f}, pos, out);
+  wave_sampler(3.f, 0.1f, (vec2){3.1f, 6.4f}, pos, out);
+  return (i32)(out[0] + out[1]) + 5;
+}
+
+static inline void gen_tree(WorldData *world, ivec2 pos_xz) {
+  ivec3 pos = {pos_xz[0], terrain_height_at(pos_xz) + 1, pos_xz[1]};
+  ivec3 pos_below = {pos[0], pos[1] - 1, pos[2]};
+  if (!block_is(world, pos_below, BlockId_GRASS))
+    return;
+
+  i32 height = rand_in(2, 4);
 
   // Leaves.
   for (i32 y = pos[1] + height; y <= pos[1] + height + 3; ++y) {
@@ -136,55 +170,62 @@ static inline void gen_tree(WorldData *world, ivec3 pos) {
   }
 }
 
-static inline void gen_sand_patch(WorldData *world, ivec3 pos) {
+static inline void gen_sand_patch(WorldData *world, ivec2 pos) {
   i32 radius = rand() % 20 + 6;
-  for (i32 z = pos[2] - radius; z <= pos[2] + radius; ++z) {
+  for (i32 z = pos[1] - radius; z <= pos[1] + radius; ++z) {
     for (i32 x = pos[0] - radius; x <= pos[0] + radius; ++x) {
-      auto dz = z - pos[2];
+      auto y = terrain_height_at((ivec2){x, z});
+      auto dz = z - pos[1];
       auto dx = x - pos[0];
       if (dz * dz + dx * dx < radius)
-        world_set_block(world, (ivec3){x, pos[1], z}, BlockId_SAND);
+        world_set_block(world, (ivec3){x, y, z}, BlockId_SAND);
     }
   }
   if (rand() % 100 < 75) {
     pos[0] = pos[0] + rand() % radius * 2 - radius / 2;
-    pos[2] = pos[2] + rand() % radius * 2 - radius / 2;
+    pos[1] = pos[1] + rand() % radius * 2 - radius / 2;
     gen_sand_patch(world, pos);
   }
 }
 
-static inline bool block_is(const WorldData *world, ivec3 pos, BlockId block_id) {
-  bool is_in_range;
-  auto block = world_get_block(world, pos, &is_in_range);
-  if (is_in_range)
-    return block == block_id;
-  else
-    return false;
-}
+constexpr i32 WORLD_SEED = 0;
+
+constexpr ivec2 WORLDGEN_RANGE_X = {-WORLD_SIZE_X / 2 * 32, +WORLD_SIZE_X / 2 * 32};
+constexpr ivec2 WORLDGEN_RANGE_Z = {-WORLD_SIZE_Z / 2 * 32, +WORLD_SIZE_Z / 2 * 32};
+
+constexpr u32 N_TREES = 500;
+constexpr u32 N_SAND_PATCHES = 70;
 
 void world_gen(WorldData *world) {
-  for (i32 z = -256; z < 256; ++z) {
-    for (i32 x = -256; x < 256; ++x) {
-      for (i32 y = -32; y <= 2; ++y) {
+  for (i32 z = WORLDGEN_RANGE_Z[0]; z < WORLDGEN_RANGE_Z[1]; ++z) {
+    for (i32 x = WORLDGEN_RANGE_X[0]; x < WORLDGEN_RANGE_X[1]; ++x) {
+      i32 terrain_height = terrain_height_at((ivec2){x, z});
+      i32 y_stone_start = -32;
+      i32 y_dirt_start = terrain_height - 3;
+      i32 y_surface = terrain_height;
+      for (i32 y = y_stone_start; y < y_dirt_start; ++y)
         world_set_block(world, (ivec3){x, y, z}, BlockId_STONE);
-      }
-      world_set_block(world, (ivec3){x, 3, z}, BlockId_DIRT);
-      world_set_block(world, (ivec3){x, 4, z}, BlockId_DIRT);
-      world_set_block(world, (ivec3){x, 5, z}, BlockId_DIRT);
-      world_set_block(world, (ivec3){x, 6, z}, BlockId_GRASS);
+      for (i32 y = y_dirt_start; y < y_surface; ++y)
+        world_set_block(world, (ivec3){x, y, z}, BlockId_DIRT);
+      world_set_block(world, (ivec3){x, y_surface, z}, BlockId_GRASS);
     }
   }
-  srand(0);
 
-  for (usize i = 0; i < 70; ++i) {
-    ivec3 pos = {rand() % 500 - 250, 6, rand() % 500 - 250};
+  srand(WORLD_SEED);
+
+  for (u32 i = 0; i < N_SAND_PATCHES; ++i) {
+    ivec2 pos = {
+        rand_in(WORLDGEN_RANGE_X[0], WORLDGEN_RANGE_X[1]),
+        rand_in(WORLDGEN_RANGE_X[0], WORLDGEN_RANGE_X[1]),
+    };
     gen_sand_patch(world, pos);
   }
 
-  for (usize i = 0; i < 500; ++i) {
-    ivec3 pos = {rand() % 510 - 254, 7, rand() % 510 - 254};
-    ivec3 pos_below = {pos[0], pos[1] - 1, pos[2]};
-    if (block_is(world, pos_below, BlockId_GRASS))
-      gen_tree(world, pos);
+  for (u32 i = 0; i < N_TREES; ++i) {
+    ivec2 pos = {
+        rand_in(WORLDGEN_RANGE_X[0], WORLDGEN_RANGE_X[1]),
+        rand_in(WORLDGEN_RANGE_X[0], WORLDGEN_RANGE_X[1]),
+    };
+    gen_tree(world, pos);
   }
 }
