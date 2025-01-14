@@ -118,7 +118,7 @@ static inline bool has_solid_neighbor(const ChunkData *chunk_data, u32 x, u32 y,
   }
   auto block_id = chunk_data->blocks[neighbor_y][neighbor_z][neighbor_x].id;
   auto block_transparency = BLOCK_REGISTRIES[block_id].transparency;
-  return block_transparency == BlockTransparency_Solid;
+  return block_transparency == BlockTransparency_Solid || block_transparency == BlockTransparency_Transparent;
 }
 
 void build_chunk(ChunkBuilder *chunk_builder, Mesh *mesh, const ChunkData *chunk_data, Texture texture) {

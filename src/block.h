@@ -41,6 +41,7 @@ typedef enum block_id : u16 {
   BlockId_SAND,
   BlockId_CHERRY_LOG,
   BlockId_CHERRY_LEAVES,
+  BlockId_WATER,
   BlockId_TEST_BLOCK = 255,
 } BlockId;
 
@@ -135,6 +136,16 @@ static BlockRegistry BLOCK_REGISTRIES[256] = {
                             [CubeDirection_Up] = {11, 0},
                             [CubeDirection_Down] = {11, 0},
                         }}},
+    [BlockId_WATER] = {.name = STATIC_STRING("water"),
+                            .transparency = BlockTransparency_Solid,
+                            .model = {{
+                                [CubeDirection_North] = {12, 0},
+                                [CubeDirection_South] = {12, 0},
+                                [CubeDirection_East] = {12, 0},
+                                [CubeDirection_West] = {12, 0},
+                                [CubeDirection_Up] = {12, 0},
+                                [CubeDirection_Down] = {12, 0},
+                            }}},
     [BlockId_TEST_BLOCK] = {.name = STATIC_STRING("test_block"),
                             .transparency = BlockTransparency_Solid,
                             .model = {{

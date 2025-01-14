@@ -161,11 +161,14 @@ static inline i32 terrain_height_at(ivec2 pos) {
   f32 out = 0.f;
   // Just some random values I cooked up.
   out += wave_sampler(1.3f, 0.51784f, (vec2){0.8f, 0.1f}, pos);
-  out = MAX(out, wave_sampler(1.9f, 0.2472f, (vec2){2.8f, 7.4f}, pos));
   out *= out;
+  out = MAX(out, wave_sampler(1.9f, 0.2472f, (vec2){2.8f, 7.4f}, pos));
   out -= wave_sampler(1.f, 0.397f, (vec2){6.3f, 1.4f}, pos);
   out += wave_sampler(2.f, 0.12f, (vec2){4.9f, 4.2f}, pos);
+  out *= 2;
   out += wave_sampler(3.f, 0.1f, (vec2){3.1f, 6.4f}, pos);
+  if (out < 3.f)
+    out += 1.f;
   return (i32)(out) + 5;
 }
 
@@ -243,7 +246,7 @@ constexpr ivec2 WORLDGEN_RANGE_Z = {-WORLD_SIZE_Z / 2 * 32, +WORLD_SIZE_Z / 2 * 
 
 constexpr u32 N_TREES = 500;
 constexpr u32 N_CHERRY_TREES = 100;
-constexpr u32 N_SAND_PATCHES = 70;
+constexpr u32 N_SAND_PATCHES = 40;
 
 void world_gen(WorldData *world) {
   for (i32 z = WORLDGEN_RANGE_Z[0]; z < WORLDGEN_RANGE_Z[1]; ++z) {
@@ -252,11 +255,16 @@ void world_gen(WorldData *world) {
       i32 y_stone_start = -32;
       i32 y_dirt_start = terrain_height - 3;
       i32 y_surface = terrain_height;
+      bool is_underwater = terrain_height < 3;
+      bool is_sand = 3 <= terrain_height && terrain_height <= 3;
+      BlockId surface_block = is_underwater ? BlockId_WATER : (is_sand ? BlockId_SAND : BlockId_GRASS);
       for (i32 y = y_stone_start; y < y_dirt_start; ++y)
         world_set_block(world, (ivec3){x, y, z}, BlockId_STONE);
       for (i32 y = y_dirt_start; y < y_surface; ++y)
-        world_set_block(world, (ivec3){x, y, z}, BlockId_DIRT);
-      world_set_block(world, (ivec3){x, y_surface, z}, BlockId_GRASS);
+        world_set_block(world, (ivec3){x, y, z}, (is_underwater) ? BlockId_STONE : BlockId_DIRT);
+      world_set_block(world, (ivec3){x, y_surface, z}, surface_block);
+      for (i32 y = y_surface; y < 3; ++y)
+        world_set_block(world, (ivec3){x, y, z}, BlockId_WATER);
     }
   }
 
