@@ -138,6 +138,7 @@ static inline i32 terrain_height_at(ivec2 pos) {
   // Just some random values I cooked up.
   out += wave_sampler(1.3f, 0.51784f, (vec2){0.8f, 0.1f}, pos);
   out = MAX(out, wave_sampler(1.9f, 0.2472f, (vec2){2.8f, 7.4f}, pos));
+  out *= out;
   out -= wave_sampler(1.f, 0.397f, (vec2){6.3f, 1.4f}, pos);
   out += wave_sampler(2.f, 0.12f, (vec2){4.9f, 4.2f}, pos);
   out += wave_sampler(3.f, 0.1f, (vec2){3.1f, 6.4f}, pos);
@@ -153,23 +154,44 @@ static inline void gen_tree(WorldData *world, ivec2 pos_xz) {
   i32 height = rand_in(2, 4);
 
   // Leaves.
-  for (i32 y = pos[1] + height; y <= pos[1] + height + 3; ++y) {
-    for (i32 z = pos[2] - 2; z <= pos[2] + 2; ++z) {
-      for (i32 x = pos[0] - 2; x <= pos[0] + 2; ++x) {
-        world_set_block(world, (ivec3){x, y, z}, BlockId_LEAVES);
-      }
-    }
-  }
-  for (i32 z = pos[2] - 1; z <= pos[2] + 1; ++z) {
-    for (i32 x = pos[0] - 1; x <= pos[0] + 1; ++x) {
+  for (i32 y = pos[1] + height; y <= pos[1] + height + 3; ++y)
+    for (i32 z = pos[2] - 2; z <= pos[2] + 2; ++z)
+      for (i32 x = pos[0] - 2; x <= pos[0] + 2; ++x)
+        if (!(abs(x - pos[0]) == 2 && abs(z - pos[2]) == 2))
+          world_set_block(world, (ivec3){x, y, z}, BlockId_LEAVES);
+  for (i32 z = pos[2] - 1; z <= pos[2] + 1; ++z)
+    for (i32 x = pos[0] - 1; x <= pos[0] + 1; ++x)
       world_set_block(world, (ivec3){x, pos[1] + height + 4, z}, BlockId_LEAVES);
-    }
-  }
 
   // Trunk.
-  for (i32 y = pos[1]; y <= pos[1] + height + 2; ++y) {
+  for (i32 y = pos[1]; y <= pos[1] + height + 2; ++y)
     world_set_block(world, (ivec3){pos[0], y, pos[2]}, BlockId_LOG);
-  }
+}
+
+static inline void gen_cherry_tree(WorldData *world, ivec2 pos_xz) {
+  ivec3 pos = {pos_xz[0], terrain_height_at(pos_xz) + 1, pos_xz[1]};
+  ivec3 pos_below = {pos[0], pos[1] - 1, pos[2]};
+  if (!block_is(world, pos_below, BlockId_GRASS))
+    return;
+
+  i32 height = rand_in(3, 7);
+
+  // Leaves.
+  for (i32 y = pos[1] + height; y <= pos[1] + height + 3; ++y)
+    for (i32 z = pos[2] - 3; z <= pos[2] + 3; ++z)
+      for (i32 x = pos[0] - 3; x <= pos[0] + 3; ++x)
+        if (!(abs(x - pos[0]) == 3 && abs(z - pos[2]) == 3))
+          world_set_block(world, (ivec3){x, y, z}, BlockId_CHERRY_LEAVES);
+  for (i32 z = pos[2] - 2; z <= pos[2] + 2; ++z)
+    for (i32 x = pos[0] - 2; x <= pos[0] + 2; ++x)
+      world_set_block(world, (ivec3){x, pos[1] + height + 4, z}, BlockId_CHERRY_LEAVES);
+  for (i32 z = pos[2] - 1; z <= pos[2] + 1; ++z)
+    for (i32 x = pos[0] - 1; x <= pos[0] + 1; ++x)
+      world_set_block(world, (ivec3){x, pos[1] + height + 5, z}, BlockId_CHERRY_LEAVES);
+
+  // Trunk.
+  for (i32 y = pos[1]; y <= pos[1] + height + 2; ++y)
+    world_set_block(world, (ivec3){pos[0], y, pos[2]}, BlockId_CHERRY_LOG);
 }
 
 static inline void gen_sand_patch(WorldData *world, ivec2 pos) {
@@ -196,6 +218,7 @@ constexpr ivec2 WORLDGEN_RANGE_X = {-WORLD_SIZE_X / 2 * 32, +WORLD_SIZE_X / 2 * 
 constexpr ivec2 WORLDGEN_RANGE_Z = {-WORLD_SIZE_Z / 2 * 32, +WORLD_SIZE_Z / 2 * 32};
 
 constexpr u32 N_TREES = 500;
+constexpr u32 N_CHERRY_TREES = 100;
 constexpr u32 N_SAND_PATCHES = 70;
 
 void world_gen(WorldData *world) {
@@ -229,5 +252,13 @@ void world_gen(WorldData *world) {
         rand_in(WORLDGEN_RANGE_X[0], WORLDGEN_RANGE_X[1]),
     };
     gen_tree(world, pos);
+  }
+
+  for (u32 i = 0; i < N_CHERRY_TREES; ++i) {
+    ivec2 pos = {
+        rand_in(WORLDGEN_RANGE_X[0], WORLDGEN_RANGE_X[1]),
+        rand_in(WORLDGEN_RANGE_X[0], WORLDGEN_RANGE_X[1]),
+    };
+    gen_cherry_tree(world, pos);
   }
 }
