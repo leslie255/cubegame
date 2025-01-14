@@ -46,16 +46,40 @@ i32 mod_with_sign(i32 x, i32 y) {
   return result < 0 ? result + y : result;
 }
 
-/// Min is inclusive, max is exclusive.
+/// Inclusive on both ends.
 static inline i32 is_between(i32 x, i32 min, i32 max) {
-  return min <= x && x < max;
+  return min <= x && x <= max;
 }
+
+constexpr ivec3 CHUNKD_ID_MIN = {
+    -(WORLD_SIZE_X / 2),
+    -(WORLD_SIZE_Y / 2),
+    -(WORLD_SIZE_Z / 2),
+};
+
+constexpr ivec3 CHUNKD_ID_MAX = {
+    WORLD_SIZE_X / 2 - 1,
+    WORLD_SIZE_Y / 2 - 1,
+    WORLD_SIZE_Z / 2 - 1,
+};
+
+constexpr ivec3 WORLD_COORD_MIN = {
+    CHUNKD_ID_MIN[0] * 32,
+    CHUNKD_ID_MIN[1] * 32,
+    CHUNKD_ID_MIN[2] * 32,
+};
+
+constexpr ivec3 WORLD_COORD_MAX = {
+    (CHUNKD_ID_MAX[0] + 1) * 32 - 1,
+    (CHUNKD_ID_MAX[1] + 1) * 32 - 1,
+    (CHUNKD_ID_MAX[2] + 1) * 32 - 1,
+};
 
 [[nodiscard]]
 bool world_to_chunk_coord(ivec3 world_coord, ivec3 dest_chunk_id, ivec3 dest_chunk_local_coord) {
-  if (!is_between(world_coord[0], -WORLD_SIZE_X * 32 / 2, WORLD_SIZE_X * 32 / 2) ||
-      !is_between(world_coord[1], -WORLD_SIZE_Y * 32 / 2, WORLD_SIZE_Y * 32 / 2) ||
-      !is_between(world_coord[1], -WORLD_SIZE_Z * 32 / 2, WORLD_SIZE_Z * 32 / 2)) {
+  if (!is_between(world_coord[0], WORLD_COORD_MIN[0], WORLD_COORD_MAX[0]) ||
+      !is_between(world_coord[1], WORLD_COORD_MIN[1], WORLD_COORD_MAX[1]) ||
+      !is_between(world_coord[2], WORLD_COORD_MIN[2], WORLD_COORD_MAX[2])) {
     return false;
   }
 
