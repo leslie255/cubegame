@@ -126,20 +126,22 @@ static inline i32 rand_in(i32 min, i32 max) {
   return rand() % (max - min) + min;
 }
 
-static inline void wave_sampler(f32 amp, f32 scale, vec2 offset, ivec2 in, vec2 out_acc) {
-  out_acc[0] += sinf(((f32)in[0] + offset[0]) * (scale)) * (amp / 2.f);
-  out_acc[1] += sinf(((f32)in[1] + offset[1]) * (scale)) * (amp / 2.f);
+static inline f32 wave_sampler(f32 amp, f32 scale, vec2 offset, ivec2 in) {
+  f32 result = 0;
+  result += sinf(((f32)in[0] + offset[0]) * (scale)) * (amp / 2.f);
+  result += sinf(((f32)in[1] + offset[1]) * (scale)) * (amp / 2.f);
+  return result;
 }
 
 static inline i32 terrain_height_at(ivec2 pos) {
-  vec2 out = {};
+  f32 out = 0.f;
   // Just some random values I cooked up.
-  wave_sampler(1.3f, 0.51784f, (vec2){0.8f, 0.1f}, pos, out);
-  wave_sampler(1.9f, 0.2472f, (vec2){2.8f, 7.4f}, pos, out);
-  wave_sampler(-1.f, 0.397f, (vec2){6.3f, 1.4f}, pos, out);
-  wave_sampler(-2.f, 0.12f, (vec2){4.9f, 4.2f}, pos, out);
-  wave_sampler(3.f, 0.1f, (vec2){3.1f, 6.4f}, pos, out);
-  return (i32)(out[0] + out[1]) + 5;
+  out += wave_sampler(1.3f, 0.51784f, (vec2){0.8f, 0.1f}, pos);
+  out = MAX(out, wave_sampler(1.9f, 0.2472f, (vec2){2.8f, 7.4f}, pos));
+  out -= wave_sampler(1.f, 0.397f, (vec2){6.3f, 1.4f}, pos);
+  out += wave_sampler(2.f, 0.12f, (vec2){4.9f, 4.2f}, pos);
+  out += wave_sampler(3.f, 0.1f, (vec2){3.1f, 6.4f}, pos);
+  return (i32)(out) + 5;
 }
 
 static inline void gen_tree(WorldData *world, ivec2 pos_xz) {
