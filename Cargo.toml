@@ -1,0 +1,9 @@
+[package]
+name = "new_cubegame"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+glium = "*"
+cgmath = "0.18"
+index_vec = "*"
