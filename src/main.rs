@@ -1,7 +1,10 @@
-#![feature(duration_millis_float)]
+#![allow(dead_code)]
 
-use cgmath::prelude::*;
+use std::time::{Instant, SystemTime};
+
 use cgmath::*;
+
+use font::Font;
 use glium::{
     Surface,
     backend::glutin,
@@ -11,7 +14,20 @@ use glium::{
         keyboard::{KeyCode, PhysicalKey},
     },
 };
+use resource::ResourceLoader;
 
+pub mod font;
+pub mod resource;
+
+pub fn matrix4_to_array<T>(matrix: Matrix4<T>) -> [[T; 4]; 4] {
+    matrix.into()
+}
+
+pub fn matrix3_to_array<T>(matrix: Matrix3<T>) -> [[T; 3]; 3] {
+    matrix.into()
+}
+
+/// Keeps track of which keys are currently down.
 #[derive(Debug, Clone)]
 pub struct InputHelper {
     downed_keys: Vec<bool>,
@@ -57,7 +73,6 @@ pub struct Camera {
     pub direction: Vector3<f32>,
     pub up: Vector3<f32>,
     /// In degrees.
-    /// 0 for orthographic projection (+0.0, not -0.0!).
     pub fov: f32,
     pub near: f32,
     pub far: f32,
@@ -68,13 +83,13 @@ impl Camera {
         Matrix4::look_to_rh(self.position, self.direction, self.up)
     }
 
-    pub fn projection_matrix(self, frame_width: f32, frame_height: f32) -> Matrix4<f32> {
-        let aspect_ratio = frame_width / frame_height;
-        if self.fov == 0. {
-            cgmath::ortho(0., frame_width, 0., frame_height, self.near, self.far)
-        } else {
-            cgmath::perspective(Deg(self.fov), aspect_ratio, self.near, self.far)
-        }
+    pub fn projection_matrix(self, frame_size: Vector2<f32>) -> Matrix4<f32> {
+        cgmath::perspective(
+            Deg(self.fov),
+            frame_size.x / frame_size.y,
+            self.near,
+            self.far,
+        )
     }
 }
 
@@ -160,13 +175,248 @@ glium::implement_vertex!(TriangleVertex, position, color);
 pub struct Triangle {
     vertex_buffer: glium::VertexBuffer<TriangleVertex>,
     draw_parameters: glium::DrawParameters<'static>,
-    program: glium::Program,
     model: Matrix4<f32>,
     view: Matrix4<f32>,
     projection: Matrix4<f32>,
 }
 
 impl Triangle {
+    const VERTICES: [TriangleVertex; 3] = [
+        TriangleVertex::new([0.5, -0.5], [1.0, 0.0, 0.0]), // bottom right
+        TriangleVertex::new([-0.5, -0.5], [0.0, 1.0, 0.0]), // bottom left
+        TriangleVertex::new([0.0, 0.5], [0.0, 0.0, 1.0]),  // top
+    ];
+
+    pub fn set_model(&mut self, model: Matrix4<f32>) {
+        self.model = model;
+    }
+
+    pub fn set_view(&mut self, view: Matrix4<f32>) {
+        self.view = view;
+    }
+
+    pub fn set_projection(&mut self, projection: Matrix4<f32>) {
+        self.projection = projection;
+    }
+
+    pub fn new(display: &impl glium::backend::Facade) -> Self {
+        Self {
+            vertex_buffer: glium::VertexBuffer::new(display, &Self::VERTICES[..]).unwrap(),
+            draw_parameters: glium::DrawParameters {
+                depth: glium::Depth {
+                    test: glium::DepthTest::IfLess,
+                    write: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            model: Matrix4::identity(),
+            view: Matrix4::identity(),
+            projection: Matrix4::identity(),
+        }
+    }
+
+    pub fn draw(&self, frame: &mut glium::Frame, shader: &glium::Program) {
+        let model: [[f32; 4]; 4] = self.model.into();
+        let view: [[f32; 4]; 4] = self.view.into();
+        let projection: [[f32; 4]; 4] = self.projection.into();
+        let uniforms = glium::uniform! {
+            model: model,
+            view: view,
+            projection: projection,
+        };
+        frame
+            .draw(
+                &self.vertex_buffer,
+                glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
+                shader,
+                &uniforms,
+                &self.draw_parameters,
+            )
+            .unwrap();
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CharacterMesh {
+    pub position: [f32; 2],
+    pub uv: [f32; 2],
+}
+
+glium::implement_vertex!(CharacterMesh, position, uv);
+
+#[derive(Debug)]
+pub struct TextPainter {
+    vertices: glium::VertexBuffer<CharacterMesh>,
+    indices: glium::IndexBuffer<u32>,
+    shader: glium::Program,
+    draw_parameters: glium::DrawParameters<'static>,
+    font: Font,
+}
+
+impl TextPainter {
+    const VERTEX_SHADER: &'static str = r#"
+        #version 140
+
+        in vec2 position;
+        in vec2 uv;
+        out vec2 vert_uv;
+
+        uniform mat4 model;
+        uniform mat4 view;
+        uniform mat4 projection;
+        uniform mat3 uv_matrix;
+
+        void main() {
+            gl_Position = projection * view * model * vec4(position.xy, 0.0, 1.0);
+            vert_uv = (uv_matrix * vec3(uv, 1.0)).xy;
+        }
+    "#;
+
+    const FRAGMENT_SHADER: &'static str = r#"
+        #version 140
+
+        in vec2 vert_uv;
+        out vec4 color;
+
+        uniform sampler2D tex;
+        uniform vec4 fg_color;
+        uniform vec4 bg_color;
+
+        void main() {
+            color = texture(tex, vert_uv);
+            color = vec4(
+                color.a * fg_color.r,
+                color.a * fg_color.g,
+                color.a * fg_color.b,
+                color.a * fg_color.a);
+            color += vec4(
+                (1 - color.a) * bg_color.r,
+                (1 - color.a) * bg_color.g,
+                (1 - color.a) * bg_color.b,
+                (1 - color.a) * bg_color.a);
+        }
+    "#;
+
+    #[rustfmt::skip]
+    const VERTICES: [CharacterMesh; 4] = [
+        CharacterMesh { position: [0., 0.], uv: [0., 0.] },
+        CharacterMesh { position: [1., 0.], uv: [1., 0.] },
+        CharacterMesh { position: [0., 1.], uv: [0., 1.] },
+        CharacterMesh { position: [1., 1.], uv: [1., 1.] },
+    ];
+
+    #[rustfmt::skip]
+    const INDICES: [u32; 6] = [
+        2, 1, 0, //
+        1, 2, 3, //
+    ];
+
+    pub fn new(display: &impl glium::backend::Facade, resource_loader: &ResourceLoader) -> Self {
+        Self {
+            vertices: glium::VertexBuffer::new(display, &Self::VERTICES[..]).unwrap(),
+            indices: glium::IndexBuffer::new(
+                display,
+                glium::index::PrimitiveType::TrianglesList,
+                &Self::INDICES[..],
+            )
+            .unwrap(),
+            shader: glium::program::Program::from_source(
+                display,
+                Self::VERTEX_SHADER,
+                Self::FRAGMENT_SHADER,
+                None,
+            )
+            .unwrap(),
+            draw_parameters: glium::DrawParameters {
+                depth: glium::Depth {
+                    test: glium::DepthTest::Overwrite,
+                    write: false,
+                    ..Default::default()
+                },
+                blend: glium::Blend {
+                    alpha: glium::BlendingFunction::Addition {
+                        source: glium::LinearBlendingFactor::One,
+                        destination: glium::LinearBlendingFactor::One,
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            font: {
+                let mut font =
+                    Font::load_from_path(resource_loader, "font/big_blue_terminal.json", false);
+                let image = glium::texture::RawImage2d::from_raw_rgba(
+                    font.atlas().to_rgba8().into_raw(),
+                    (font.atlas().width(), font.atlas().height()),
+                );
+                font.gl_texture = Some(glium::Texture2d::new(display, image).unwrap());
+                font
+            },
+        }
+    }
+
+    pub fn draw_char(
+        &self,
+        frame: &mut glium::Frame,
+        position: Vector2<f32>,
+        size: f32,
+        char: char,
+    ) {
+        let (frame_width, frame_height) = frame.get_dimensions();
+        let view: Matrix4<f32> = Matrix4::identity();
+        let projection = cgmath::ortho(0., frame_width as f32, frame_height as f32, 0., -1., 1.);
+        let model = Matrix4::from_translation(Vector3::new(position.x, position.y, 0.));
+        let model = model * Matrix4::from_nonuniform_scale(size, size, 1.);
+        let quad = self.font.sample(char);
+        let uv_matrix = Matrix3::from_translation(vec2(quad.left, quad.top))
+            * Matrix3::from_nonuniform_scale(quad.width(), quad.height());
+        let texture_sampler = self
+            .font
+            .gl_texture
+            .as_ref()
+            .unwrap()
+            .sampled()
+            .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
+            .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest);
+        let uniforms = glium::uniform! {
+            model: matrix4_to_array(model),
+            view: matrix4_to_array(view),
+            projection: matrix4_to_array(projection),
+            uv_matrix: matrix3_to_array(uv_matrix),
+            tex: texture_sampler,
+            fg_color: [1., 1., 1., 1.0f32],
+            bg_color: [0.5, 0.5, 0.5, 1.0f32],
+        };
+        frame
+            .draw(
+                &self.vertices,
+                &self.indices,
+                &self.shader,
+                &uniforms,
+                &self.draw_parameters,
+            )
+            .unwrap();
+    }
+}
+
+#[derive(Debug)]
+pub struct Game {
+    window: winit::window::Window,
+    display: glium::Display<glium::glutin::surface::WindowSurface>,
+    resource_loader: ResourceLoader,
+    shader: glium::Program,
+    input_helper: InputHelper,
+    player_camera: PlayerCamera,
+    text_painter: TextPainter,
+    triangle0: Triangle,
+    triangle1: Triangle,
+    last_window_event: SystemTime,
+    fps_counter: u32,
+    fps_counter_seconds: f64,
+}
+
+impl Game {
     const VERTEX_SHADER: &'static str = r#"
         #version 140
 
@@ -197,118 +447,51 @@ impl Triangle {
         }
     "#;
 
-    const VERTICES: [TriangleVertex; 3] = [
-        TriangleVertex::new([0.5, -0.5], [1.0, 0.0, 0.0]), // bottom right
-        TriangleVertex::new([-0.5, -0.5], [0.0, 1.0, 0.0]), // bottom left
-        TriangleVertex::new([0.0, 0.5], [0.0, 0.0, 1.0]),  // top
-    ];
-
-    fn program(display: &impl glium::backend::Facade) -> glium::Program {
-        glium::program::Program::from_source(
-            display,
-            Self::VERTEX_SHADER,
-            Self::FRAGMENT_SHADER,
-            None,
-        )
-        .unwrap()
-    }
-
-    pub fn set_model(&mut self, model: Matrix4<f32>) {
-        self.model = model;
-    }
-
-    pub fn set_view(&mut self, view: Matrix4<f32>) {
-        self.view = view;
-    }
-
-    pub fn set_projection(&mut self, projection: Matrix4<f32>) {
-        self.projection = projection;
-    }
-
-    pub fn new(display: &impl glium::backend::Facade) -> Self {
-        Self {
-            vertex_buffer: glium::VertexBuffer::new(display, &Self::VERTICES[..]).unwrap(),
-            draw_parameters: glium::DrawParameters {
-                depth: glium::Depth {
-                    test: glium::DepthTest::IfLess,
-                    write: true,
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            program: Self::program(display),
-            model: Matrix4::identity(),
-            view: Matrix4::identity(),
-            projection: Matrix4::identity(),
-        }
-    }
-
-    pub fn draw(&self, frame: &mut glium::Frame) {
-        let model: [[f32; 4]; 4] = self.model.into();
-        let view: [[f32; 4]; 4] = self.view.into();
-        let projection: [[f32; 4]; 4] = self.projection.into();
-        let uniforms = glium::uniform! {
-            model: model,
-            view: view,
-            projection: projection,
-        };
-        frame
-            .draw(
-                &self.vertex_buffer,
-                glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
-                &self.program,
-                &uniforms,
-                &self.draw_parameters,
-            )
-            .unwrap();
-    }
-}
-
-#[derive(Debug)]
-pub struct Game {
-    window: winit::window::Window,
-    display: glium::Display<glium::glutin::surface::WindowSurface>,
-    input_helper: InputHelper,
-    player_camera: PlayerCamera,
-    triangle0: Triangle,
-    triangle1: Triangle,
-}
-
-impl Game {
     pub fn new(event_loop: &winit::event_loop::EventLoop<()>) -> Self {
         let (window, display) = glutin::SimpleWindowBuilder::new()
             .with_title("New Cube Game!")
             .with_inner_size(1600, 1200)
             .build(event_loop);
-
-        let triangle0 = Triangle::new(&display);
-        let triangle1 = Triangle::new(&display);
-
+        let resource_loader = ResourceLoader::with_default_res_directory().unwrap();
         Self {
             window,
-            display,
+            shader: glium::program::Program::from_source(
+                &display,
+                Self::VERTEX_SHADER,
+                Self::FRAGMENT_SHADER,
+                None,
+            )
+            .unwrap(),
             input_helper: InputHelper::new(),
             player_camera: PlayerCamera::new(Point3::new(0., 0., 1.), 0., -90.),
-            triangle0,
-            triangle1,
+            text_painter: TextPainter::new(&display, &resource_loader),
+            triangle0: Triangle::new(&display),
+            triangle1: Triangle::new(&display),
+            last_window_event: SystemTime::now(),
+            fps_counter: 0,
+            fps_counter_seconds: 0.,
+            display,
+            resource_loader,
         }
     }
 
     fn draw(&mut self) {
+        let before_drawing = Instant::now();
+
         let mut frame = self.display.draw();
         frame.clear_color_and_depth((0.8, 0.95, 1.0, 1.0), 1.);
 
         let view_matrix = self.player_camera.camera.view_matrix();
-        let projection_matrix = self.player_camera.camera.projection_matrix(
-            self.window.inner_size().width as f32,
-            self.window.inner_size().height as f32,
-        );
-
+        let frame_size = self.window.inner_size();
+        let projection_matrix = self.player_camera.camera.projection_matrix(Vector2::new(
+            frame_size.width as f32,
+            frame_size.height as f32,
+        ));
         self.triangle0
             .set_model(Matrix4::from_translation([0.5, 0., 0.].into()));
         self.triangle0.set_view(view_matrix);
         self.triangle0.set_projection(projection_matrix);
-        self.triangle0.draw(&mut frame);
+        self.triangle0.draw(&mut frame, &self.shader);
 
         let s = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -321,27 +504,32 @@ impl Game {
         );
         self.triangle1.set_view(view_matrix);
         self.triangle1.set_projection(projection_matrix);
-        self.triangle1.draw(&mut frame);
+        self.triangle1.draw(&mut frame, &self.shader);
+
+        self.text_painter
+            .draw_char(&mut frame, Vector2::new(10., 10.), 100., 'a');
 
         frame.finish().unwrap();
-    }
 
-    fn key_down(&mut self, key_code: KeyCode, text: Option<&str>, is_repeat: bool) {
-        _ = (text, is_repeat);
-        if key_code == KeyCode::KeyW {
-            if is_repeat {
-                println!("So many W!");
-            } else {
-                println!("W!");
-            }
+        let after_drawing = Instant::now();
+        let frame_time = after_drawing.duration_since(before_drawing);
+        self.fps_counter_seconds += frame_time.as_secs_f64();
+        self.fps_counter += 1;
+        if self.fps_counter_seconds >= 0.5 {
+            println!(
+                "FPS: {}",
+                (self.fps_counter as f64) / self.fps_counter_seconds
+            );
+            self.fps_counter_seconds = 0.;
+            self.fps_counter = 0;
         }
     }
 
-    fn key_up(&mut self, key_code: KeyCode) {
-        if key_code == KeyCode::KeyW {
-            println!("No W :(");
-        }
-    }
+    #[expect(unused_variables)]
+    fn key_down(&mut self, key_code: KeyCode, text: Option<&str>, is_repeat: bool) {}
+
+    #[expect(unused_variables)]
+    fn key_up(&mut self, key_code: KeyCode) {}
 }
 
 impl winit::application::ApplicationHandler for Game {
@@ -365,26 +553,32 @@ impl winit::application::ApplicationHandler for Game {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
+        let now = std::time::SystemTime::now();
+        let duration_since_last_window_event = now.duration_since(self.last_window_event).unwrap();
+        self.last_window_event = now;
+
         let mut movement = <Vector3<f32>>::zero();
         if self.input_helper.key_is_down(KeyCode::KeyW) {
-            movement.y += 0.005;
+            movement.y += 1.0;
         }
         if self.input_helper.key_is_down(KeyCode::KeyS) {
-            movement.y -= 0.005;
+            movement.y -= 1.0;
         }
         if self.input_helper.key_is_down(KeyCode::KeyA) {
-            movement.x -= 0.005;
+            movement.x -= 1.0;
         }
         if self.input_helper.key_is_down(KeyCode::KeyD) {
-            movement.x += 0.005;
+            movement.x += 1.0;
         }
         if self.input_helper.key_is_down(KeyCode::Space) {
-            movement.z += 0.005;
+            movement.z += 1.0;
         }
         if self.input_helper.key_is_down(KeyCode::KeyR) {
-            movement.z -= 0.005;
+            movement.z -= 1.0;
         }
+        movement *= duration_since_last_window_event.as_secs_f32();
         self.player_camera.move_(movement);
+
         match event {
             winit::event::WindowEvent::CloseRequested => event_loop.exit(),
             winit::event::WindowEvent::RedrawRequested => {

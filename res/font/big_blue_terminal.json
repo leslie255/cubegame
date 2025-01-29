@@ -1,0 +1,10 @@
+{
+    "path": "big_blue_terminal.png",
+    "atlas_width": 128,
+    "atlas_height": 128,
+    "glyph_width": 8,
+    "glyph_height": 12,
+    "present_start": 32,
+    "present_end": 126,
+    "glyphs_per_line": 16
+}
