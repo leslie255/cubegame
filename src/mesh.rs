@@ -27,11 +27,10 @@ pub fn default_2d_draw_parameters() -> glium::DrawParameters<'static> {
 
 #[derive(Debug)]
 pub struct Mesh<V: Copy + glium::Vertex, I: Copy + glium::index::Index = u32> {
-    vertex_buffer: Option<glium::VertexBuffer<V>>,
-    index_buffer: Option<glium::IndexBuffer<I>>,
+    vertex_buffer: Option<Box<glium::VertexBuffer<V>>>,
+    index_buffer: Option<Box<glium::IndexBuffer<I>>>,
     vertices: Vec<V>,
     indices: Vec<I>,
-    draw_parameters: glium::DrawParameters<'static>,
 }
 
 impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> Mesh<V, I> {
@@ -41,7 +40,6 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> Mesh<V, I> {
             index_buffer: None,
             vertices: Vec::new(),
             indices: Vec::new(),
-            draw_parameters: glium::DrawParameters::default(),
         }
     }
 
@@ -57,13 +55,6 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> Mesh<V, I> {
         self_
     }
 
-    pub fn with_draw_parameters(self, draw_parameters: glium::DrawParameters<'static>) -> Self {
-        Self {
-            draw_parameters,
-            ..self
-        }
-    }
-
     /// Send the vertices and indices to the GPU.
     #[track_caller]
     pub fn update(&mut self, display: &impl glium::backend::Facade) {
@@ -72,14 +63,19 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> Mesh<V, I> {
             self.index_buffer = None;
             return;
         }
-        self.vertex_buffer = Some(glium::VertexBuffer::dynamic(display, self.vertices()).unwrap());
+        self.vertex_buffer = Some(
+            glium::VertexBuffer::dynamic(display, self.vertices())
+                .unwrap()
+                .into(),
+        );
         self.index_buffer = Some(
             glium::IndexBuffer::dynamic(
                 display,
                 glium::index::PrimitiveType::TrianglesList,
                 self.indices(),
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
         );
     }
 
@@ -89,6 +85,7 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> Mesh<V, I> {
         frame: &mut glium::Frame,
         uniforms: U,
         shader: &glium::Program,
+        draw_parameters: &glium::DrawParameters,
     ) {
         let Some(vertex_buffer) = self.vertex_buffer.as_ref() else {
             return;
@@ -98,11 +95,11 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> Mesh<V, I> {
         };
         frame
             .draw(
-                vertex_buffer,
-                index_buffer,
+                vertex_buffer.as_ref(),
+                index_buffer.as_ref(),
                 shader,
                 &uniforms,
-                self.draw_parameters(),
+                draw_parameters,
             )
             .unwrap();
     }
@@ -123,14 +120,6 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> Mesh<V, I> {
     /// Remember to call `update`!
     pub fn indices_mut(&mut self) -> &mut Vec<I> {
         &mut self.indices
-    }
-
-    pub fn draw_parameters(&self) -> &glium::DrawParameters<'static> {
-        &self.draw_parameters
-    }
-
-    pub fn draw_parameters_mut(&mut self) -> &mut glium::DrawParameters<'static> {
-        &mut self.draw_parameters
     }
 
     /// Don't forget to `update`!

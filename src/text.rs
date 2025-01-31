@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::rc::Rc;
 
 use std::ops::Range;
 
@@ -11,66 +10,6 @@ use cgmath::*;
 
 use crate::mesh::{self, Mesh};
 use crate::resource::ResourceLoader;
-
-pub fn default_font(
-    resource_loader: &ResourceLoader,
-    display: &impl glium::backend::Facade,
-) -> Font {
-    let mut font = Font::load_from_path(resource_loader, "font/big_blue_terminal.json");
-    let image = glium::texture::RawImage2d::from_raw_rgba(
-        font.atlas().to_rgba8().into_raw(),
-        (font.atlas().width(), font.atlas().height()),
-    );
-    font.gl_texture = Some(glium::Texture2d::new(display, image).unwrap());
-    font
-}
-
-pub fn text_shader(display: &impl glium::backend::Facade) -> glium::Program {
-    const VERTEX_SHADER: &str = r#"
-        #version 140
-
-        in vec2 position;
-        in vec2 uv;
-        out vec2 vert_uv;
-
-        uniform mat4 model;
-        uniform mat4 view;
-        uniform mat4 projection;
-        uniform mat3 uv_matrix;
-
-        void main() {
-            gl_Position = projection * view * model * vec4(position.xy, 0.0, 1.0);
-            vert_uv = (uv_matrix * vec3(uv, 1.0)).xy;
-        }
-    "#;
-
-    const FRAGMENT_SHADER: &str = r#"
-        #version 140
-
-        in vec2 vert_uv;
-        out vec4 color;
-
-        uniform sampler2D tex;
-        uniform vec4 fg_color;
-        uniform vec4 bg_color;
-
-        void main() {
-            color = texture(tex, vert_uv);
-            color = vec4(
-                color.a * fg_color.r,
-                color.a * fg_color.g,
-                color.a * fg_color.b,
-                color.a * fg_color.a);
-            color += vec4(
-                (1 - color.a) * bg_color.r,
-                (1 - color.a) * bg_color.g,
-                (1 - color.a) * bg_color.b,
-                (1 - color.a) * bg_color.a);
-        }
-    "#;
-
-    glium::program::Program::from_source(display, VERTEX_SHADER, FRAGMENT_SHADER, None).unwrap()
-}
 
 pub fn matrix4_to_array<T>(matrix: Matrix4<T>) -> [[T; 4]; 4] {
     matrix.into()
@@ -214,17 +153,17 @@ pub struct CharacterVertex {
 glium::implement_vertex!(CharacterVertex, position, uv);
 
 #[derive(Debug)]
-pub struct Line {
+pub struct Line<'res> {
     mesh: Mesh<CharacterVertex>,
     string: String,
-    font: Rc<Font>,
-    shader: Rc<Program>,
+    font: &'res Font,
+    shader: &'res Program,
 }
 
-impl Line {
-    pub fn new(font: Rc<Font>, shader: Rc<Program>) -> Self {
+impl<'res> Line<'res> {
+    pub fn new(font: &'res Font, shader: &'res Program) -> Self {
         Self {
-            mesh: Mesh::new().with_draw_parameters(mesh::default_2d_draw_parameters()),
+            mesh: Mesh::new(),
             string: String::new(),
             font,
             shader,
@@ -232,8 +171,8 @@ impl Line {
     }
 
     pub fn with_string(
-        font: Rc<Font>,
-        shader: Rc<Program>,
+        font: &'res Font,
+        shader: &'res Program,
         display: &impl glium::backend::Facade,
         string: String,
     ) -> Self {
@@ -264,18 +203,30 @@ impl Line {
 
         #[rustfmt::skip]
         let vertices = [
-            CharacterVertex { position: [quad.left,  quad.top],    uv: [uv_quad.left,  uv_quad.top]    },
             CharacterVertex { position: [quad.left,  quad.bottom], uv: [uv_quad.left,  uv_quad.bottom] },
-            CharacterVertex { position: [quad.right, quad.top],    uv: [uv_quad.right, uv_quad.top]    },
+            CharacterVertex { position: [quad.right, quad.top   ], uv: [uv_quad.right, uv_quad.top   ] },
             CharacterVertex { position: [quad.right, quad.bottom], uv: [uv_quad.right, uv_quad.bottom] },
+            CharacterVertex { position: [quad.left,  quad.top   ], uv: [uv_quad.left,  uv_quad.top   ] },
         ];
         #[rustfmt::skip]
         let indices = [
-            2, 1, 0,
-            1, 2, 3,
+            0, 1, 2,
+            1, 0, 3,
         ];
 
         self.mesh.append(&vertices, &indices);
+    }
+
+    pub fn clear(&mut self) {
+        self.string.clear();
+        self.mesh.indices_mut().clear();
+        self.mesh.vertices_mut().clear();
+    }
+
+    pub fn push_str(&mut self, str: &str) {
+        for char in str.chars() {
+            self.push_char(char);
+        }
     }
 
     /// Send the new mesh to the CPU.
@@ -313,6 +264,6 @@ impl Line {
             fg_color: Into::<[f32; 4]>::into(fg_color),
             bg_color: Into::<[f32; 4]>::into(bg_color),
         };
-        self.mesh.draw(frame, uniforms, &self.shader);
+        self.mesh.draw(frame, uniforms, self.shader, &mesh::default_2d_draw_parameters());
     }
 }

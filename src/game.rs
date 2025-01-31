@@ -1,8 +1,4 @@
-use std::{
-    fmt::Write,
-    rc::Rc,
-    time::{Duration, Instant, SystemTime},
-};
+use std::time::{Duration, Instant, SystemTime};
 
 use cgmath::*;
 use glium::{
@@ -17,7 +13,7 @@ use glium::{
 use crate::{
     mesh,
     resource::ResourceLoader,
-    text::{self, Font, Line},
+    text::{Font, Line},
 };
 
 /// Keeps track of which keys are currently down.
@@ -224,6 +220,62 @@ impl Triangle {
 }
 
 #[derive(Debug)]
+pub struct InfoText<'res> {
+    lines: Vec<Line<'res>>,
+    font: &'res Font,
+    shader: &'res glium::Program,
+}
+
+impl<'res> InfoText<'res> {
+    pub fn new(
+        display: &impl glium::backend::Facade,
+        font: &'res Font,
+        shader: &'res glium::Program,
+    ) -> Self {
+        Self {
+            lines: vec![
+                Line::with_string(font, shader, display, "CUBE GAME v0.0.0".into()),
+                Line::with_string(font, shader, display, "FPS: ---.---".into()),
+            ],
+            font,
+            shader,
+        }
+    }
+
+    fn set_line(&mut self, display: &impl glium::backend::Facade, i_line: usize, text: &str) {
+        let line = &mut self.lines[i_line];
+        line.clear();
+        line.push_str(text);
+        line.update(display);
+    }
+
+    fn set_is_paused(&mut self, display: &impl glium::backend::Facade, is_paused: bool) {
+        if is_paused {
+            self.set_line(display, 0, "[ESC] GAME PAUSED");
+        } else {
+            self.set_line(display, 0, "CUBE GAME v0.0.0");
+        }
+    }
+
+    fn set_fps(&mut self, display: &impl glium::backend::Facade, fps: f64) {
+        self.set_line(display, 1, format!("FPS: {:.3}", fps).as_str());
+    }
+
+    fn draw(&self, frame: &mut glium::Frame, content_scale: f32) {
+        let font_size = 16. * content_scale;
+        for (i, line) in self.lines.iter().enumerate() {
+            line.draw(
+                frame,
+                /* position   */ vec2(10., font_size * i as f32),
+                /* foreground */ vec4(1., 1., 1., 1.),
+                /* background */ vec4(0.5, 0.5, 0.5, 0.6),
+                /* font size  */ font_size,
+            );
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct GameResources {
     loader: ResourceLoader,
     shader_3d: glium::Program,
@@ -277,13 +329,12 @@ pub struct Game<'res> {
     player_camera: PlayerCamera,
     triangle0: Triangle,
     triangle1: Triangle,
-    line0: Line,
+    info_text: InfoText<'res>,
     last_window_event: SystemTime,
     fps_counter: u32,
     last_fps_update: Instant,
     fps: f64,
     is_paused: bool,
-    overlay_text: String,
 }
 
 impl<'res> Game<'res> {
@@ -292,25 +343,17 @@ impl<'res> Game<'res> {
         window: winit::window::Window,
         display: glium::Display<glium::glutin::surface::WindowSurface>,
     ) -> Self {
-        let resource_loader = ResourceLoader::with_default_res_directory().unwrap();
-        let text_shader = Rc::new(text::text_shader(&display));
         Self {
             window,
             input_helper: InputHelper::new(),
             player_camera: PlayerCamera::new(Point3::new(0., 0., 1.), 0., -90.),
             triangle0: Triangle::new(&display),
             triangle1: Triangle::new(&display),
-            line0: Line::with_string(
-                Rc::new(text::default_font(&resource_loader, &display)),
-                text_shader.clone(),
-                &display,
-                "abc".into(),
-            ),
+            info_text: InfoText::new(&display, &resources.font, &resources.shader_text),
             last_window_event: SystemTime::now(),
             fps_counter: 0,
             last_fps_update: Instant::now(),
             fps: f64::NAN,
-            overlay_text: String::new(),
             is_paused: false,
             display,
             resources,
@@ -348,18 +391,8 @@ impl<'res> Game<'res> {
         self.triangle1.set_projection(projection_matrix);
         self.triangle1.draw(&mut frame, &self.resources.shader_3d);
 
-        self.overlay_text.clear();
-        if self.is_paused {
-            let _ = writeln!(&mut self.overlay_text, "[ESC] Game Paused");
-        } else {
-            let _ = writeln!(&mut self.overlay_text, "CUBE GAME v0.0.0");
-        }
-        if self.fps.is_nan() {
-            let _ = writeln!(&mut self.overlay_text, "FPS: --.--");
-        } else {
-            let _ = writeln!(&mut self.overlay_text, "FPS: {:.2}", self.fps);
-        }
-        self.draw_overlay_text(&mut frame);
+        self.info_text
+            .draw(&mut frame, self.window.scale_factor() as f32);
 
         frame.finish().unwrap();
 
@@ -370,17 +403,8 @@ impl<'res> Game<'res> {
             self.fps = (self.fps_counter as f64) / seconds_last_fps_update;
             self.last_fps_update = now;
             self.fps_counter = 0;
+            self.info_text.set_fps(&self.display, self.fps);
         }
-    }
-
-    fn draw_overlay_text(&self, frame: &mut glium::Frame) {
-        self.line0.draw(
-            frame,
-            /* position   */ vec2(10., 10.),
-            /* foreground */ vec4(1., 1., 1., 1.),
-            /* background */ vec4(0.5, 0.5, 0.5, 0.6),
-            /* font size  */ 16. * self.window.scale_factor() as f32,
-        );
     }
 
     fn grab_cursor(&mut self) {
@@ -405,6 +429,7 @@ impl<'res> Game<'res> {
 
     fn toggle_paused(&mut self) {
         self.is_paused = !self.is_paused;
+        self.info_text.set_is_paused(&self.display, self.is_paused);
         if self.is_paused {
             self.ungrab_cursor();
         } else {
