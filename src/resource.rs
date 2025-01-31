@@ -44,7 +44,7 @@ impl ResourceLoader {
     }
 
     fn with_res_directory_unchecked(res_directory: PathBuf) -> Self {
-        println!("[DEBUG] loading resources under {res_directory:?}");
+        println!("[INFO] using resource directory {res_directory:?}");
         Self { res_directory }
     }
 
@@ -87,6 +87,12 @@ impl ResourceLoader {
     fn handle_malformed_image_encoding(&self, subpath: impl AsRef<Path>) -> ! {
         let subpath = subpath.as_ref();
         panic!("Image file is has malformed encoding: {subpath:?}")
+    }
+
+    pub fn read_to_string(&self, subpath: impl AsRef<Path>) -> String {
+        let path = self.path_for(subpath);
+        println!("[INFO] loading resource at {path:?}");
+        std::fs::read_to_string(path).unwrap()
     }
 
     pub fn open_file(&self, subpath: impl AsRef<Path>) -> File {

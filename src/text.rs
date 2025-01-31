@@ -1,14 +1,76 @@
 use std::path::Path;
+use std::rc::Rc;
 
 use std::ops::Range;
 
-use glium::Surface as _;
+use glium::{Program, Surface as _};
 use image::DynamicImage;
 use serde::{Deserialize, Serialize};
 
 use cgmath::*;
 
+use crate::mesh::{self, Mesh};
 use crate::resource::ResourceLoader;
+
+pub fn default_font(
+    resource_loader: &ResourceLoader,
+    display: &impl glium::backend::Facade,
+) -> Font {
+    let mut font = Font::load_from_path(resource_loader, "font/big_blue_terminal.json");
+    let image = glium::texture::RawImage2d::from_raw_rgba(
+        font.atlas().to_rgba8().into_raw(),
+        (font.atlas().width(), font.atlas().height()),
+    );
+    font.gl_texture = Some(glium::Texture2d::new(display, image).unwrap());
+    font
+}
+
+pub fn text_shader(display: &impl glium::backend::Facade) -> glium::Program {
+    const VERTEX_SHADER: &str = r#"
+        #version 140
+
+        in vec2 position;
+        in vec2 uv;
+        out vec2 vert_uv;
+
+        uniform mat4 model;
+        uniform mat4 view;
+        uniform mat4 projection;
+        uniform mat3 uv_matrix;
+
+        void main() {
+            gl_Position = projection * view * model * vec4(position.xy, 0.0, 1.0);
+            vert_uv = (uv_matrix * vec3(uv, 1.0)).xy;
+        }
+    "#;
+
+    const FRAGMENT_SHADER: &str = r#"
+        #version 140
+
+        in vec2 vert_uv;
+        out vec4 color;
+
+        uniform sampler2D tex;
+        uniform vec4 fg_color;
+        uniform vec4 bg_color;
+
+        void main() {
+            color = texture(tex, vert_uv);
+            color = vec4(
+                color.a * fg_color.r,
+                color.a * fg_color.g,
+                color.a * fg_color.b,
+                color.a * fg_color.a);
+            color += vec4(
+                (1 - color.a) * bg_color.r,
+                (1 - color.a) * bg_color.g,
+                (1 - color.a) * bg_color.b,
+                (1 - color.a) * bg_color.a);
+        }
+    "#;
+
+    glium::program::Program::from_source(display, VERTEX_SHADER, FRAGMENT_SHADER, None).unwrap()
+}
 
 pub fn matrix4_to_array<T>(matrix: Matrix4<T>) -> [[T; 4]; 4] {
     matrix.into()
@@ -82,13 +144,9 @@ impl Font {
     pub fn load_from_path(
         resource_loader: &ResourceLoader,
         json_subpath: impl AsRef<Path>,
-        log: bool,
     ) -> Self {
         let json_subpath = json_subpath.as_ref();
         let font_meta = resource_loader.load_json_object::<FontMetaJson>(json_subpath);
-        if log {
-            println!("[INFO] loaded resource {json_subpath:?}");
-        }
         let atlas_subpath = resource_loader.solve_relative_subpath(json_subpath, &font_meta.path);
         let atlas = resource_loader.load_image(&atlas_subpath);
         Self {
@@ -156,133 +214,88 @@ pub struct CharacterVertex {
 glium::implement_vertex!(CharacterVertex, position, uv);
 
 #[derive(Debug)]
-pub struct TextPainter {
-    vertices: glium::VertexBuffer<CharacterVertex>,
-    indices: glium::IndexBuffer<u32>,
-    shader: glium::Program,
-    draw_parameters: glium::DrawParameters<'static>,
-    font: Font,
+pub struct Line {
+    mesh: Mesh<CharacterVertex>,
+    string: String,
+    font: Rc<Font>,
+    shader: Rc<Program>,
 }
 
-impl TextPainter {
-    const VERTEX_SHADER: &'static str = r#"
-        #version 140
-
-        in vec2 position;
-        in vec2 uv;
-        out vec2 vert_uv;
-
-        uniform mat4 model;
-        uniform mat4 view;
-        uniform mat4 projection;
-        uniform mat3 uv_matrix;
-
-        void main() {
-            gl_Position = projection * view * model * vec4(position.xy, 0.0, 1.0);
-            vert_uv = (uv_matrix * vec3(uv, 1.0)).xy;
-        }
-    "#;
-
-    const FRAGMENT_SHADER: &'static str = r#"
-        #version 140
-
-        in vec2 vert_uv;
-        out vec4 color;
-
-        uniform sampler2D tex;
-        uniform vec4 fg_color;
-        uniform vec4 bg_color;
-
-        void main() {
-            color = texture(tex, vert_uv);
-            color = vec4(
-                color.a * fg_color.r,
-                color.a * fg_color.g,
-                color.a * fg_color.b,
-                color.a * fg_color.a);
-            color += vec4(
-                (1 - color.a) * bg_color.r,
-                (1 - color.a) * bg_color.g,
-                (1 - color.a) * bg_color.b,
-                (1 - color.a) * bg_color.a);
-        }
-    "#;
-
-    #[rustfmt::skip]
-    const VERTICES: [CharacterVertex; 4] = [
-        CharacterVertex { position: [0., 0.], uv: [0., 0.] },
-        CharacterVertex { position: [1., 0.], uv: [1., 0.] },
-        CharacterVertex { position: [0., 1.], uv: [0., 1.] },
-        CharacterVertex { position: [1., 1.], uv: [1., 1.] },
-    ];
-
-    #[rustfmt::skip]
-    const INDICES: [u32; 6] = [
-        2, 1, 0, //
-        1, 2, 3, //
-    ];
-
-    pub fn new(display: &impl glium::backend::Facade, resource_loader: &ResourceLoader) -> Self {
+impl Line {
+    pub fn new(font: Rc<Font>, shader: Rc<Program>) -> Self {
         Self {
-            vertices: glium::VertexBuffer::new(display, &Self::VERTICES[..]).unwrap(),
-            indices: glium::IndexBuffer::new(
-                display,
-                glium::index::PrimitiveType::TrianglesList,
-                &Self::INDICES[..],
-            )
-            .unwrap(),
-            shader: glium::program::Program::from_source(
-                display,
-                Self::VERTEX_SHADER,
-                Self::FRAGMENT_SHADER,
-                None,
-            )
-            .unwrap(),
-            draw_parameters: glium::DrawParameters {
-                depth: glium::Depth {
-                    test: glium::DepthTest::Overwrite,
-                    write: false,
-                    ..Default::default()
-                },
-                blend: glium::Blend {
-                    alpha: glium::BlendingFunction::Addition {
-                        source: glium::LinearBlendingFactor::One,
-                        destination: glium::LinearBlendingFactor::One,
-                    },
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            font: {
-                let mut font =
-                    Font::load_from_path(resource_loader, "font/big_blue_terminal.json", false);
-                let image = glium::texture::RawImage2d::from_raw_rgba(
-                    font.atlas().to_rgba8().into_raw(),
-                    (font.atlas().width(), font.atlas().height()),
-                );
-                font.gl_texture = Some(glium::Texture2d::new(display, image).unwrap());
-                font
-            },
+            mesh: Mesh::new().with_draw_parameters(mesh::default_2d_draw_parameters()),
+            string: String::new(),
+            font,
+            shader,
         }
     }
 
-    /// Returns the width of the character.
-    pub fn draw_char(
+    pub fn with_string(
+        font: Rc<Font>,
+        shader: Rc<Program>,
+        display: &impl glium::backend::Facade,
+        string: String,
+    ) -> Self {
+        let mut self_ = Self::new(font, shader);
+        for char in string.chars() {
+            self_.push_char(char);
+        }
+        self_.update(display);
+        self_
+    }
+
+    pub fn push_char(&mut self, char: char) {
+        let uv_quad = if self.font.has_glyph(char) {
+            self.font.sample(char)
+        } else {
+            return;
+        };
+        // Width is just the aspect ratio because height is 1.
+        let glyph_width = self.font.glyph_aspect_ratio();
+        let quad = Quad2 {
+            left: self.string.len() as f32 * glyph_width,
+            right: (self.string.len() + 1) as f32 * glyph_width,
+            bottom: 1.,
+            top: 0.,
+        };
+
+        self.string.push(char);
+
+        #[rustfmt::skip]
+        let vertices = [
+            CharacterVertex { position: [quad.left,  quad.top],    uv: [uv_quad.left,  uv_quad.top]    },
+            CharacterVertex { position: [quad.left,  quad.bottom], uv: [uv_quad.left,  uv_quad.bottom] },
+            CharacterVertex { position: [quad.right, quad.top],    uv: [uv_quad.right, uv_quad.top]    },
+            CharacterVertex { position: [quad.right, quad.bottom], uv: [uv_quad.right, uv_quad.bottom] },
+        ];
+        #[rustfmt::skip]
+        let indices = [
+            2, 1, 0,
+            1, 2, 3,
+        ];
+
+        self.mesh.append(&vertices, &indices);
+    }
+
+    /// Send the new mesh to the CPU.
+    pub fn update(&mut self, display: &impl glium::backend::Facade) {
+        self.mesh.update(display);
+    }
+
+    pub fn draw(
         &self,
         frame: &mut glium::Frame,
         position: Vector2<f32>,
-        size: f32,
-        char: char,
-    ) -> f32 {
-        let char_width = size * self.font.glyph_aspect_ratio();
+        fg_color: Vector4<f32>,
+        bg_color: Vector4<f32>,
+        font_size: f32,
+    ) {
         let (frame_width, frame_height) = frame.get_dimensions();
+        let model = Matrix4::from_translation(Vector3::new(position.x, position.y, 0.));
+        let model = model * Matrix4::from_nonuniform_scale(font_size, font_size, 1.);
         let view: Matrix4<f32> = Matrix4::identity();
         let projection = cgmath::ortho(0., frame_width as f32, frame_height as f32, 0., -1., 1.);
-        let model = Matrix4::from_translation(Vector3::new(position.x, position.y, 0.));
-        let model = model * Matrix4::from_nonuniform_scale(char_width, size, 1.);
-        let quad = self.font.sample(char);
-        let uv_matrix = Matrix3::from_translation(vec2(quad.left, quad.top))
-            * Matrix3::from_nonuniform_scale(quad.width(), quad.height());
         let texture_sampler = self
             .font
             .gl_texture
@@ -295,20 +308,11 @@ impl TextPainter {
             model: matrix4_to_array(model),
             view: matrix4_to_array(view),
             projection: matrix4_to_array(projection),
-            uv_matrix: matrix3_to_array(uv_matrix),
+            uv_matrix: matrix3_to_array::<f32>(Matrix3::identity()),
             tex: texture_sampler,
-            fg_color: [1., 1., 1., 1.0f32],
-            bg_color: [0.5, 0.5, 0.5, 1.0f32],
+            fg_color: Into::<[f32; 4]>::into(fg_color),
+            bg_color: Into::<[f32; 4]>::into(bg_color),
         };
-        frame
-            .draw(
-                &self.vertices,
-                &self.indices,
-                &self.shader,
-                &uniforms,
-                &self.draw_parameters,
-            )
-            .unwrap();
-        char_width
+        self.mesh.draw(frame, uniforms, &self.shader);
     }
 }

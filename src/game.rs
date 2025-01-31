@@ -1,12 +1,12 @@
 use std::{
     fmt::Write,
+    rc::Rc,
     time::{Duration, Instant, SystemTime},
 };
 
 use cgmath::*;
 use glium::{
     Surface,
-    backend::glutin,
     winit::{
         self,
         event::KeyEvent,
@@ -14,7 +14,11 @@ use glium::{
     },
 };
 
-use crate::{resource::ResourceLoader, text::TextPainter};
+use crate::{
+    mesh,
+    resource::ResourceLoader,
+    text::{self, Font, Line},
+};
 
 /// Keeps track of which keys are currently down.
 #[derive(Debug, Clone)]
@@ -191,14 +195,7 @@ impl Triangle {
     pub fn new(display: &impl glium::backend::Facade) -> Self {
         Self {
             vertex_buffer: glium::VertexBuffer::new(display, &Self::VERTICES[..]).unwrap(),
-            draw_parameters: glium::DrawParameters {
-                depth: glium::Depth {
-                    test: glium::DepthTest::IfLess,
-                    write: true,
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
+            draw_parameters: mesh::default_3d_draw_parameters(),
             model: Matrix4::identity(),
             view: Matrix4::identity(),
             projection: Matrix4::identity(),
@@ -227,16 +224,60 @@ impl Triangle {
 }
 
 #[derive(Debug)]
-pub struct Game {
+pub struct GameResources {
+    loader: ResourceLoader,
+    shader_3d: glium::Program,
+    shader_text: glium::Program,
+    font: Font,
+}
+
+impl GameResources {
+    pub fn load(display: &impl glium::backend::Facade) -> Self {
+        let loader = ResourceLoader::with_default_res_directory().unwrap();
+        Self {
+            shader_3d: Self::load_shader(display, &loader, "shader/3d"),
+            shader_text: Self::load_shader(display, &loader, "shader/text"),
+            font: Self::load_font(display, &loader, "font/big_blue_terminal.json"),
+            loader,
+        }
+    }
+
+    /// `name` is in the format of `"shader/name"`, which would load `"res/shader/name.vs"` and `"res/shader/name.fs"`.
+    fn load_shader(
+        display: &impl glium::backend::Facade,
+        resource_loader: &ResourceLoader,
+        name: &str,
+    ) -> glium::Program {
+        let vs_source = resource_loader.read_to_string(format!("{name}.vs"));
+        let fs_source = resource_loader.read_to_string(format!("{name}.fs"));
+        glium::Program::from_source(display, &vs_source, &fs_source, None).unwrap()
+    }
+
+    fn load_font(
+        display: &impl glium::backend::Facade,
+        resource_loader: &ResourceLoader,
+        name: &str,
+    ) -> Font {
+        let mut font = Font::load_from_path(resource_loader, name);
+        let image = glium::texture::RawImage2d::from_raw_rgba(
+            font.atlas().to_rgba8().into_raw(),
+            (font.atlas().width(), font.atlas().height()),
+        );
+        font.gl_texture = Some(glium::Texture2d::new(display, image).unwrap());
+        font
+    }
+}
+
+#[derive(Debug)]
+pub struct Game<'res> {
     window: winit::window::Window,
     display: glium::Display<glium::glutin::surface::WindowSurface>,
-    resource_loader: ResourceLoader,
-    shader: glium::Program,
+    resources: &'res GameResources,
     input_helper: InputHelper,
     player_camera: PlayerCamera,
-    text_painter: TextPainter,
     triangle0: Triangle,
     triangle1: Triangle,
+    line0: Line,
     last_window_event: SystemTime,
     fps_counter: u32,
     last_fps_update: Instant,
@@ -245,57 +286,26 @@ pub struct Game {
     overlay_text: String,
 }
 
-impl Game {
-    const VERTEX_SHADER: &'static str = r#"
-        #version 140
-
-        in vec2 position;
-        in vec3 color;
-
-        uniform mat4 model;
-        uniform mat4 view;
-        uniform mat4 projection;
-
-        out vec3 vert_color;
-
-        void main() {
-            gl_Position = projection * view * model * vec4(position.xy, 0.0, 1.0);
-            vert_color = color;
-        }
-    "#;
-
-    const FRAGMENT_SHADER: &'static str = r#"
-        #version 140
-
-        in vec3 vert_color;
-
-        out vec4 color;
-
-        void main() {
-            color = vec4(vert_color.xyz, 1.0);
-        }
-    "#;
-
-    pub fn new(event_loop: &winit::event_loop::EventLoop<()>) -> Self {
-        let (window, display) = glutin::SimpleWindowBuilder::new()
-            .with_title("New Cube Game!")
-            .with_inner_size(1600, 1200)
-            .build(event_loop);
+impl<'res> Game<'res> {
+    pub fn new(
+        resources: &'res GameResources,
+        window: winit::window::Window,
+        display: glium::Display<glium::glutin::surface::WindowSurface>,
+    ) -> Self {
         let resource_loader = ResourceLoader::with_default_res_directory().unwrap();
+        let text_shader = Rc::new(text::text_shader(&display));
         Self {
             window,
-            shader: glium::program::Program::from_source(
-                &display,
-                Self::VERTEX_SHADER,
-                Self::FRAGMENT_SHADER,
-                None,
-            )
-            .unwrap(),
             input_helper: InputHelper::new(),
             player_camera: PlayerCamera::new(Point3::new(0., 0., 1.), 0., -90.),
-            text_painter: TextPainter::new(&display, &resource_loader),
             triangle0: Triangle::new(&display),
             triangle1: Triangle::new(&display),
+            line0: Line::with_string(
+                Rc::new(text::default_font(&resource_loader, &display)),
+                text_shader.clone(),
+                &display,
+                "abc".into(),
+            ),
             last_window_event: SystemTime::now(),
             fps_counter: 0,
             last_fps_update: Instant::now(),
@@ -303,13 +313,15 @@ impl Game {
             overlay_text: String::new(),
             is_paused: false,
             display,
-            resource_loader,
+            resources,
         }
     }
 
     fn draw(&mut self) {
         let mut frame = self.display.draw();
-        frame.clear_color_and_depth((0.8, 0.95, 1.0, 1.0), 1.);
+        // let clear_color = (0.8, 0.95, 1.0, 1.0);
+        let clear_color = (0.1, 0.1, 0.1, 1.);
+        frame.clear_color_and_depth(clear_color, 1.);
 
         let view_matrix = self.player_camera.camera.view_matrix();
         let frame_size = self.window.inner_size();
@@ -321,7 +333,7 @@ impl Game {
             .set_model(Matrix4::from_translation([0.5, 0., 0.].into()));
         self.triangle0.set_view(view_matrix);
         self.triangle0.set_projection(projection_matrix);
-        self.triangle0.draw(&mut frame, &self.shader);
+        self.triangle0.draw(&mut frame, &self.resources.shader_3d);
 
         let s = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -334,7 +346,7 @@ impl Game {
         );
         self.triangle1.set_view(view_matrix);
         self.triangle1.set_projection(projection_matrix);
-        self.triangle1.draw(&mut frame, &self.shader);
+        self.triangle1.draw(&mut frame, &self.resources.shader_3d);
 
         self.overlay_text.clear();
         if self.is_paused {
@@ -362,23 +374,13 @@ impl Game {
     }
 
     fn draw_overlay_text(&self, frame: &mut glium::Frame) {
-        let overlay_text_x = 10.0f32;
-        let mut x = overlay_text_x;
-        let mut y = 10.0f32;
-        for char in self.overlay_text.chars() {
-            if char == '\n' {
-                x = overlay_text_x;
-                y += 16. * self.window.scale_factor() as f32;
-            } else {
-                let char_width = self.text_painter.draw_char(
-                    frame,
-                    Vector2::new(x, y),
-                    16. * self.window.scale_factor() as f32,
-                    char,
-                );
-                x += char_width;
-            }
-        }
+        self.line0.draw(
+            frame,
+            /* position   */ vec2(10., 10.),
+            /* foreground */ vec4(1., 1., 1., 1.),
+            /* background */ vec4(0.5, 0.5, 0.5, 0.6),
+            /* font size  */ 16. * self.window.scale_factor() as f32,
+        );
     }
 
     fn grab_cursor(&mut self) {
@@ -453,7 +455,7 @@ impl Game {
     }
 }
 
-impl winit::application::ApplicationHandler for Game {
+impl winit::application::ApplicationHandler for Game<'_> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         _ = event_loop;
         if !self.is_paused {
