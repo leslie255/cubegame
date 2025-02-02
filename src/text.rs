@@ -218,22 +218,38 @@ impl<'res> Line<'res> {
         position: Point2<f32>,
         fg_color: Color,
         bg_color: Color,
+        shadow: bool,
         font_size: f32,
     ) {
         let (frame_width, frame_height) = frame.get_dimensions();
         let model = Matrix4::from_translation(Vector3::new(position.x, position.y, 0.))
             * Matrix4::from_nonuniform_scale(font_size, font_size, 1.);
         let projection = cgmath::ortho(0., frame_width as f32, frame_height as f32, 0., -1., 1.);
-        let uniforms = glium::uniform! {
-            model: mesh::matrix4_to_array(model),
-            projection: mesh::matrix4_to_array(projection),
-            tex: self.font.texture_sampler(),
-            fg_color: fg_color.into_array(),
-            bg_color: bg_color.into_array(),
-        };
+        if shadow {
+            let model =
+                Matrix4::from_translation(vec3(font_size * 0.1, font_size * 0.1, 0.)) * model;
+            self.mesh.draw(
+                frame,
+                glium::uniform! {
+                    model: mesh::matrix4_to_array(model),
+                    projection: mesh::matrix4_to_array(projection),
+                    tex: self.font.texture_sampler(),
+                    fg_color: [fg_color.r * 0.2, fg_color.g * 0.2, fg_color.b * 0.2, fg_color.a],
+                    bg_color: Color::new(0.4, 0.4, 0.4, 0.5).into_array(),
+                },
+                self.shader,
+                &mesh::default_2d_draw_parameters(),
+            );
+        }
         self.mesh.draw(
             frame,
-            uniforms,
+            glium::uniform! {
+                model: mesh::matrix4_to_array(model),
+                projection: mesh::matrix4_to_array(projection),
+                tex: self.font.texture_sampler(),
+                fg_color: fg_color.into_array(),
+                bg_color: bg_color.into_array(),
+            },
             self.shader,
             &mesh::default_2d_draw_parameters(),
         );

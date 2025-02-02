@@ -257,13 +257,14 @@ impl<'res> InfoText<'res> {
     }
 
     fn draw(&self, frame: &mut glium::Frame, content_scale: f32) {
-        let font_size = 16. * content_scale;
+        let font_size = 20. * content_scale;
         for (i, line) in self.lines.iter().enumerate() {
             line.draw(
                 frame,
                 /* position   */ Point2::new(10., 10. + font_size * i as f32),
                 /* foreground */ Color::new(1., 1., 1., 1.),
-                /* background */ Color::new(0.5, 0.5, 0.5, 0.6),
+                /* background */ Color::new(0., 0., 0., 0.),
+                /* shadow     */ true,
                 /* font size  */ font_size,
             );
         }
@@ -421,7 +422,11 @@ impl<'res> Game<'res> {
     }
 
     fn init_test_chunk(&mut self) {
-        *self.test_chunk.get_block_mut(LocalCoord::new(0, 0, 0)) = BlockId(3);
+        for x in 0..32 {
+            for z in 0..32 {
+                *self.test_chunk.get_block_mut(LocalCoord::new(x, 0, z)) = BlockId(3);
+            }
+        }
         self.chunk_builder
             .build(&self.display, &self.test_chunk, &mut self.test_chunk_mesh);
     }
@@ -532,6 +537,7 @@ impl<'res> Game<'res> {
             if self.input_helper.key_is_down(KeyCode::KeyR) {
                 movement.y -= 1.0;
             }
+            movement *= 4.;
             movement *= duration_since_last_window_event.as_secs_f32();
             self.player_camera.move_(movement);
         }
