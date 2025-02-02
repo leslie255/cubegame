@@ -8,16 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use cgmath::*;
 
-use crate::mesh::{self, Mesh};
+use crate::mesh::{self, Color, Mesh};
 use crate::resource::ResourceLoader;
-
-pub fn matrix4_to_array<T>(matrix: Matrix4<T>) -> [[T; 4]; 4] {
-    matrix.into()
-}
-
-pub fn matrix3_to_array<T>(matrix: Matrix3<T>) -> [[T; 3]; 3] {
-    matrix.into()
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Quad2 {
@@ -142,6 +134,10 @@ impl Font {
     pub fn glyph_size(&self) -> Vector2<u32> {
         self.glyph_size
     }
+
+    pub fn texture_sampler(&self) -> glium::uniforms::Sampler<glium::Texture2d> {
+        mesh::texture_sampler(self.gl_texture.as_ref().unwrap())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -237,33 +233,27 @@ impl<'res> Line<'res> {
     pub fn draw(
         &self,
         frame: &mut glium::Frame,
-        position: Vector2<f32>,
-        fg_color: Vector4<f32>,
-        bg_color: Vector4<f32>,
+        position: Point2<f32>,
+        fg_color: Color,
+        bg_color: Color,
         font_size: f32,
     ) {
         let (frame_width, frame_height) = frame.get_dimensions();
-        let model = Matrix4::from_translation(Vector3::new(position.x, position.y, 0.));
-        let model = model * Matrix4::from_nonuniform_scale(font_size, font_size, 1.);
-        let view: Matrix4<f32> = Matrix4::identity();
+        let model = Matrix4::from_translation(Vector3::new(position.x, position.y, 0.))
+            * Matrix4::from_nonuniform_scale(font_size, font_size, 1.);
         let projection = cgmath::ortho(0., frame_width as f32, frame_height as f32, 0., -1., 1.);
-        let texture_sampler = self
-            .font
-            .gl_texture
-            .as_ref()
-            .unwrap()
-            .sampled()
-            .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
-            .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest);
         let uniforms = glium::uniform! {
-            model: matrix4_to_array(model),
-            view: matrix4_to_array(view),
-            projection: matrix4_to_array(projection),
-            uv_matrix: matrix3_to_array::<f32>(Matrix3::identity()),
-            tex: texture_sampler,
-            fg_color: Into::<[f32; 4]>::into(fg_color),
-            bg_color: Into::<[f32; 4]>::into(bg_color),
+            model: mesh::matrix4_to_array(model),
+            projection: mesh::matrix4_to_array(projection),
+            tex: self.font.texture_sampler(),
+            fg_color: fg_color.into_array(),
+            bg_color: bg_color.into_array(),
         };
-        self.mesh.draw(frame, uniforms, self.shader, &mesh::default_2d_draw_parameters());
+        self.mesh.draw(
+            frame,
+            uniforms,
+            self.shader,
+            &mesh::default_2d_draw_parameters(),
+        );
     }
 }

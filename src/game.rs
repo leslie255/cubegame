@@ -5,56 +5,16 @@ use glium::{
     Surface,
     winit::{
         self,
-        event::KeyEvent,
         keyboard::{KeyCode, PhysicalKey},
     },
 };
 
 use crate::{
-    mesh,
+    input::InputHelper,
+    mesh::{self, Color},
     resource::ResourceLoader,
     text::{Font, Line},
 };
-
-/// Keeps track of which keys are currently down.
-#[derive(Debug, Clone)]
-pub struct InputHelper {
-    downed_keys: Vec<bool>,
-}
-impl InputHelper {
-    pub fn new() -> Self {
-        Self {
-            downed_keys: vec![false; 256],
-        }
-    }
-
-    fn index_for_key(key_code: KeyCode) -> usize {
-        // This is technically unsafe lol due to KeyCode not being a stable API, but like nah.
-        (key_code as u8).into()
-    }
-
-    pub fn key_is_down(&self, key_code: KeyCode) -> bool {
-        self.downed_keys[Self::index_for_key(key_code)]
-    }
-
-    pub fn update_key_event(&mut self, key_event: &KeyEvent) {
-        if key_event.repeat {
-            return;
-        }
-        let key_code = match key_event.physical_key {
-            PhysicalKey::Code(key_code) => key_code,
-            PhysicalKey::Unidentified(_) => return,
-        };
-        let index = Self::index_for_key(key_code);
-        self.downed_keys[index] = key_event.state.is_pressed();
-    }
-}
-
-impl Default for InputHelper {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {
@@ -116,8 +76,8 @@ impl PlayerCamera {
     pub fn cursor_moved(&mut self, sensitivity: f32, delta: Vector2<f32>) {
         self.yaw += delta.x * sensitivity;
         self.pitch -= delta.y * sensitivity;
-        self.pitch = self.pitch.clamp(-89., 89.);
-        self.yaw %= 360.;
+        self.pitch = self.pitch.clamp(-89.99, 89.99);
+        self.yaw = ((self.yaw + 180.) % 360.) - 180.;
         self.camera.direction = self.direction();
     }
 
@@ -127,9 +87,9 @@ impl PlayerCamera {
         let right = forward.cross(self.camera.up).normalize();
         let up = self.camera.up;
 
-        let forward_scaled = delta.y * forward;
+        let forward_scaled = delta.z * forward;
         let right_scaled = delta.x * right;
-        let up_scaled = delta.z * up;
+        let up_scaled = delta.y * up;
 
         self.camera.position += forward_scaled + right_scaled + up_scaled;
     }
@@ -148,22 +108,128 @@ impl PlayerCamera {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BlockVertex {
+    pub position: [f32; 3],
+    pub uv: [f32; 2],
+}
+
+glium::implement_vertex!(BlockVertex, position, uv);
+
+impl BlockVertex {
+    pub const fn new(position: [f32; 3], texture_coord: [f32; 2]) -> Self {
+        Self {
+            position,
+            uv: texture_coord,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Cube<'res> {
+    vertex_buffer: glium::VertexBuffer<BlockVertex>,
+    index_buffer: glium::IndexBuffer<u32>,
+    shader: &'res glium::Program,
+    texture_atlas: &'res glium::Texture2d,
+    pub model: Matrix4<f32>,
+    pub view: Matrix4<f32>,
+    pub projection: Matrix4<f32>,
+}
+
+impl<'res> Cube<'res> {
+    const VERTICES: &'static [BlockVertex] = &[
+        // South
+        BlockVertex::new([0., 0., 0.], [1.0, 1.0]), // A 0
+        BlockVertex::new([1., 0., 0.], [0.0, 1.0]), // B 1
+        BlockVertex::new([1., 1., 0.], [0.0, 0.0]), // C 2
+        BlockVertex::new([0., 1., 0.], [1.0, 0.0]), // D 3
+        // North
+        BlockVertex::new([0., 0., 1.], [0.0, 1.0]), // E 4
+        BlockVertex::new([1., 0., 1.], [1.0, 1.0]), // F 5
+        BlockVertex::new([1., 1., 1.], [1.0, 0.0]), // G 6
+        BlockVertex::new([0., 1., 1.], [0.0, 0.0]), // H 7
+        // East
+        BlockVertex::new([1., 0., 0.], [1.0, 1.0]), // B 8
+        BlockVertex::new([1., 1., 0.], [1.0, 0.0]), // C 9
+        BlockVertex::new([1., 1., 1.], [0.0, 0.0]), // G 10
+        BlockVertex::new([1., 0., 1.], [0.0, 1.0]), // F 11
+        // West
+        BlockVertex::new([0., 1., 0.], [0.0, 0.0]), // D 12
+        BlockVertex::new([0., 0., 0.], [0.0, 1.0]), // A 13
+        BlockVertex::new([0., 0., 1.], [1.0, 1.0]), // E 14
+        BlockVertex::new([0., 1., 1.], [1.0, 0.0]), // H 15
+        // Up
+        BlockVertex::new([1., 1., 0.], [0.0, 1.0]), // C 16
+        BlockVertex::new([0., 1., 0.], [1.0, 1.0]), // D 17
+        BlockVertex::new([0., 1., 1.], [1.0, 0.0]), // H 18
+        BlockVertex::new([1., 1., 1.], [0.0, 0.0]), // G 19
+        // Down
+        BlockVertex::new([0., 0., 0.], [0.0, 1.0]), // A 20
+        BlockVertex::new([1., 0., 0.], [1.0, 1.0]), // B 21
+        BlockVertex::new([1., 0., 1.], [1.0, 0.0]), // F 22
+        BlockVertex::new([0., 0., 1.], [0.0, 0.0]), // E 23
+    ];
+
+    const INDICES: &'static [u32] = &[
+        /* South */ 0, 3, 2, 2, 1, 0, //
+        /* North */ 4, 5, 6, 6, 7, 4, //
+        /* East  */ 8, 9, 10, 10, 11, 8, //
+        /* West  */ 12, 13, 14, 14, 15, 12, //
+        /* Up    */ 16, 17, 18, 18, 19, 16, //
+        /* Down  */ 20, 21, 22, 22, 23, 20, //
+    ];
+
+    pub fn new(display: &impl glium::backend::Facade, resources: &'res GameResources) -> Self {
+        Self {
+            vertex_buffer: glium::VertexBuffer::new(display, Self::VERTICES).unwrap(),
+            index_buffer: glium::IndexBuffer::new(
+                display,
+                glium::index::PrimitiveType::TrianglesList,
+                Self::INDICES,
+            )
+            .unwrap(),
+            shader: &resources.shader_cube,
+            texture_atlas: &resources.block_atlas,
+            model: Matrix4::identity(),
+            view: Matrix4::identity(),
+            projection: Matrix4::identity(),
+        }
+    }
+
+    pub fn draw(&self, frame: &mut glium::Frame) {
+        frame
+            .draw(
+                &self.vertex_buffer,
+                &self.index_buffer,
+                self.shader,
+                &glium::uniform! {
+                    model: mesh::matrix4_to_array(self.model),
+                    view: mesh::matrix4_to_array(self.view),
+                    projection: mesh::matrix4_to_array(self.projection),
+                    texture_atlas: mesh::texture_sampler(self.texture_atlas),
+                },
+                &mesh::default_3d_draw_parameters(),
+            )
+            .unwrap();
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TriangleVertex {
     pub position: [f32; 2],
     pub color: [f32; 3],
 }
+
+glium::implement_vertex!(TriangleVertex, position, color);
 
 impl TriangleVertex {
     pub const fn new(position: [f32; 2], color: [f32; 3]) -> Self {
         Self { position, color }
     }
 }
-glium::implement_vertex!(TriangleVertex, position, color);
 
 #[derive(Debug)]
 pub struct Triangle {
     vertex_buffer: glium::VertexBuffer<TriangleVertex>,
-    draw_parameters: glium::DrawParameters<'static>,
     model: Matrix4<f32>,
     view: Matrix4<f32>,
     projection: Matrix4<f32>,
@@ -191,7 +257,6 @@ impl Triangle {
     pub fn new(display: &impl glium::backend::Facade) -> Self {
         Self {
             vertex_buffer: glium::VertexBuffer::new(display, &Self::VERTICES[..]).unwrap(),
-            draw_parameters: mesh::default_3d_draw_parameters(),
             model: Matrix4::identity(),
             view: Matrix4::identity(),
             projection: Matrix4::identity(),
@@ -213,7 +278,10 @@ impl Triangle {
                 glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
                 shader,
                 &uniforms,
-                &self.draw_parameters,
+                &glium::DrawParameters {
+                    backface_culling: glium::BackfaceCullingMode::CullingDisabled,
+                    ..mesh::default_3d_draw_parameters()
+                },
             )
             .unwrap();
     }
@@ -236,6 +304,19 @@ impl<'res> InfoText<'res> {
             lines: vec![
                 Line::with_string(font, shader, display, "CUBE GAME v0.0.0".into()),
                 Line::with_string(font, shader, display, "FPS: ---.---".into()),
+                Line::with_string(
+                    font,
+                    shader,
+                    display,
+                    "Camera XYZ: ---.---, ---.---, ---.---".into(),
+                ),
+                Line::with_string(
+                    font,
+                    shader,
+                    display,
+                    "Camera pitch/yaw: ---.---deg, ---.---deg".into(),
+                ),
+                Line::with_string(font, shader, display, "Facing: ----".into()),
             ],
             font,
             shader,
@@ -258,7 +339,52 @@ impl<'res> InfoText<'res> {
     }
 
     fn set_fps(&mut self, display: &impl glium::backend::Facade, fps: f64) {
-        self.set_line(display, 1, format!("FPS: {:.3}", fps).as_str());
+        if fps.is_nan() {
+            self.set_line(display, 1, "FPS: ---.---");
+        } else {
+            self.set_line(display, 1, format!("FPS: {fps:.3}").as_str());
+        }
+    }
+
+    fn set_camera_xyz(&mut self, display: &impl glium::backend::Facade, camera_xyz: Point3<f32>) {
+        self.set_line(
+            display,
+            2,
+            format!(
+                "Camera XYZ: {:.3}, {:.3}, {:.3}",
+                camera_xyz.x, camera_xyz.y, camera_xyz.z
+            )
+            .as_str(),
+        );
+    }
+
+    fn set_camera_direction(
+        &mut self,
+        display: &glium::Display<glium::glutin::surface::WindowSurface>,
+        pitch_yaw: (f32, f32),
+        direction: Vector3<f32>,
+    ) {
+        let facing = if direction.x.abs() > direction.z.abs() {
+            if direction.x.is_sign_positive() {
+                "East (+X)"
+            } else {
+                "West (-X)"
+            }
+        } else if direction.z.is_sign_positive() {
+            "North (+Z)"
+        } else {
+            "South (-Z)"
+        };
+        self.set_line(
+            display,
+            3,
+            format!(
+                "Camera pitch/yaw: {:.3}deg, {:.3}deg",
+                pitch_yaw.0, pitch_yaw.1
+            )
+            .as_str(),
+        );
+        self.set_line(display, 4, format!("Facing: {facing}").as_str());
     }
 
     fn draw(&self, frame: &mut glium::Frame, content_scale: f32) {
@@ -266,9 +392,9 @@ impl<'res> InfoText<'res> {
         for (i, line) in self.lines.iter().enumerate() {
             line.draw(
                 frame,
-                /* position   */ vec2(10., font_size * i as f32),
-                /* foreground */ vec4(1., 1., 1., 1.),
-                /* background */ vec4(0.5, 0.5, 0.5, 0.6),
+                /* position   */ Point2::new(10., 10. + font_size * i as f32),
+                /* foreground */ Color::new(1., 1., 1., 1.),
+                /* background */ Color::new(0.5, 0.5, 0.5, 0.6),
                 /* font size  */ font_size,
             );
         }
@@ -280,6 +406,8 @@ pub struct GameResources {
     loader: ResourceLoader,
     shader_3d: glium::Program,
     shader_text: glium::Program,
+    shader_cube: glium::Program,
+    block_atlas: glium::Texture2d,
     font: Font,
 }
 
@@ -289,9 +417,24 @@ impl GameResources {
         Self {
             shader_3d: Self::load_shader(display, &loader, "shader/3d"),
             shader_text: Self::load_shader(display, &loader, "shader/text"),
+            shader_cube: Self::load_shader(display, &loader, "shader/cube"),
+            block_atlas: Self::load_texture(display, &loader, "texture/block_atlas.png"),
             font: Self::load_font(display, &loader, "font/big_blue_terminal.json"),
             loader,
         }
+    }
+
+    fn load_texture(
+        display: &impl glium::backend::Facade,
+        resource_loader: &ResourceLoader,
+        name: &str,
+    ) -> glium::Texture2d {
+        let image = resource_loader.load_image(name);
+        let image = glium::texture::RawImage2d::from_raw_rgba(
+            image.to_rgba8().into_raw(),
+            (image.width(), image.height()),
+        );
+        glium::Texture2d::new(display, image).unwrap()
     }
 
     /// `name` is in the format of `"shader/name"`, which would load `"res/shader/name.vs"` and `"res/shader/name.fs"`.
@@ -320,20 +463,61 @@ impl GameResources {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct FpsCounter {
+    last_update: Instant,
+    counter: u32,
+    fps: f64,
+}
+
+impl FpsCounter {
+    pub fn new() -> Self {
+        Self {
+            last_update: Instant::now(),
+            counter: 0,
+            fps: f64::NAN,
+        }
+    }
+
+    /// Returns `Some(fps)` if FPS is updated.
+    pub fn frame(&mut self) -> Option<f64> {
+        self.counter += 1;
+        let now = Instant::now();
+        let seconds_since_last_update = now.duration_since(self.last_update).as_secs_f64();
+        if seconds_since_last_update > 0.5 {
+            self.fps = (self.counter as f64) / seconds_since_last_update;
+            self.last_update = now;
+            self.counter = 0;
+            Some(self.fps)
+        } else {
+            None
+        }
+    }
+
+    pub fn fps(&self) -> f64 {
+        self.fps
+    }
+}
+
+impl Default for FpsCounter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug)]
 pub struct Game<'res> {
     window: winit::window::Window,
     display: glium::Display<glium::glutin::surface::WindowSurface>,
     resources: &'res GameResources,
     input_helper: InputHelper,
+    fps_counter: FpsCounter,
     player_camera: PlayerCamera,
     triangle0: Triangle,
     triangle1: Triangle,
+    cube: Cube<'res>,
     info_text: InfoText<'res>,
     last_window_event: SystemTime,
-    fps_counter: u32,
-    last_fps_update: Instant,
-    fps: f64,
     is_paused: bool,
 }
 
@@ -346,14 +530,13 @@ impl<'res> Game<'res> {
         Self {
             window,
             input_helper: InputHelper::new(),
+            fps_counter: FpsCounter::new(),
             player_camera: PlayerCamera::new(Point3::new(0., 0., 1.), 0., -90.),
+            cube: Cube::new(&display, resources),
             triangle0: Triangle::new(&display),
             triangle1: Triangle::new(&display),
             info_text: InfoText::new(&display, &resources.font, &resources.shader_text),
             last_window_event: SystemTime::now(),
-            fps_counter: 0,
-            last_fps_update: Instant::now(),
-            fps: f64::NAN,
             is_paused: false,
             display,
             resources,
@@ -373,7 +556,7 @@ impl<'res> Game<'res> {
             frame_size.height as f32,
         ));
         self.triangle0
-            .set_model(Matrix4::from_translation([0.5, 0., 0.].into()));
+            .set_model(Matrix4::from_translation([2., 0., 0.].into()));
         self.triangle0.set_view(view_matrix);
         self.triangle0.set_projection(projection_matrix);
         self.triangle0.draw(&mut frame, &self.resources.shader_3d);
@@ -391,19 +574,25 @@ impl<'res> Game<'res> {
         self.triangle1.set_projection(projection_matrix);
         self.triangle1.draw(&mut frame, &self.resources.shader_3d);
 
+        self.cube.view = view_matrix;
+        self.cube.projection = projection_matrix;
+        self.cube.draw(&mut frame);
+
+        self.info_text
+            .set_camera_xyz(&self.display, self.player_camera.camera.position);
+        self.info_text.set_camera_direction(
+            &self.display,
+            self.player_camera.pitch_yaw(),
+            self.player_camera.camera.direction,
+        );
+
         self.info_text
             .draw(&mut frame, self.window.scale_factor() as f32);
 
         frame.finish().unwrap();
 
-        self.fps_counter += 1;
-        let now = Instant::now();
-        let seconds_last_fps_update = now.duration_since(self.last_fps_update).as_secs_f64();
-        if seconds_last_fps_update > 0.5 {
-            self.fps = (self.fps_counter as f64) / seconds_last_fps_update;
-            self.last_fps_update = now;
-            self.fps_counter = 0;
-            self.info_text.set_fps(&self.display, self.fps);
+        if let Some(fps) = self.fps_counter.frame() {
+            self.info_text.set_fps(&self.display, fps);
         }
     }
 
@@ -441,10 +630,10 @@ impl<'res> Game<'res> {
         if !self.is_paused {
             let mut movement = <Vector3<f32>>::zero();
             if self.input_helper.key_is_down(KeyCode::KeyW) {
-                movement.y += 1.0;
+                movement.z += 1.0;
             }
             if self.input_helper.key_is_down(KeyCode::KeyS) {
-                movement.y -= 1.0;
+                movement.z -= 1.0;
             }
             if self.input_helper.key_is_down(KeyCode::KeyA) {
                 movement.x -= 1.0;
@@ -453,10 +642,10 @@ impl<'res> Game<'res> {
                 movement.x += 1.0;
             }
             if self.input_helper.key_is_down(KeyCode::Space) {
-                movement.z += 1.0;
+                movement.y += 1.0;
             }
             if self.input_helper.key_is_down(KeyCode::KeyR) {
-                movement.z -= 1.0;
+                movement.y -= 1.0;
             }
             movement *= duration_since_last_window_event.as_secs_f32();
             self.player_camera.move_(movement);

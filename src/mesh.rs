@@ -2,6 +2,24 @@ use std::ops::Add;
 
 use glium::Surface as _;
 
+use cgmath::*;
+
+pub fn matrix4_to_array<T>(matrix: Matrix4<T>) -> [[T; 4]; 4] {
+    matrix.into()
+}
+
+pub fn matrix3_to_array<T>(matrix: Matrix3<T>) -> [[T; 3]; 3] {
+    matrix.into()
+}
+
+pub fn texture_sampler(texture: &glium::Texture2d) -> glium::uniforms::Sampler<glium::Texture2d> {
+    texture
+        .sampled()
+        .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
+        .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
+        .wrap_function(glium::uniforms::SamplerWrapFunction::Repeat)
+}
+
 pub fn default_3d_draw_parameters() -> glium::DrawParameters<'static> {
     glium::DrawParameters {
         depth: glium::Depth {
@@ -9,6 +27,7 @@ pub fn default_3d_draw_parameters() -> glium::DrawParameters<'static> {
             write: true,
             ..Default::default()
         },
+        backface_culling: glium::BackfaceCullingMode::CullClockwise,
         ..Default::default()
     }
 }
@@ -20,8 +39,47 @@ pub fn default_2d_draw_parameters() -> glium::DrawParameters<'static> {
             write: false,
             ..Default::default()
         },
+        backface_culling: glium::BackfaceCullingMode::CullCounterClockwise,
         blend: glium::draw_parameters::Blend::alpha_blending(),
         ..Default::default()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Color {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
+}
+
+impl Color {
+    pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self { r, g, b, a }
+    }
+
+    pub const fn rgb(r: f32, g: f32, b: f32) -> Self {
+        Self { r, g, b, a: 1. }
+    }
+
+    pub const fn into_array(self) -> [f32; 4] {
+        [self.r, self.g, self.b, self.a]
+    }
+
+    pub const fn into_vec4(self) -> Vector4<f32> {
+        vec4(self.r, self.g, self.b, self.a)
+    }
+}
+
+impl From<Color> for [f32; 4] {
+    fn from(color: Color) -> Self {
+        color.into_array()
+    }
+}
+
+impl From<Color> for Vector4<f32> {
+    fn from(color: Color) -> Self {
+        color.into_vec4()
     }
 }
 

@@ -7,6 +7,7 @@ pub mod game;
 pub mod mesh;
 pub mod resource;
 pub mod text;
+pub mod input;
 
 use game::{Game, GameResources};
 
