@@ -10,7 +10,7 @@ use glium::{
 };
 
 use crate::{
-    block::{self, BlockId, BlockRegistry},
+    block::{BlockRegistry, GameBlocks},
     chunk::{ChunkBuilder, ChunkData, ChunkMesh, LocalCoord},
     input::InputHelper,
     mesh::{self, Color},
@@ -69,7 +69,7 @@ impl PlayerCamera {
                 up: Vector3::new(0., 1., 0.).normalize(),
                 fov: 90.,
                 near: 0.01,
-                far: 1000.,
+                far: 10000.,
             },
             pitch,
             yaw,
@@ -223,9 +223,9 @@ impl<'res> InfoText<'res> {
                 "West (-X)"
             }
         } else if direction.z.is_sign_positive() {
-            "North (+Z)"
+            "South (+Z)"
         } else {
-            "South (-Z)"
+            "North (-Z)"
         };
         self.set_line(
             display,
@@ -275,26 +275,27 @@ impl<'res> InfoText<'res> {
 pub struct GameResources {
     pub loader: ResourceLoader,
     pub shader_text: glium::Program,
-    pub shader_cube: glium::Program,
+    pub shader_chunk: glium::Program,
+    pub shader_chunk_wireframe: glium::Program,
     pub block_atlas: glium::Texture2d,
     pub font: Font,
     pub block_registry: BlockRegistry,
+    pub game_blocks: GameBlocks,
 }
 
 impl GameResources {
     pub fn load(display: &impl glium::backend::Facade) -> Self {
         let loader = ResourceLoader::with_default_res_directory().unwrap();
+        let mut block_registry = BlockRegistry::default();
         Self {
             shader_text: Self::load_shader(display, &loader, "shader/text"),
-            shader_cube: Self::load_shader(display, &loader, "shader/cube"),
+            shader_chunk: Self::load_shader(display, &loader, "shader/chunk"),
+            shader_chunk_wireframe: Self::load_shader(display, &loader, "shader/chunk_wireframe"),
             block_atlas: Self::load_texture(display, &loader, "texture/block_atlas.png"),
             font: Self::load_font(display, &loader, "font/big_blue_terminal.json"),
             loader,
-            block_registry: {
-                let mut block_registry = BlockRegistry::default();
-                block::register_default_blocks(&mut block_registry);
-                block_registry
-            },
+            game_blocks: GameBlocks::new(&mut block_registry),
+            block_registry,
         }
     }
 
@@ -421,10 +422,23 @@ impl<'res> Game<'res> {
         self_
     }
 
+    pub fn blocks(&self) -> &GameBlocks {
+        &self.resources.game_blocks
+    }
+
+    pub fn block_registry(&self) -> &BlockRegistry {
+        &self.resources.block_registry
+    }
+
     fn init_test_chunk(&mut self) {
         for x in 0..32 {
             for z in 0..32 {
-                *self.test_chunk.get_block_mut(LocalCoord::new(x, 0, z)) = BlockId(3);
+                *self.test_chunk.get_block_mut(LocalCoord::new(x, 0, z)) = self.blocks().stone;
+                *self.test_chunk.get_block_mut(LocalCoord::new(x, 1, z)) = self.blocks().stone;
+                *self.test_chunk.get_block_mut(LocalCoord::new(x, 2, z)) = self.blocks().stone;
+                *self.test_chunk.get_block_mut(LocalCoord::new(x, 3, z)) = self.blocks().stone;
+                *self.test_chunk.get_block_mut(LocalCoord::new(x, 4, z)) = self.blocks().dirt;
+                *self.test_chunk.get_block_mut(LocalCoord::new(x, 5, z)) = self.blocks().grass;
             }
         }
         self.chunk_builder
@@ -433,8 +447,11 @@ impl<'res> Game<'res> {
 
     fn draw(&mut self) {
         let mut frame = self.display.draw();
-        // let clear_color = (0.8, 0.95, 1.0, 1.0);
-        let clear_color = (0.1, 0.1, 0.1, 1.);
+        let clear_color = if self.debug_options.wireframe_mode {
+            (0.1, 0.1, 0.1, 1.)
+        } else {
+            (0.8, 0.95, 1.0, 1.0)
+        };
         frame.clear_color_and_depth(clear_color, 1.);
 
         let view_matrix = self.player_camera.camera.view_matrix();
@@ -444,6 +461,24 @@ impl<'res> Game<'res> {
             frame_size.height as f32,
         ));
 
+        let draw_parameters = &glium::DrawParameters {
+            polygon_mode: if self.debug_options.wireframe_mode {
+                glium::PolygonMode::Line
+            } else {
+                glium::PolygonMode::Fill
+            },
+            backface_culling: if self.debug_options.disable_gl_backface_culling {
+                glium::BackfaceCullingMode::CullingDisabled
+            } else {
+                glium::BackfaceCullingMode::CullClockwise
+            },
+            ..mesh::default_3d_draw_parameters()
+        };
+        let shader = if self.debug_options.wireframe_mode {
+            &self.resources.shader_chunk_wireframe
+        } else {
+            &self.resources.shader_chunk
+        };
         self.test_chunk_mesh.mesh().draw(
             &mut frame,
             glium::uniform! {
@@ -452,20 +487,8 @@ impl<'res> Game<'res> {
                 projection: mesh::matrix4_to_array(projection_matrix),
                 texture_atlas: mesh::texture_sampler(&self.resources.block_atlas),
             },
-            &self.resources.shader_cube,
-            &glium::DrawParameters {
-                polygon_mode: if self.debug_options.wireframe_mode {
-                    glium::PolygonMode::Line
-                } else {
-                    glium::PolygonMode::Fill
-                },
-                backface_culling: if self.debug_options.disable_gl_backface_culling {
-                    glium::BackfaceCullingMode::CullingDisabled
-                } else {
-                    glium::BackfaceCullingMode::CullClockwise
-                },
-                ..mesh::default_3d_draw_parameters()
-            },
+            shader,
+            draw_parameters,
         );
 
         self.info_text
@@ -587,7 +610,6 @@ impl winit::application::ApplicationHandler for Game<'_> {
         let duration_since_last_window_event = now.duration_since(self.last_window_event).unwrap();
         self.last_window_event = now;
         self.before_window_event(duration_since_last_window_event);
-
         match event {
             winit::event::WindowEvent::CloseRequested => event_loop.exit(),
             winit::event::WindowEvent::RedrawRequested => {

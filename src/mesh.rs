@@ -19,7 +19,7 @@ pub fn texture_sampler(texture: &glium::Texture2d) -> glium::uniforms::Sampler<g
         .sampled()
         .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
         .minify_filter(glium::uniforms::MinifySamplerFilter::NearestMipmapNearest)
-        .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp)
+        .wrap_function(glium::uniforms::SamplerWrapFunction::Repeat)
 }
 
 pub fn default_3d_draw_parameters() -> glium::DrawParameters<'static> {

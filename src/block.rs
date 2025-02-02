@@ -3,11 +3,17 @@ use index_vec::IndexVec;
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlockFace {
-    South = 0,
+    /// +Z
+    South,
+    /// -Z
     North,
+    /// +X
     East,
+    /// -X
     West,
+    /// -Y
     Top,
+    /// +Y
     Bottom,
 }
 
@@ -105,61 +111,73 @@ impl BlockRegistry {
     }
 }
 
-pub fn register_default_blocks(blocks: &mut BlockRegistry) {
-    blocks.register(BlockInfo {
-        name: "air",
-        transparency: BlockTransparency::Air,
-        model: BlockModel {
-            faces: [
-                BlockTextureId(0), // South
-                BlockTextureId(0), // North
-                BlockTextureId(0), // East
-                BlockTextureId(0), // West
-                BlockTextureId(0), // Top
-                BlockTextureId(0), // Bottom
-            ],
-        },
-    });
-    blocks.register(BlockInfo {
-        name: "stone",
-        transparency: BlockTransparency::Solid,
-        model: BlockModel {
-            faces: [
-                BlockTextureId(1), // South
-                BlockTextureId(1), // North
-                BlockTextureId(1), // East
-                BlockTextureId(1), // West
-                BlockTextureId(1), // Top
-                BlockTextureId(1), // Bottom
-            ],
-        },
-    });
-    blocks.register(BlockInfo {
-        name: "dirt",
-        transparency: BlockTransparency::Solid,
-        model: BlockModel {
-            faces: [
-                BlockTextureId(2), // South
-                BlockTextureId(2), // North
-                BlockTextureId(2), // East
-                BlockTextureId(2), // West
-                BlockTextureId(2), // Top
-                BlockTextureId(2), // Bottom
-            ],
-        },
-    });
-    blocks.register(BlockInfo {
-        name: "grass",
-        transparency: BlockTransparency::Solid,
-        model: BlockModel {
-            faces: [
-                BlockTextureId(3), // South
-                BlockTextureId(3), // North
-                BlockTextureId(3), // East
-                BlockTextureId(3), // West
-                BlockTextureId(4), // Top
-                BlockTextureId(2), // Bottom
-            ],
-        },
-    });
+#[derive(Debug, Clone)]
+pub struct GameBlocks {
+    pub air: BlockId,
+    pub stone: BlockId,
+    pub dirt: BlockId,
+    pub grass: BlockId,
+}
+
+impl GameBlocks {
+    pub fn new(block_registry: &mut BlockRegistry) -> Self {
+        Self {
+            air: block_registry.register(BlockInfo {
+                name: "air",
+                transparency: BlockTransparency::Air,
+                model: BlockModel {
+                    faces: [
+                        BlockTextureId(0), // South
+                        BlockTextureId(0), // North
+                        BlockTextureId(0), // East
+                        BlockTextureId(0), // West
+                        BlockTextureId(0), // Top
+                        BlockTextureId(0), // Bottom
+                    ],
+                },
+            }),
+            stone: block_registry.register(BlockInfo {
+                name: "stone",
+                transparency: BlockTransparency::Solid,
+                model: BlockModel {
+                    faces: [
+                        BlockTextureId(1), // South
+                        BlockTextureId(1), // North
+                        BlockTextureId(1), // East
+                        BlockTextureId(1), // West
+                        BlockTextureId(1), // Top
+                        BlockTextureId(1), // Bottom
+                    ],
+                },
+            }),
+            dirt: block_registry.register(BlockInfo {
+                name: "dirt",
+                transparency: BlockTransparency::Solid,
+                model: BlockModel {
+                    faces: [
+                        BlockTextureId(2), // South
+                        BlockTextureId(2), // North
+                        BlockTextureId(2), // East
+                        BlockTextureId(2), // West
+                        BlockTextureId(2), // Top
+                        BlockTextureId(2), // Bottom
+                    ],
+                },
+            }),
+            grass: block_registry.register(BlockInfo {
+                name: "grass",
+                transparency: BlockTransparency::Solid,
+                model: BlockModel {
+                    faces: [
+                        BlockTextureId(3), // South
+                        BlockTextureId(3), // North
+                        BlockTextureId(3), // East
+                        BlockTextureId(3), // West
+                        BlockTextureId(4), // Top
+                        BlockTextureId(2), // Bottom
+                    ],
+                },
+            }),
+        }
+    }
 }

@@ -33,6 +33,30 @@ impl LocalCoord {
     pub const fn index(self) -> usize {
         self.y as usize * 32 * 32 + self.z as usize * 32 + self.x as usize
     }
+
+    pub const fn with_x(self, x: u8) -> Self {
+        Self { x, ..self }
+    }
+
+    pub const fn with_y(self, y: u8) -> Self {
+        Self { y, ..self }
+    }
+
+    pub const fn with_z(self, z: u8) -> Self {
+        Self { z, ..self }
+    }
+
+    pub fn neighbor_in_direction(self, direction: BlockFace) -> Option<Self> {
+        let result = match direction {
+            BlockFace::South => self.with_z((self.z + 1).min(31)),
+            BlockFace::North => self.with_z(self.z.saturating_sub(1)),
+            BlockFace::East => self.with_x((self.x + 1).min(31)),
+            BlockFace::West => self.with_x(self.x.saturating_sub(1)),
+            BlockFace::Top => self.with_y((self.y + 1).min(31)),
+            BlockFace::Bottom => self.with_y(self.y.saturating_sub(1)),
+        };
+        (result != self).then_some(result)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -112,17 +136,17 @@ impl<'res> ChunkBuilder<'res> {
     const CUBE_VERTICES: [[BlockVertex; 4]; 6] = [
         // South
         [
-            BlockVertex::new([0., 0., 0.], [1.0, 1.0]),
-            BlockVertex::new([0., 1., 0.], [1.0, 0.0]),
-            BlockVertex::new([1., 1., 0.], [0.0, 0.0]),
-            BlockVertex::new([1., 0., 0.], [0.0, 1.0]),
-        ],
-        // North
-        [
             BlockVertex::new([0., 0., 1.], [0.0, 1.0]),
             BlockVertex::new([1., 0., 1.], [1.0, 1.0]),
             BlockVertex::new([1., 1., 1.], [1.0, 0.0]),
             BlockVertex::new([0., 1., 1.], [0.0, 0.0]),
+        ],
+        // North
+        [
+            BlockVertex::new([0., 0., 0.], [1.0, 1.0]),
+            BlockVertex::new([0., 1., 0.], [1.0, 0.0]),
+            BlockVertex::new([1., 1., 0.], [0.0, 0.0]),
+            BlockVertex::new([1., 0., 0.], [0.0, 1.0]),
         ],
         // East
         [
@@ -176,7 +200,7 @@ impl<'res> ChunkBuilder<'res> {
                 for z in 0..32 {
                     let local_coord = LocalCoord::new(y, z, x);
                     let block_id = unsafe { chunk.get_block_unchecked(local_coord) };
-                    self.build_block(local_coord, block_id, chunk_mesh);
+                    self.build_block(chunk, local_coord, block_id, chunk_mesh);
                 }
             }
         }
@@ -185,6 +209,7 @@ impl<'res> ChunkBuilder<'res> {
 
     fn build_block(
         &mut self,
+        chunk: &ChunkData,
         local_position: LocalCoord,
         block_id: BlockId,
         chunk_mesh: &mut ChunkMesh,
@@ -194,6 +219,17 @@ impl<'res> ChunkBuilder<'res> {
             return;
         }
         for block_face in BlockFace::iter() {
+            if let Some(neighbor_position) = local_position.neighbor_in_direction(block_face) {
+                let neighbor_block_id = unsafe { chunk.get_block_unchecked(neighbor_position) };
+                let neighbor_transparency = self
+                    .block_registry
+                    .lookup(neighbor_block_id)
+                    .unwrap()
+                    .transparency;
+                if neighbor_transparency == BlockTransparency::Solid {
+                    continue;
+                }
+            }
             let texture_id = block_info.model.texture_for_face(block_face);
             let texture_coord = self.texture_coord(texture_id);
             let vertices = Self::CUBE_VERTICES[block_face.to_usize()].map(|vertex| BlockVertex {
