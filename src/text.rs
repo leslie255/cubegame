@@ -8,26 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use cgmath::*;
 
-use crate::mesh::{self, Color, Mesh};
+use crate::mesh::{self, Color, Mesh, Quad2};
 use crate::resource::ResourceLoader;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Quad2 {
-    pub left: f32,
-    pub right: f32,
-    pub bottom: f32,
-    pub top: f32,
-}
-
-impl Quad2 {
-    pub fn width(self) -> f32 {
-        (self.right - self.left).abs()
-    }
-
-    pub fn height(self) -> f32 {
-        (self.top - self.bottom).abs()
-    }
-}
 
 fn uvec2_to_fvec2(uvec: Vector2<u32>) -> Vector2<f32> {
     uvec.map(|x| x as f32)

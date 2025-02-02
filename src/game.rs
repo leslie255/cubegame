@@ -10,11 +10,20 @@ use glium::{
 };
 
 use crate::{
+    block::{self, BlockId, BlockRegistry},
+    chunk::{ChunkBuilder, ChunkData, ChunkMesh, LocalCoord},
     input::InputHelper,
     mesh::{self, Color},
     resource::ResourceLoader,
     text::{Font, Line},
+    utils::BoolToggle as _,
 };
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct DebugOptions {
+    pub wireframe_mode: bool,
+    pub disable_gl_backface_culling: bool,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {
@@ -77,7 +86,11 @@ impl PlayerCamera {
         self.yaw += delta.x * sensitivity;
         self.pitch -= delta.y * sensitivity;
         self.pitch = self.pitch.clamp(-89.99, 89.99);
-        self.yaw = ((self.yaw + 180.) % 360.) - 180.;
+        if self.yaw <= -180. {
+            self.yaw += 360.;
+        } else if self.yaw >= 180. {
+            self.yaw -= 360.;
+        }
         self.camera.direction = self.direction();
     }
 
@@ -125,169 +138,6 @@ impl BlockVertex {
 }
 
 #[derive(Debug)]
-pub struct Cube<'res> {
-    vertex_buffer: glium::VertexBuffer<BlockVertex>,
-    index_buffer: glium::IndexBuffer<u32>,
-    shader: &'res glium::Program,
-    texture_atlas: &'res glium::Texture2d,
-    pub model: Matrix4<f32>,
-    pub view: Matrix4<f32>,
-    pub projection: Matrix4<f32>,
-}
-
-impl<'res> Cube<'res> {
-    const VERTICES: &'static [BlockVertex] = &[
-        // South
-        BlockVertex::new([0., 0., 0.], [1.0, 1.0]), // A 0
-        BlockVertex::new([1., 0., 0.], [0.0, 1.0]), // B 1
-        BlockVertex::new([1., 1., 0.], [0.0, 0.0]), // C 2
-        BlockVertex::new([0., 1., 0.], [1.0, 0.0]), // D 3
-        // North
-        BlockVertex::new([0., 0., 1.], [0.0, 1.0]), // E 4
-        BlockVertex::new([1., 0., 1.], [1.0, 1.0]), // F 5
-        BlockVertex::new([1., 1., 1.], [1.0, 0.0]), // G 6
-        BlockVertex::new([0., 1., 1.], [0.0, 0.0]), // H 7
-        // East
-        BlockVertex::new([1., 0., 0.], [1.0, 1.0]), // B 8
-        BlockVertex::new([1., 1., 0.], [1.0, 0.0]), // C 9
-        BlockVertex::new([1., 1., 1.], [0.0, 0.0]), // G 10
-        BlockVertex::new([1., 0., 1.], [0.0, 1.0]), // F 11
-        // West
-        BlockVertex::new([0., 1., 0.], [0.0, 0.0]), // D 12
-        BlockVertex::new([0., 0., 0.], [0.0, 1.0]), // A 13
-        BlockVertex::new([0., 0., 1.], [1.0, 1.0]), // E 14
-        BlockVertex::new([0., 1., 1.], [1.0, 0.0]), // H 15
-        // Up
-        BlockVertex::new([1., 1., 0.], [0.0, 1.0]), // C 16
-        BlockVertex::new([0., 1., 0.], [1.0, 1.0]), // D 17
-        BlockVertex::new([0., 1., 1.], [1.0, 0.0]), // H 18
-        BlockVertex::new([1., 1., 1.], [0.0, 0.0]), // G 19
-        // Down
-        BlockVertex::new([0., 0., 0.], [0.0, 1.0]), // A 20
-        BlockVertex::new([1., 0., 0.], [1.0, 1.0]), // B 21
-        BlockVertex::new([1., 0., 1.], [1.0, 0.0]), // F 22
-        BlockVertex::new([0., 0., 1.], [0.0, 0.0]), // E 23
-    ];
-
-    const INDICES: &'static [u32] = &[
-        /* South */ 0, 3, 2, 2, 1, 0, //
-        /* North */ 4, 5, 6, 6, 7, 4, //
-        /* East  */ 8, 9, 10, 10, 11, 8, //
-        /* West  */ 12, 13, 14, 14, 15, 12, //
-        /* Up    */ 16, 17, 18, 18, 19, 16, //
-        /* Down  */ 20, 21, 22, 22, 23, 20, //
-    ];
-
-    pub fn new(display: &impl glium::backend::Facade, resources: &'res GameResources) -> Self {
-        Self {
-            vertex_buffer: glium::VertexBuffer::new(display, Self::VERTICES).unwrap(),
-            index_buffer: glium::IndexBuffer::new(
-                display,
-                glium::index::PrimitiveType::TrianglesList,
-                Self::INDICES,
-            )
-            .unwrap(),
-            shader: &resources.shader_cube,
-            texture_atlas: &resources.block_atlas,
-            model: Matrix4::identity(),
-            view: Matrix4::identity(),
-            projection: Matrix4::identity(),
-        }
-    }
-
-    pub fn draw(&self, frame: &mut glium::Frame) {
-        frame
-            .draw(
-                &self.vertex_buffer,
-                &self.index_buffer,
-                self.shader,
-                &glium::uniform! {
-                    model: mesh::matrix4_to_array(self.model),
-                    view: mesh::matrix4_to_array(self.view),
-                    projection: mesh::matrix4_to_array(self.projection),
-                    texture_atlas: mesh::texture_sampler(self.texture_atlas),
-                },
-                &mesh::default_3d_draw_parameters(),
-            )
-            .unwrap();
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TriangleVertex {
-    pub position: [f32; 2],
-    pub color: [f32; 3],
-}
-
-glium::implement_vertex!(TriangleVertex, position, color);
-
-impl TriangleVertex {
-    pub const fn new(position: [f32; 2], color: [f32; 3]) -> Self {
-        Self { position, color }
-    }
-}
-
-#[derive(Debug)]
-pub struct Triangle {
-    vertex_buffer: glium::VertexBuffer<TriangleVertex>,
-    model: Matrix4<f32>,
-    view: Matrix4<f32>,
-    projection: Matrix4<f32>,
-}
-
-impl Triangle {
-    const VERTICES: [TriangleVertex; 3] = [
-        TriangleVertex::new([0.5, -0.5], [1.0, 0.0, 0.0]), // bottom right
-        TriangleVertex::new([-0.5, -0.5], [0.0, 1.0, 0.0]), // bottom left
-        TriangleVertex::new([0.0, 0.5], [0.0, 0.0, 1.0]),  // top
-    ];
-
-    pub fn set_model(&mut self, model: Matrix4<f32>) {
-        self.model = model;
-    }
-
-    pub fn set_view(&mut self, view: Matrix4<f32>) {
-        self.view = view;
-    }
-
-    pub fn set_projection(&mut self, projection: Matrix4<f32>) {
-        self.projection = projection;
-    }
-
-    pub fn new(display: &impl glium::backend::Facade) -> Self {
-        Self {
-            vertex_buffer: glium::VertexBuffer::new(display, &Self::VERTICES[..]).unwrap(),
-            model: Matrix4::identity(),
-            view: Matrix4::identity(),
-            projection: Matrix4::identity(),
-        }
-    }
-
-    pub fn draw(&self, frame: &mut glium::Frame, shader: &glium::Program) {
-        let model: [[f32; 4]; 4] = self.model.into();
-        let view: [[f32; 4]; 4] = self.view.into();
-        let projection: [[f32; 4]; 4] = self.projection.into();
-        let uniforms = glium::uniform! {
-            model: model,
-            view: view,
-            projection: projection,
-        };
-        frame
-            .draw(
-                &self.vertex_buffer,
-                glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
-                shader,
-                &uniforms,
-                &glium::DrawParameters {
-                    backface_culling: glium::BackfaceCullingMode::CullingDisabled,
-                    ..mesh::default_3d_draw_parameters()
-                },
-            )
-            .unwrap();
-    }
-}
-
-#[derive(Debug)]
 pub struct InfoText<'res> {
     lines: Vec<Line<'res>>,
     font: &'res Font,
@@ -317,6 +167,8 @@ impl<'res> InfoText<'res> {
                     "Camera pitch/yaw: ---.---deg, ---.---deg".into(),
                 ),
                 Line::with_string(font, shader, display, "Facing: ----".into()),
+                Line::new(font, shader),
+                Line::new(font, shader),
             ],
             font,
             shader,
@@ -387,6 +239,23 @@ impl<'res> InfoText<'res> {
         self.set_line(display, 4, format!("Facing: {facing}").as_str());
     }
 
+    fn update_debug_options(
+        &mut self,
+        display: &impl glium::backend::Facade,
+        debug_options: &DebugOptions,
+    ) {
+        if debug_options.wireframe_mode {
+            self.set_line(display, 5, "[F3+L] DEBUG: Wire frame mode")
+        } else {
+            self.set_line(display, 5, "")
+        }
+        if debug_options.disable_gl_backface_culling {
+            self.set_line(display, 6, "[F3+F] DEBUG: Disable OpenGL backface culling")
+        } else {
+            self.set_line(display, 6, "")
+        }
+    }
+
     fn draw(&self, frame: &mut glium::Frame, content_scale: f32) {
         let font_size = 16. * content_scale;
         for (i, line) in self.lines.iter().enumerate() {
@@ -403,24 +272,28 @@ impl<'res> InfoText<'res> {
 
 #[derive(Debug)]
 pub struct GameResources {
-    loader: ResourceLoader,
-    shader_3d: glium::Program,
-    shader_text: glium::Program,
-    shader_cube: glium::Program,
-    block_atlas: glium::Texture2d,
-    font: Font,
+    pub loader: ResourceLoader,
+    pub shader_text: glium::Program,
+    pub shader_cube: glium::Program,
+    pub block_atlas: glium::Texture2d,
+    pub font: Font,
+    pub block_registry: BlockRegistry,
 }
 
 impl GameResources {
     pub fn load(display: &impl glium::backend::Facade) -> Self {
         let loader = ResourceLoader::with_default_res_directory().unwrap();
         Self {
-            shader_3d: Self::load_shader(display, &loader, "shader/3d"),
             shader_text: Self::load_shader(display, &loader, "shader/text"),
             shader_cube: Self::load_shader(display, &loader, "shader/cube"),
             block_atlas: Self::load_texture(display, &loader, "texture/block_atlas.png"),
             font: Self::load_font(display, &loader, "font/big_blue_terminal.json"),
             loader,
+            block_registry: {
+                let mut block_registry = BlockRegistry::default();
+                block::register_default_blocks(&mut block_registry);
+                block_registry
+            },
         }
     }
 
@@ -512,10 +385,11 @@ pub struct Game<'res> {
     resources: &'res GameResources,
     input_helper: InputHelper,
     fps_counter: FpsCounter,
+    debug_options: DebugOptions,
     player_camera: PlayerCamera,
-    triangle0: Triangle,
-    triangle1: Triangle,
-    cube: Cube<'res>,
+    test_chunk: Box<ChunkData>,
+    test_chunk_mesh: ChunkMesh,
+    chunk_builder: ChunkBuilder<'res>,
     info_text: InfoText<'res>,
     last_window_event: SystemTime,
     is_paused: bool,
@@ -527,20 +401,29 @@ impl<'res> Game<'res> {
         window: winit::window::Window,
         display: glium::Display<glium::glutin::surface::WindowSurface>,
     ) -> Self {
-        Self {
+        let mut self_ = Self {
             window,
             input_helper: InputHelper::new(),
             fps_counter: FpsCounter::new(),
+            debug_options: DebugOptions::default(),
             player_camera: PlayerCamera::new(Point3::new(0., 0., 1.), 0., -90.),
-            cube: Cube::new(&display, resources),
-            triangle0: Triangle::new(&display),
-            triangle1: Triangle::new(&display),
+            test_chunk: ChunkData::new(),
+            test_chunk_mesh: ChunkMesh::new(),
+            chunk_builder: ChunkBuilder::new(resources),
             info_text: InfoText::new(&display, &resources.font, &resources.shader_text),
             last_window_event: SystemTime::now(),
             is_paused: false,
             display,
             resources,
-        }
+        };
+        self_.init_test_chunk();
+        self_
+    }
+
+    fn init_test_chunk(&mut self) {
+        *self.test_chunk.get_block_mut(LocalCoord::new(0, 0, 0)) = BlockId(3);
+        self.chunk_builder
+            .build(&self.display, &self.test_chunk, &mut self.test_chunk_mesh);
     }
 
     fn draw(&mut self) {
@@ -555,28 +438,30 @@ impl<'res> Game<'res> {
             frame_size.width as f32,
             frame_size.height as f32,
         ));
-        self.triangle0
-            .set_model(Matrix4::from_translation([2., 0., 0.].into()));
-        self.triangle0.set_view(view_matrix);
-        self.triangle0.set_projection(projection_matrix);
-        self.triangle0.draw(&mut frame, &self.resources.shader_3d);
 
-        let s = (std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .subsec_nanos() as f32)
-            / 1_000_000_000.
-            * 360.;
-        self.triangle1.set_model(
-            Matrix4::from_translation([-0.5, 0.5, 0.].into()) * Matrix4::from_angle_y(Deg(s)),
+        self.test_chunk_mesh.mesh().draw(
+            &mut frame,
+            glium::uniform! {
+                model: mesh::matrix4_to_array::<f32>(Matrix4::identity()),
+                view: mesh::matrix4_to_array(view_matrix),
+                projection: mesh::matrix4_to_array(projection_matrix),
+                texture_atlas: mesh::texture_sampler(&self.resources.block_atlas),
+            },
+            &self.resources.shader_cube,
+            &glium::DrawParameters {
+                polygon_mode: if self.debug_options.wireframe_mode {
+                    glium::PolygonMode::Line
+                } else {
+                    glium::PolygonMode::Fill
+                },
+                backface_culling: if self.debug_options.disable_gl_backface_culling {
+                    glium::BackfaceCullingMode::CullingDisabled
+                } else {
+                    glium::BackfaceCullingMode::CullClockwise
+                },
+                ..mesh::default_3d_draw_parameters()
+            },
         );
-        self.triangle1.set_view(view_matrix);
-        self.triangle1.set_projection(projection_matrix);
-        self.triangle1.draw(&mut frame, &self.resources.shader_3d);
-
-        self.cube.view = view_matrix;
-        self.cube.projection = projection_matrix;
-        self.cube.draw(&mut frame);
 
         self.info_text
             .set_camera_xyz(&self.display, self.player_camera.camera.position);
@@ -617,7 +502,7 @@ impl<'res> Game<'res> {
     }
 
     fn toggle_paused(&mut self) {
-        self.is_paused = !self.is_paused;
+        self.is_paused.toggle();
         self.info_text.set_is_paused(&self.display, self.is_paused);
         if self.is_paused {
             self.ungrab_cursor();
@@ -652,15 +537,24 @@ impl<'res> Game<'res> {
         }
     }
 
-    #[expect(unused_variables)]
-    fn key_down(&mut self, key_code: KeyCode, text: Option<&str>, is_repeat: bool) {
-        if key_code == KeyCode::Escape && !is_repeat {
-            self.toggle_paused();
+    fn key_down(&mut self, key_code: KeyCode, _text: Option<&str>, is_repeat: bool) {
+        if self.input_helper.key_is_down(KeyCode::F3) {
+            match key_code {
+                KeyCode::KeyL => self.debug_options.wireframe_mode.toggle(),
+                KeyCode::KeyF => self.debug_options.disable_gl_backface_culling.toggle(),
+                _ => (),
+            }
+            self.info_text
+                .update_debug_options(&self.display, &self.debug_options);
+            return;
+        }
+        match key_code {
+            KeyCode::Escape if !is_repeat => self.toggle_paused(),
+            _ => (),
         }
     }
 
-    #[expect(unused_variables)]
-    fn key_up(&mut self, key_code: KeyCode) {}
+    fn key_up(&mut self, _key_code: KeyCode) {}
 
     fn cursor_moved(&mut self, delta: Vector2<f32>) {
         if !self.is_paused {

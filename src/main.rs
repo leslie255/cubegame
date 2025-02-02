@@ -3,11 +3,13 @@
 use glium::{backend::glutin, winit};
 
 pub mod block;
+pub mod chunk;
 pub mod game;
+pub mod input;
 pub mod mesh;
 pub mod resource;
 pub mod text;
-pub mod input;
+pub mod utils;
 
 use game::{Game, GameResources};
 

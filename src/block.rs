@@ -20,6 +20,10 @@ impl BlockFace {
         }
     }
 
+    pub fn iter() -> impl Iterator<Item = Self> {
+        (0..6).map(|i| unsafe { Self::from_usize_unchecked(i) })
+    }
+
     /// # Safety
     /// `value` must be in `0..6`.
     pub const unsafe fn from_usize_unchecked(value: usize) -> Self {
@@ -65,7 +69,7 @@ impl BlockModel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BlockTextureId(u32);
+pub struct BlockTextureId(pub u32);
 
 #[derive(Debug, Clone)]
 pub struct BlockInfo {
@@ -75,6 +79,7 @@ pub struct BlockInfo {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::From)]
+#[repr(transparent)]
 pub struct BlockId(pub usize);
 impl index_vec::Idx for BlockId {
     fn from_usize(idx: usize) -> Self {

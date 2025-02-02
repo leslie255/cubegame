@@ -1,3 +1,5 @@
+//! Utilities for drawing.
+
 use std::ops::Add;
 
 use glium::Surface as _;
@@ -16,8 +18,8 @@ pub fn texture_sampler(texture: &glium::Texture2d) -> glium::uniforms::Sampler<g
     texture
         .sampled()
         .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
-        .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
-        .wrap_function(glium::uniforms::SamplerWrapFunction::Repeat)
+        .minify_filter(glium::uniforms::MinifySamplerFilter::NearestMipmapNearest)
+        .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp)
 }
 
 pub fn default_3d_draw_parameters() -> glium::DrawParameters<'static> {
@@ -42,6 +44,24 @@ pub fn default_2d_draw_parameters() -> glium::DrawParameters<'static> {
         backface_culling: glium::BackfaceCullingMode::CullCounterClockwise,
         blend: glium::draw_parameters::Blend::alpha_blending(),
         ..Default::default()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Quad2 {
+    pub left: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub top: f32,
+}
+
+impl Quad2 {
+    pub fn width(self) -> f32 {
+        (self.right - self.left).abs()
+    }
+
+    pub fn height(self) -> f32 {
+        (self.top - self.bottom).abs()
     }
 }
 
