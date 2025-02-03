@@ -403,7 +403,7 @@ impl<'res> Game<'res> {
         window: winit::window::Window,
         display: glium::Display<glium::glutin::surface::WindowSurface>,
     ) -> Self {
-        let mut world_generator = WorldGenerator::new(0, resources);
+        let mut world_generator = WorldGenerator::new(100, resources);
         let mut world = World::new(resources);
         world_generator.generate_world(&mut world);
         world.do_chunk_building(&display);
@@ -468,10 +468,7 @@ impl<'res> Game<'res> {
         for y in World::CHUNK_ID_Y_RANGE {
             for z in World::CHUNK_ID_Z_RANGE {
                 for x in World::CHUNK_ID_X_RANGE {
-                    let chunk_mesh = self
-                        .world
-                        .get_chunk_mesh(ChunkId::new(x, y, z))
-                        .unwrap();
+                    let chunk_mesh = self.world.get_chunk_mesh(ChunkId::new(x, y, z)).unwrap();
                     let model_matrix = Matrix4::from_translation(vec3(
                         (x * 32) as f32,
                         (y * 32) as f32,
@@ -560,6 +557,9 @@ impl<'res> Game<'res> {
             }
             if self.input_helper.key_is_down(KeyCode::KeyR) {
                 movement.y -= 1.0;
+            }
+            if self.input_helper.key_is_down(KeyCode::ControlLeft) {
+                movement.z *= 2.;
             }
             movement *= 4.;
             movement *= duration_since_last_window_event.as_secs_f32();

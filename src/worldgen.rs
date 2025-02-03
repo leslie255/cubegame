@@ -19,11 +19,11 @@ struct WaveComponent {
 }
 
 impl WaveComponent {
-    fn random(rng: &mut impl Rng, base_scale: f32, base_amplitude: f32) -> Self {
+    fn random(rng: &mut impl Rng, scale: f32, amplitude: f32) -> Self {
         const PI: f32 = std::f32::consts::PI;
         Self {
-            amplitude: base_amplitude * rng.random_range(0.9..1.1),
-            scale: base_scale * rng.random_range(0.9..1.1),
+            amplitude,
+            scale,
             offset: vec2(rng.random_range((-PI)..PI), rng.random_range((-PI)..PI)),
         }
     }
@@ -52,8 +52,8 @@ impl<'res> WorldGenerator<'res> {
         Self {
             seed,
             wave_components: [
-                WaveComponent::random(&mut rng, 0.5, 0.7),
-                WaveComponent::random(&mut rng, 1.5, 0.8),
+                WaveComponent::random(&mut rng, 1.8, 0.6),
+                WaveComponent::random(&mut rng, 1.5, 0.7),
                 WaveComponent::random(&mut rng, 3.0, 2.5),
                 WaveComponent::random(&mut rng, 7.0, 3.0),
                 WaveComponent::random(&mut rng, 8.5, 5.3),
@@ -68,6 +68,7 @@ impl<'res> WorldGenerator<'res> {
         for wave_component in self.wave_components {
             height += wave_component.sample(point2(x as f32, z as f32));
         }
+        height += 6.;
         height.floor() as i32
     }
 
@@ -86,7 +87,63 @@ impl<'res> WorldGenerator<'res> {
                     }
                 }
                 if let Some(block) = world.get_block_mut(BlockCoord::new(x, terrain_height, z)) {
-                    *block = self.game_blocks.grass;
+                    *block = if terrain_height < 0 {
+                        self.game_blocks.sand
+                    } else {
+                        self.game_blocks.grass
+                    };
+                }
+            }
+        }
+
+        // Features.
+        let n_trees = (1.92 * (World::SIZE_X * World::SIZE_Z) as f32) as u32;
+        for _ in 0..n_trees {
+            let x = self.rng.random_range(World::COORD_X_RANGE);
+            let z = self.rng.random_range(World::COORD_X_RANGE);
+            self.place_tree(x, z, world);
+        }
+    }
+
+    pub fn place_tree(&mut self, x: i32, z: i32, world: &mut World) {
+        let terrain_height = self.terrain_height_at(x, z);
+        let height = self.rng.random_range(1..4); // The exposed part of the trunk.
+
+        // The dirt block below.
+        if let Some(block) = world.get_block_mut(BlockCoord::new(x, terrain_height, z)) {
+            if *block != self.game_blocks.grass {
+                return;
+            }
+            *block = self.game_blocks.dirt;
+        }
+
+        // Trunk.
+        for y in (terrain_height + 1)..=(terrain_height + height + 3) {
+            if let Some(block) = world.get_block_mut(BlockCoord::new(x, y, z)) {
+                *block = self.game_blocks.log;
+            }
+        }
+
+        // Leaves.
+        for y in (terrain_height + height + 1)..=(terrain_height + height + 4) {
+            for z in (z - 2)..=(z + 2) {
+                for x in (x - 2)..=(x + 2) {
+                    if let Some(block) = world.get_block_mut(BlockCoord::new(x, y, z)) {
+                        if *block != self.game_blocks.log && *block != self.game_blocks.cherry_log {
+                            *block = self.game_blocks.leaves;
+                        }
+                    }
+                }
+            }
+        }
+        for z in (z - 1)..=(z + 1) {
+            for x in (x - 1)..=(x + 1) {
+                if let Some(block) =
+                    world.get_block_mut(BlockCoord::new(x, terrain_height + height + 5, z))
+                {
+                    if *block != self.game_blocks.log && *block != self.game_blocks.cherry_log {
+                        *block = self.game_blocks.leaves;
+                    }
                 }
             }
         }

@@ -117,6 +117,12 @@ pub struct GameBlocks {
     pub stone: BlockId,
     pub dirt: BlockId,
     pub grass: BlockId,
+    pub log: BlockId,
+    pub leaves: BlockId,
+    pub sand: BlockId,
+    pub cherry_log: BlockId,
+    pub cherry_leaves: BlockId,
+    pub water: BlockId,
 }
 
 impl GameBlocks {
@@ -175,6 +181,90 @@ impl GameBlocks {
                         BlockTextureId(3), // West
                         BlockTextureId(4), // Top
                         BlockTextureId(2), // Bottom
+                    ],
+                },
+            }),
+            log: block_registry.register(BlockInfo {
+                name: "log",
+                transparency: BlockTransparency::Solid,
+                model: BlockModel {
+                    faces: [
+                        BlockTextureId(5), // South
+                        BlockTextureId(5), // North
+                        BlockTextureId(5), // East
+                        BlockTextureId(5), // West
+                        BlockTextureId(6), // Top
+                        BlockTextureId(6), // Bottom
+                    ],
+                },
+            }),
+            leaves: block_registry.register(BlockInfo {
+                name: "leaves",
+                transparency: BlockTransparency::Transparent,
+                model: BlockModel {
+                    faces: [
+                        BlockTextureId(7), // South
+                        BlockTextureId(7), // North
+                        BlockTextureId(7), // East
+                        BlockTextureId(7), // West
+                        BlockTextureId(7), // Top
+                        BlockTextureId(7), // Bottom
+                    ],
+                },
+            }),
+            sand: block_registry.register(BlockInfo {
+                name: "sand",
+                transparency: BlockTransparency::Transparent,
+                model: BlockModel {
+                    faces: [
+                        BlockTextureId(8), // South
+                        BlockTextureId(8), // North
+                        BlockTextureId(8), // East
+                        BlockTextureId(8), // West
+                        BlockTextureId(8), // Top
+                        BlockTextureId(8), // Bottom
+                    ],
+                },
+            }),
+            cherry_log: block_registry.register(BlockInfo {
+                name: "cherry_log",
+                transparency: BlockTransparency::Transparent,
+                model: BlockModel {
+                    faces: [
+                        BlockTextureId(9), // South
+                        BlockTextureId(9), // North
+                        BlockTextureId(9), // East
+                        BlockTextureId(9), // West
+                        BlockTextureId(10), // Top
+                        BlockTextureId(10), // Bottom
+                    ],
+                },
+            }),
+            cherry_leaves: block_registry.register(BlockInfo {
+                name: "cherry_leaves",
+                transparency: BlockTransparency::Transparent,
+                model: BlockModel {
+                    faces: [
+                        BlockTextureId(11), // South
+                        BlockTextureId(11), // North
+                        BlockTextureId(11), // East
+                        BlockTextureId(11), // West
+                        BlockTextureId(11), // Top
+                        BlockTextureId(11), // Bottom
+                    ],
+                },
+            }),
+            water: block_registry.register(BlockInfo {
+                name: "water",
+                transparency: BlockTransparency::Transparent,
+                model: BlockModel {
+                    faces: [
+                        BlockTextureId(12), // South
+                        BlockTextureId(12), // North
+                        BlockTextureId(12), // East
+                        BlockTextureId(12), // West
+                        BlockTextureId(12), // Top
+                        BlockTextureId(12), // Bottom
                     ],
                 },
             }),
