@@ -2,6 +2,10 @@
 
 **Voxel Game in OpenGL**
 
+![cubegame_demo_screenshot](https://github.com/user-attachments/assets/68d7269c-73a0-4c48-b3e3-bc38cd69bacf)
+
+Note that an older version before a re-write exists at [leslie255/old_cubegame](https://github.com/leslie255/old_cubegame).
+
 ## LICENSE
 
 This project is licensed under BSD 2-Clause.
