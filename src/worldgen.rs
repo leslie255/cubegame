@@ -29,10 +29,10 @@ impl WaveComponent {
     }
 
     fn sample(self, xz: Point2<f32>) -> f32 {
-        let xz = xz - self.offset;
+        let xz = (xz - self.offset).map(|i| i / self.scale);
         let mut result = 0.;
-        result += f32::sin(xz.x / self.scale) * self.amplitude;
-        result += f32::sin(xz.y / self.scale) * self.amplitude;
+        result += f32::sin(xz.x) * self.amplitude;
+        result += f32::sin(xz.y) * self.amplitude;
         result /= 2.;
         result
     }
@@ -103,6 +103,14 @@ impl<'res> WorldGenerator<'res> {
             let z = self.rng.random_range(World::COORD_X_RANGE);
             self.place_tree(x, z, world);
         }
+
+        // Features.
+        let n_cherry_trees = (0.3 * (World::SIZE_X * World::SIZE_Z) as f32) as u32;
+        for _ in 0..n_cherry_trees {
+            let x = self.rng.random_range(World::COORD_X_RANGE);
+            let z = self.rng.random_range(World::COORD_X_RANGE);
+            self.place_cherry_tree(x, z, world);
+        }
     }
 
     pub fn place_tree(&mut self, x: i32, z: i32, world: &mut World) {
@@ -126,8 +134,13 @@ impl<'res> WorldGenerator<'res> {
 
         // Leaves.
         for y in (terrain_height + height + 1)..=(terrain_height + height + 4) {
-            for z in (z - 2)..=(z + 2) {
-                for x in (x - 2)..=(x + 2) {
+            for dz in (-2)..=2i32 {
+                for dx in (-2)..=2i32 {
+                    if dz.abs() == 2 && dx.abs() == 2 {
+                        continue;
+                    }
+                    let z = z + dz;
+                    let x = x + dx;
                     if let Some(block) = world.get_block_mut(BlockCoord::new(x, y, z)) {
                         if *block != self.game_blocks.log && *block != self.game_blocks.cherry_log {
                             *block = self.game_blocks.leaves;
@@ -136,13 +149,79 @@ impl<'res> WorldGenerator<'res> {
                 }
             }
         }
-        for z in (z - 1)..=(z + 1) {
-            for x in (x - 1)..=(x + 1) {
+        for dz in (-1)..=1i32 {
+            for dx in (-1)..=1i32 {
+                if dz.abs() == 1 && dx.abs() == 1 {
+                    continue;
+                }
+                let z = z + dz;
+                let x = x + dx;
                 if let Some(block) =
                     world.get_block_mut(BlockCoord::new(x, terrain_height + height + 5, z))
                 {
                     if *block != self.game_blocks.log && *block != self.game_blocks.cherry_log {
                         *block = self.game_blocks.leaves;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn place_cherry_tree(&mut self, x: i32, z: i32, world: &mut World) {
+        let terrain_height = self.terrain_height_at(x, z);
+        let height = self.rng.random_range(2..6); // The exposed part of the trunk.
+
+        // The dirt block below.
+        if let Some(block) = world.get_block_mut(BlockCoord::new(x, terrain_height, z)) {
+            if *block != self.game_blocks.grass {
+                return;
+            }
+            *block = self.game_blocks.dirt;
+        }
+
+        // Trunk.
+        for y in (terrain_height + 1)..=(terrain_height + height + 3) {
+            if let Some(block) = world.get_block_mut(BlockCoord::new(x, y, z)) {
+                *block = self.game_blocks.cherry_log;
+            }
+        }
+
+        // Leaves.
+        for y in (terrain_height + height + 2)..=(terrain_height + height + 4) {
+            for dz in (-3)..=3i32 {
+                for dx in (-3)..=3i32 {
+                    if dz.abs() == 3 && dx.abs() == 3 {
+                        continue;
+                    }
+                    let z = z + dz;
+                    let x = x + dx;
+                    if let Some(block) = world.get_block_mut(BlockCoord::new(x, y, z)) {
+                        if *block != self.game_blocks.log && *block != self.game_blocks.cherry_log {
+                            *block = self.game_blocks.cherry_leaves;
+                        }
+                    }
+                }
+            }
+        }
+        for dz in (-2)..=2i32 {
+            for dx in (-2)..=2i32 {
+                if dz.abs() == 2 && dx.abs() == 2 {
+                    continue;
+                }
+                let z = z + dz;
+                let x = x + dx;
+                if let Some(block) =
+                    world.get_block_mut(BlockCoord::new(x, terrain_height + height + 1, z))
+                {
+                    if *block != self.game_blocks.log && *block != self.game_blocks.cherry_log {
+                        *block = self.game_blocks.cherry_leaves;
+                    }
+                }
+                if let Some(block) =
+                    world.get_block_mut(BlockCoord::new(x, terrain_height + height + 5, z))
+                {
+                    if *block != self.game_blocks.log && *block != self.game_blocks.cherry_log {
+                        *block = self.game_blocks.cherry_leaves;
                     }
                 }
             }

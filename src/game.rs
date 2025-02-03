@@ -403,7 +403,7 @@ impl<'res> Game<'res> {
         window: winit::window::Window,
         display: glium::Display<glium::glutin::surface::WindowSurface>,
     ) -> Self {
-        let mut world_generator = WorldGenerator::new(100, resources);
+        let mut world_generator = WorldGenerator::new(255, resources);
         let mut world = World::new(resources);
         world_generator.generate_world(&mut world);
         world.do_chunk_building(&display);
@@ -580,11 +580,18 @@ impl<'res> Game<'res> {
         }
         match key_code {
             KeyCode::Escape if !is_repeat => self.toggle_paused(),
+            KeyCode::KeyC if !is_repeat => self.player_camera.camera.fov = 30.,
             _ => (),
         }
     }
 
-    fn key_up(&mut self, _key_code: KeyCode) {}
+    fn key_up(&mut self, key_code: KeyCode) {
+        #[allow(clippy::single_match)]
+        match key_code {
+            KeyCode::KeyC => self.player_camera.camera.fov = 90.,
+            _ => (),
+        }
+    }
 
     fn cursor_moved(&mut self, delta: Vector2<f32>) {
         if !self.is_paused {

@@ -59,6 +59,7 @@ impl BlockFace {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlockTransparency {
     Solid,
+    Leaves,
     Transparent,
     Air,
 }
@@ -200,7 +201,7 @@ impl GameBlocks {
             }),
             leaves: block_registry.register(BlockInfo {
                 name: "leaves",
-                transparency: BlockTransparency::Transparent,
+                transparency: BlockTransparency::Leaves,
                 model: BlockModel {
                     faces: [
                         BlockTextureId(7), // South
@@ -214,7 +215,7 @@ impl GameBlocks {
             }),
             sand: block_registry.register(BlockInfo {
                 name: "sand",
-                transparency: BlockTransparency::Transparent,
+                transparency: BlockTransparency::Solid,
                 model: BlockModel {
                     faces: [
                         BlockTextureId(8), // South
@@ -228,7 +229,7 @@ impl GameBlocks {
             }),
             cherry_log: block_registry.register(BlockInfo {
                 name: "cherry_log",
-                transparency: BlockTransparency::Transparent,
+                transparency: BlockTransparency::Solid,
                 model: BlockModel {
                     faces: [
                         BlockTextureId(9), // South
@@ -242,7 +243,7 @@ impl GameBlocks {
             }),
             cherry_leaves: block_registry.register(BlockInfo {
                 name: "cherry_leaves",
-                transparency: BlockTransparency::Transparent,
+                transparency: BlockTransparency::Leaves,
                 model: BlockModel {
                     faces: [
                         BlockTextureId(11), // South
