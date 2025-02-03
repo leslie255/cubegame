@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use cgmath::*;
 use glium::{
@@ -393,7 +393,7 @@ pub struct Game<'res> {
     world: World<'res>,
     world_generator: WorldGenerator<'res>,
     info_text: InfoText<'res>,
-    last_window_event: SystemTime,
+    last_window_event: Instant,
     is_paused: bool,
 }
 
@@ -412,11 +412,11 @@ impl<'res> Game<'res> {
             input_helper: InputHelper::new(),
             fps_counter: FpsCounter::new(),
             debug_options: DebugOptions::default(),
-            player_camera: PlayerCamera::new(Point3::new(0., 0., 1.), 0., -90.),
+            player_camera: PlayerCamera::new(Point3::new(0., 15., 0.), 0., -90.),
             world,
             world_generator,
             info_text: InfoText::new(&display, &resources.font, &resources.shader_text),
-            last_window_event: SystemTime::now(),
+            last_window_event: Instant::now(),
             is_paused: false,
             display,
             resources,
@@ -614,8 +614,8 @@ impl winit::application::ApplicationHandler for Game<'_> {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let now = std::time::SystemTime::now();
-        let duration_since_last_window_event = now.duration_since(self.last_window_event).unwrap();
+        let now = Instant::now();
+        let duration_since_last_window_event = now.duration_since(self.last_window_event);
         self.last_window_event = now;
         self.before_window_event(duration_since_last_window_event);
         match event {
