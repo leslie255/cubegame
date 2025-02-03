@@ -18,7 +18,7 @@ pub fn texture_sampler(texture: &glium::Texture2d) -> glium::uniforms::Sampler<g
     texture
         .sampled()
         .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
-        .minify_filter(glium::uniforms::MinifySamplerFilter::NearestMipmapNearest)
+        .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
         .wrap_function(glium::uniforms::SamplerWrapFunction::Repeat)
 }
 

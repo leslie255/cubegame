@@ -8,56 +8,7 @@ use crate::{
     mesh::{Mesh, Quad2},
 };
 
-/// A chunk-local coordinate.
-/// They are `Ord` just for the sake of it. The ordering has no geometric implications.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct LocalCoord {
-    pub x: u8,
-    pub y: u8,
-    pub z: u8,
-}
-
-impl LocalCoord {
-    pub fn new(x: u8, y: u8, z: u8) -> Self {
-        Self { x, y, z }
-    }
-
-    pub fn as_array<S: From<u8>>(self) -> [S; 3] {
-        [self.x.into(), self.y.into(), self.z.into()]
-    }
-
-    pub fn as_vec3<S: From<u8>>(self) -> Vector3<S> {
-        vec3(self.x.into(), self.y.into(), self.z.into())
-    }
-
-    pub const fn index(self) -> usize {
-        self.y as usize * 32 * 32 + self.z as usize * 32 + self.x as usize
-    }
-
-    pub const fn with_x(self, x: u8) -> Self {
-        Self { x, ..self }
-    }
-
-    pub const fn with_y(self, y: u8) -> Self {
-        Self { y, ..self }
-    }
-
-    pub const fn with_z(self, z: u8) -> Self {
-        Self { z, ..self }
-    }
-
-    pub fn neighbor_in_direction(self, direction: BlockFace) -> Option<Self> {
-        let result = match direction {
-            BlockFace::South => self.with_z((self.z + 1).min(31)),
-            BlockFace::North => self.with_z(self.z.saturating_sub(1)),
-            BlockFace::East => self.with_x((self.x + 1).min(31)),
-            BlockFace::West => self.with_x(self.x.saturating_sub(1)),
-            BlockFace::Top => self.with_y((self.y + 1).min(31)),
-            BlockFace::Bottom => self.with_y(self.y.saturating_sub(1)),
-        };
-        (result != self).then_some(result)
-    }
-}
+pub type LocalCoord = Point3<u8>;
 
 #[derive(Debug, Clone)]
 pub struct ChunkData {
@@ -81,12 +32,18 @@ impl ChunkData {
         self.blocks.as_mut_slice()
     }
 
+    fn index(local_coord: LocalCoord) -> usize {
+        (local_coord.y as usize) * 32 * 32
+            + (local_coord.z as usize) * 32
+            + (local_coord.x as usize)
+    }
+
     pub fn try_get_block(&self, local_coord: LocalCoord) -> Option<BlockId> {
-        self.blocks.get(local_coord.index()).copied()
+        self.blocks.get(Self::index(local_coord)).copied()
     }
 
     pub fn try_get_block_mut(&mut self, local_coord: LocalCoord) -> Option<&mut BlockId> {
-        self.blocks.get_mut(local_coord.index())
+        self.blocks.get_mut(Self::index(local_coord))
     }
 
     #[track_caller]
@@ -102,13 +59,13 @@ impl ChunkData {
     /// # Safety
     /// `local_coord` must be in range.
     pub unsafe fn get_block_unchecked(&self, local_coord: LocalCoord) -> BlockId {
-        unsafe { *self.blocks.get_unchecked(local_coord.index()) }
+        unsafe { *self.blocks.get_unchecked(Self::index(local_coord)) }
     }
 
     /// # Safety
     /// `local_coord` must be in range.
     pub unsafe fn get_block_unchecked_mut(&mut self, local_coord: LocalCoord) -> &mut BlockId {
-        unsafe { self.blocks.get_unchecked_mut(local_coord.index()) }
+        unsafe { self.blocks.get_unchecked_mut(Self::index(local_coord)) }
     }
 }
 
@@ -207,6 +164,19 @@ impl<'res> ChunkBuilder<'res> {
         chunk_mesh.mesh.update(display);
     }
 
+    fn neighbor_local_coord(local_coord: LocalCoord, direction: BlockFace) -> Option<LocalCoord> {
+        let mut result = local_coord;
+        match direction {
+            BlockFace::South  => result.z = (result.z + 1).min(31),
+            BlockFace::East   => result.x = (result.x + 1).min(31),
+            BlockFace::Top    => result.y = (result.y + 1).min(31),
+            BlockFace::North  => result.z =  result.z.saturating_sub(1),
+            BlockFace::West   => result.x =  result.x.saturating_sub(1),
+            BlockFace::Bottom => result.y =  result.y.saturating_sub(1),
+        }
+        (result != local_coord).then_some(result)
+    }
+
     fn build_block(
         &mut self,
         chunk: &ChunkData,
@@ -219,7 +189,7 @@ impl<'res> ChunkBuilder<'res> {
             return;
         }
         for block_face in BlockFace::iter() {
-            if let Some(neighbor_position) = local_position.neighbor_in_direction(block_face) {
+            if let Some(neighbor_position) = Self::neighbor_local_coord(local_position, block_face) {
                 let neighbor_block_id = unsafe { chunk.get_block_unchecked(neighbor_position) };
                 let neighbor_transparency = self
                     .block_registry

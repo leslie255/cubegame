@@ -10,6 +10,8 @@ pub mod mesh;
 pub mod resource;
 pub mod text;
 pub mod utils;
+pub mod world;
+pub mod worldgen;
 
 use game::{Game, GameResources};
 

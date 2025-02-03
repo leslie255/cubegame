@@ -11,12 +11,13 @@ use glium::{
 
 use crate::{
     block::{BlockRegistry, GameBlocks},
-    chunk::{ChunkBuilder, ChunkData, ChunkMesh, LocalCoord},
     input::InputHelper,
     mesh::{self, Color},
     resource::ResourceLoader,
     text::{Font, Line},
     utils::BoolToggle as _,
+    world::{ChunkId, World},
+    worldgen::WorldGenerator,
 };
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -389,9 +390,8 @@ pub struct Game<'res> {
     fps_counter: FpsCounter,
     debug_options: DebugOptions,
     player_camera: PlayerCamera,
-    test_chunk: Box<ChunkData>,
-    test_chunk_mesh: ChunkMesh,
-    chunk_builder: ChunkBuilder<'res>,
+    world: World<'res>,
+    world_generator: WorldGenerator<'res>,
     info_text: InfoText<'res>,
     last_window_event: SystemTime,
     is_paused: bool,
@@ -403,23 +403,24 @@ impl<'res> Game<'res> {
         window: winit::window::Window,
         display: glium::Display<glium::glutin::surface::WindowSurface>,
     ) -> Self {
-        let mut self_ = Self {
+        let mut world_generator = WorldGenerator::new(0, resources);
+        let mut world = World::new(resources);
+        world_generator.generate_world(&mut world);
+        world.do_chunk_building(&display);
+        Self {
             window,
             input_helper: InputHelper::new(),
             fps_counter: FpsCounter::new(),
             debug_options: DebugOptions::default(),
             player_camera: PlayerCamera::new(Point3::new(0., 0., 1.), 0., -90.),
-            test_chunk: ChunkData::new(),
-            test_chunk_mesh: ChunkMesh::new(),
-            chunk_builder: ChunkBuilder::new(resources),
+            world,
+            world_generator,
             info_text: InfoText::new(&display, &resources.font, &resources.shader_text),
             last_window_event: SystemTime::now(),
             is_paused: false,
             display,
             resources,
-        };
-        self_.init_test_chunk();
-        self_
+        }
     }
 
     pub fn blocks(&self) -> &GameBlocks {
@@ -428,21 +429,6 @@ impl<'res> Game<'res> {
 
     pub fn block_registry(&self) -> &BlockRegistry {
         &self.resources.block_registry
-    }
-
-    fn init_test_chunk(&mut self) {
-        for x in 0..32 {
-            for z in 0..32 {
-                *self.test_chunk.get_block_mut(LocalCoord::new(x, 0, z)) = self.blocks().stone;
-                *self.test_chunk.get_block_mut(LocalCoord::new(x, 1, z)) = self.blocks().stone;
-                *self.test_chunk.get_block_mut(LocalCoord::new(x, 2, z)) = self.blocks().stone;
-                *self.test_chunk.get_block_mut(LocalCoord::new(x, 3, z)) = self.blocks().stone;
-                *self.test_chunk.get_block_mut(LocalCoord::new(x, 4, z)) = self.blocks().dirt;
-                *self.test_chunk.get_block_mut(LocalCoord::new(x, 5, z)) = self.blocks().grass;
-            }
-        }
-        self.chunk_builder
-            .build(&self.display, &self.test_chunk, &mut self.test_chunk_mesh);
     }
 
     fn draw(&mut self) {
@@ -479,17 +465,32 @@ impl<'res> Game<'res> {
         } else {
             &self.resources.shader_chunk
         };
-        self.test_chunk_mesh.mesh().draw(
-            &mut frame,
-            glium::uniform! {
-                model: mesh::matrix4_to_array::<f32>(Matrix4::identity()),
-                view: mesh::matrix4_to_array(view_matrix),
-                projection: mesh::matrix4_to_array(projection_matrix),
-                texture_atlas: mesh::texture_sampler(&self.resources.block_atlas),
-            },
-            shader,
-            draw_parameters,
-        );
+        for y in World::CHUNK_ID_Y_RANGE {
+            for z in World::CHUNK_ID_Z_RANGE {
+                for x in World::CHUNK_ID_X_RANGE {
+                    let chunk_mesh = self
+                        .world
+                        .get_chunk_mesh(ChunkId::new(x, y, z))
+                        .unwrap();
+                    let model_matrix = Matrix4::from_translation(vec3(
+                        (x * 32) as f32,
+                        (y * 32) as f32,
+                        (z * 32) as f32,
+                    ));
+                    chunk_mesh.mesh().draw(
+                        &mut frame,
+                        glium::uniform! {
+                            model: mesh::matrix4_to_array(model_matrix),
+                            view: mesh::matrix4_to_array(view_matrix),
+                            projection: mesh::matrix4_to_array(projection_matrix),
+                            texture_atlas: mesh::texture_sampler(&self.resources.block_atlas),
+                        },
+                        shader,
+                        draw_parameters,
+                    );
+                }
+            }
+        }
 
         self.info_text
             .set_camera_xyz(&self.display, self.player_camera.camera.position);
