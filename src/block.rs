@@ -87,13 +87,13 @@ pub struct BlockInfo {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::From)]
 #[repr(transparent)]
-pub struct BlockId(pub usize);
+pub struct BlockId(pub u16);
 impl index_vec::Idx for BlockId {
     fn from_usize(idx: usize) -> Self {
-        Self(idx)
+        Self(idx as u16)
     }
     fn index(self) -> usize {
-        self.0
+        self.0 as usize
     }
 }
 

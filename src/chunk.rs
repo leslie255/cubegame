@@ -5,7 +5,7 @@ use cgmath::*;
 use crate::{
     block::{BlockFace, BlockId, BlockRegistry, BlockTextureId, BlockTransparency},
     game::GameResources,
-    mesh::{Mesh, Quad2},
+    mesh::{MeshData, Quad2, SharedMesh},
 };
 
 pub type LocalCoord = Point3<u8>;
@@ -83,10 +83,9 @@ impl BlockVertex {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ChunkBuilder<'res> {
     block_registry: &'res BlockRegistry,
-    block_atlas: &'res glium::Texture2d,
 }
 
 impl<'res> ChunkBuilder<'res> {
@@ -140,39 +139,33 @@ impl<'res> ChunkBuilder<'res> {
     pub fn new(resources: &'res GameResources) -> Self {
         Self {
             block_registry: &resources.block_registry,
-            block_atlas: &resources.block_atlas,
         }
     }
 
-    pub fn build(
-        &mut self,
-        display: &impl glium::backend::Facade,
-        chunk: &ChunkData,
-        chunk_mesh: &mut ChunkMesh,
-    ) {
-        chunk_mesh.mesh.vertices_mut().clear();
-        chunk_mesh.mesh.indices_mut().clear();
+    pub fn build(&mut self, chunk: &ChunkData, chunk_mesh: &ChunkMesh) {
+        let mut mesh_data = chunk_mesh.mesh().lock_mesh_data();
+        mesh_data.vertices_mut().clear();
+        mesh_data.indices_mut().clear();
         for y in 0..32 {
             for x in 0..32 {
                 for z in 0..32 {
                     let local_coord = LocalCoord::new(y, z, x);
                     let block_id = unsafe { chunk.get_block_unchecked(local_coord) };
-                    self.build_block(chunk, local_coord, block_id, chunk_mesh);
+                    self.build_block(chunk, local_coord, block_id, &mut mesh_data);
                 }
             }
         }
-        chunk_mesh.mesh.update(display);
     }
 
     fn neighbor_local_coord(local_coord: LocalCoord, direction: BlockFace) -> Option<LocalCoord> {
         let mut result = local_coord;
         match direction {
-            BlockFace::South  => result.z = (result.z + 1).min(31),
-            BlockFace::East   => result.x = (result.x + 1).min(31),
-            BlockFace::Top    => result.y = (result.y + 1).min(31),
-            BlockFace::North  => result.z =  result.z.saturating_sub(1),
-            BlockFace::West   => result.x =  result.x.saturating_sub(1),
-            BlockFace::Bottom => result.y =  result.y.saturating_sub(1),
+            BlockFace::South => result.z = (result.z + 1).min(31),
+            BlockFace::East => result.x = (result.x + 1).min(31),
+            BlockFace::Top => result.y = (result.y + 1).min(31),
+            BlockFace::North => result.z = result.z.saturating_sub(1),
+            BlockFace::West => result.x = result.x.saturating_sub(1),
+            BlockFace::Bottom => result.y = result.y.saturating_sub(1),
         }
         (result != local_coord).then_some(result)
     }
@@ -182,14 +175,15 @@ impl<'res> ChunkBuilder<'res> {
         chunk: &ChunkData,
         local_position: LocalCoord,
         block_id: BlockId,
-        chunk_mesh: &mut ChunkMesh,
+        mesh_data: &mut MeshData<BlockVertex>,
     ) {
         let block_info = self.block_registry.lookup(block_id).unwrap();
         if block_info.transparency == BlockTransparency::Air {
             return;
         }
         for block_face in BlockFace::iter() {
-            if let Some(neighbor_position) = Self::neighbor_local_coord(local_position, block_face) {
+            if let Some(neighbor_position) = Self::neighbor_local_coord(local_position, block_face)
+            {
                 let neighbor_block_id = unsafe { chunk.get_block_unchecked(neighbor_position) };
                 let neighbor_transparency = self
                     .block_registry
@@ -214,9 +208,7 @@ impl<'res> ChunkBuilder<'res> {
                 ],
             });
             let indices = Self::FACE_INDICIES;
-            chunk_mesh
-                .mesh
-                .append(vertices.as_slice(), indices.as_slice());
+            mesh_data.append(vertices.as_slice(), indices.as_slice());
         }
     }
 
@@ -237,7 +229,7 @@ impl<'res> ChunkBuilder<'res> {
 
 #[derive(Debug, Default)]
 pub struct ChunkMesh {
-    mesh: Mesh<BlockVertex>,
+    mesh: SharedMesh<BlockVertex>,
 }
 
 impl ChunkMesh {
@@ -245,16 +237,11 @@ impl ChunkMesh {
         Self::default()
     }
 
-    pub fn build(&mut self, _chunk: &ChunkData) {
-        self.mesh.vertices_mut().clear();
-        self.mesh.indices_mut().clear();
-    }
-
-    pub fn mesh(&self) -> &Mesh<BlockVertex> {
+    pub fn mesh(&self) -> &SharedMesh<BlockVertex> {
         &self.mesh
     }
 
-    pub fn mesh_mut(&self) -> &Mesh<BlockVertex> {
-        &self.mesh
+    pub fn mesh_mut(&mut self) -> &mut SharedMesh<BlockVertex> {
+        &mut self.mesh
     }
 }

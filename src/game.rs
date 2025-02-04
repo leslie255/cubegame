@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::{thread, time::{Duration, Instant}};
 
 use cgmath::*;
 use glium::{
@@ -153,7 +153,16 @@ impl<'res> InfoText<'res> {
     ) -> Self {
         Self {
             lines: vec![
-                Line::with_string(font, shader, display, "CUBE GAME v0.0.0".into()),
+                Line::with_string(
+                    font,
+                    shader,
+                    display,
+                    if cfg!(debug_assertions) {
+                        "CUBE GAME v0.0.0 (Debug Build)".into()
+                    } else {
+                        "CUBE GAME v0.0.0".into()
+                    },
+                ),
                 Line::with_string(font, shader, display, "FPS: ---.---".into()),
                 Line::with_string(
                     font,
@@ -382,7 +391,8 @@ impl Default for FpsCounter {
 }
 
 #[derive(Debug)]
-pub struct Game<'res> {
+pub struct Game<'scope, 'res> {
+    thread_scope: &'scope thread::Scope<'scope, 'static>,
     window: winit::window::Window,
     display: glium::Display<glium::glutin::surface::WindowSurface>,
     resources: &'res GameResources,
@@ -390,24 +400,26 @@ pub struct Game<'res> {
     fps_counter: FpsCounter,
     debug_options: DebugOptions,
     player_camera: PlayerCamera,
-    world: World<'res>,
+    world: World<'scope, 'res>,
     world_generator: WorldGenerator<'res>,
     info_text: InfoText<'res>,
     last_window_event: Instant,
     is_paused: bool,
 }
 
-impl<'res> Game<'res> {
+impl<'scope, 'res> Game<'scope, 'res> {
     pub fn new(
         resources: &'res GameResources,
         window: winit::window::Window,
         display: glium::Display<glium::glutin::surface::WindowSurface>,
+        thread_scope: &'scope thread::Scope<'scope, 'static>,
     ) -> Self {
         let mut world_generator = WorldGenerator::new(255, resources);
-        let mut world = World::new(resources);
+        let mut world = World::new(resources, thread_scope);
         world_generator.generate_world(&mut world);
-        world.do_chunk_building(&display);
+        world.do_chunk_building();
         Self {
+            thread_scope,
             window,
             input_helper: InputHelper::new(),
             fps_counter: FpsCounter::new(),
@@ -468,23 +480,22 @@ impl<'res> Game<'res> {
         for y in World::CHUNK_ID_Y_RANGE {
             for z in World::CHUNK_ID_Z_RANGE {
                 for x in World::CHUNK_ID_X_RANGE {
-                    let chunk_mesh = self.world.get_chunk_mesh(ChunkId::new(x, y, z)).unwrap();
                     let model_matrix = Matrix4::from_translation(vec3(
                         (x * 32) as f32,
                         (y * 32) as f32,
                         (z * 32) as f32,
                     ));
-                    chunk_mesh.mesh().draw(
-                        &mut frame,
-                        glium::uniform! {
-                            model: mesh::matrix4_to_array(model_matrix),
-                            view: mesh::matrix4_to_array(view_matrix),
-                            projection: mesh::matrix4_to_array(projection_matrix),
-                            texture_atlas: mesh::texture_sampler(&self.resources.block_atlas),
-                        },
-                        shader,
-                        draw_parameters,
-                    );
+                    let uniforms = glium::uniform! {
+                        model: mesh::matrix4_to_array(model_matrix),
+                        view: mesh::matrix4_to_array(view_matrix),
+                        projection: mesh::matrix4_to_array(projection_matrix),
+                        texture_atlas: mesh::texture_sampler(&self.resources.block_atlas),
+                    };
+                    let chunk_mesh = self.world.get_chunk_mesh_mut(ChunkId::new(x, y, z)).unwrap();
+                    chunk_mesh.mesh_mut().update_if_needed(&self.display);
+                    chunk_mesh
+                        .mesh()
+                        .draw(&mut frame, uniforms, shader, draw_parameters);
                 }
             }
         }
@@ -600,7 +611,7 @@ impl<'res> Game<'res> {
     }
 }
 
-impl winit::application::ApplicationHandler for Game<'_> {
+impl winit::application::ApplicationHandler for Game<'_, '_> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         _ = event_loop;
         if !self.is_paused {

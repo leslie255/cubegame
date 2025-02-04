@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::thread;
+
 use glium::{backend::glutin, winit};
 
 pub mod block;
@@ -28,8 +30,8 @@ fn main() {
     }
 
     let resources = GameResources::load(&display);
-
-    let mut game = Game::new(&resources, window, display);
-
-    event_loop.run_app(&mut game).unwrap();
+    thread::scope(move |s| {
+        let mut game = Game::new(&resources, window, display, s);
+        event_loop.run_app(&mut game).unwrap();
+    });
 }
