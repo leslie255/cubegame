@@ -422,8 +422,8 @@ impl<'scope, 'res> Game<'scope, 'res> {
     ) -> Self {
         let mut world_generator = WorldGenerator::new(255, resources);
         let mut world = World::new(resources, thread_scope);
-        world_generator.generate_world(&mut world);
-        world.do_chunk_building();
+        world_generator.generate_world(&world);
+        world.start_chunk_building();
         Self {
             thread_scope,
             window,

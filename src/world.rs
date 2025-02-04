@@ -4,7 +4,6 @@ use std::{
     ops::Range,
     sync::{Arc, Mutex},
     thread,
-    time::Duration,
 };
 
 use cgmath::*;
@@ -28,6 +27,34 @@ pub enum ChunkBuildingTask {
     },
 }
 
+fn chunk_building_thread(
+    mut chunk_builder: ChunkBuilder,
+    chunks: Arc<Mutex<Vec<Box<ChunkData>>>>,
+    tasks: Arc<Mutex<VecDeque<ChunkBuildingTask>>>,
+) -> impl FnOnce() + '_ {
+    move || {
+        loop {
+            let task = match tasks.lock().unwrap().pop_back() {
+                Some(task) => task,
+                None => {
+                    std::hint::spin_loop();
+                    continue;
+                }
+            };
+            match task {
+                ChunkBuildingTask::Rebuild {
+                    chunk_id,
+                    target_mesh,
+                } => {
+                    let chunk_index = World::index_for_chunk_id(chunk_id);
+                    let chunk = chunks.lock().unwrap()[chunk_index].clone();
+                    chunk_builder.build(chunk.as_ref(), target_mesh.clone());
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct World<'scope, 'res>
 where
@@ -39,7 +66,6 @@ where
     chunk_building_tasks: Arc<Mutex<VecDeque<ChunkBuildingTask>>>,
     chunk_building_threads: Vec<thread::ScopedJoinHandle<'scope, ()>>,
     chunk_builder: ChunkBuilder<'res>,
-    needs_chunk_building: bool,
 }
 
 const WORLD_ASSERTIONS: () = {
@@ -75,7 +101,6 @@ impl<'scope, 'res> World<'scope, 'res> {
             thread_scope,
             chunks: Arc::new(Mutex::new(vec![ChunkData::new(); Self::N_CHUNKS])),
             chunk_meshes: vec_with(Self::N_CHUNKS, ChunkMesh::new),
-            needs_chunk_building: true,
             chunk_building_tasks: Default::default(),
             chunk_building_threads: Vec::new(),
             chunk_builder: ChunkBuilder::new(resources),
@@ -88,32 +113,12 @@ impl<'scope, 'res> World<'scope, 'res> {
     }
 
     fn init_chunk_building_thread(&mut self) -> thread::ScopedJoinHandle<'scope, ()> {
-        let chunks = Arc::clone(&self.chunks);
-        let chunk_builder = self.chunk_builder.clone();
-        let tasks = Arc::clone(&self.chunk_building_tasks);
-        self.thread_scope.spawn(move || {
-            let chunks = chunks;
-            let mut chunk_builder = chunk_builder;
-            loop {
-                let task = match tasks.lock().unwrap().pop_back() {
-                    Some(task) => task,
-                    None => {
-                        thread::park_timeout(Duration::from_secs_f64(0.01));
-                        continue;
-                    }
-                };
-                match task {
-                    ChunkBuildingTask::Rebuild {
-                        chunk_id,
-                        target_mesh,
-                    } => {
-                        let chunk_index = Self::index_for_chunk_id(chunk_id);
-                        let chunk = chunks.lock().unwrap()[chunk_index].clone();
-                        chunk_builder.build(chunk.as_ref(), target_mesh.clone());
-                    }
-                }
-            }
-        })
+        let chunk_building_thread = chunk_building_thread(
+            self.chunk_builder.clone(),
+            Arc::clone(&self.chunks),
+            Arc::clone(&self.chunk_building_tasks),
+        );
+        self.thread_scope.spawn(chunk_building_thread)
     }
 
     fn index_for_chunk_id(chunk_id: ChunkId) -> usize {
@@ -135,6 +140,9 @@ impl<'scope, 'res> World<'scope, 'res> {
         chunk_id: ChunkId,
         f: impl FnOnce(&mut ChunkData) -> T,
     ) -> Option<T> {
+        if !self.chunk_is_loaded(chunk_id) {
+            return None;
+        }
         let index = Self::index_for_chunk_id(chunk_id);
         let mut chunks = self.chunks.lock().unwrap();
         let chunk = chunks.get_mut(index)?;
@@ -150,29 +158,23 @@ impl<'scope, 'res> World<'scope, 'res> {
             .get_mut(Self::index_for_chunk_id(chunk_id))
     }
 
-    fn build_chunk(&mut self, chunk_id: ChunkId) {
-        let index = Self::index_for_chunk_id(chunk_id);
-        let target_mesh = self.chunk_meshes.get_mut(index).unwrap().borrow();
+    pub fn start_chunk_building(&mut self) {
+        println!("[DEBUG] adding chunk building tasks...");
         let mut chunk_building_tasks = self.chunk_building_tasks.lock().unwrap();
-        chunk_building_tasks.push_front(ChunkBuildingTask::Rebuild {
-            chunk_id,
-            target_mesh,
-        });
-    }
-
-    pub fn do_chunk_building(&mut self) {
-        if !self.needs_chunk_building {
-            return;
-        }
-        println!("[DEBUG] Adding chunk building tasks...");
         for y in Self::CHUNK_ID_Y_RANGE {
             for z in Self::CHUNK_ID_Z_RANGE {
                 for x in Self::CHUNK_ID_X_RANGE {
-                    self.build_chunk(ChunkId::new(x, y, z));
+                    let chunk_id = ChunkId::new(x, y, z);
+                    let index = Self::index_for_chunk_id(chunk_id);
+                    let target_mesh = self.chunk_meshes.get_mut(index).unwrap().borrow();
+                    chunk_building_tasks.push_front(ChunkBuildingTask::Rebuild {
+                        chunk_id,
+                        target_mesh,
+                    });
                 }
             }
         }
-        self.needs_chunk_building = false;
+        println!("[DEBUG] finished adding chunk building tasks");
     }
 
     pub fn world_to_local_coord(&self, world_coord: BlockCoord) -> (ChunkId, LocalCoord) {
@@ -196,8 +198,8 @@ impl<'scope, 'res> World<'scope, 'res> {
         self.with_chunk(chunk_id, |chunk| f(chunk.get_block_mut(local_coord)))
     }
 
-    /// Returns the original block, or `None` if block is in an unloaded chunk.
-    pub fn try_set_block(&self, world_coord: BlockCoord, mut block: BlockId) -> Option<BlockId> {
+    /// Returns the original block, or `None` if coordinate is in an unloaded chunk.
+    pub fn set_block(&self, world_coord: BlockCoord, mut block: BlockId) -> Option<BlockId> {
         self.with_block(world_coord, |target_block| {
             mem::swap(target_block, &mut block);
             block
