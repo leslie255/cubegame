@@ -5,7 +5,7 @@ use cgmath::*;
 use crate::{
     block::{BlockFace, BlockId, BlockRegistry, BlockTextureId, BlockTransparency},
     game::GameResources,
-    mesh::{MeshData, Quad2, SharedMesh},
+    mesh::{MeshData, MeshRef, Quad2, SharedMesh},
 };
 
 pub type LocalCoord = Point3<u8>;
@@ -142,8 +142,8 @@ impl<'res> ChunkBuilder<'res> {
         }
     }
 
-    pub fn build(&mut self, chunk: &ChunkData, chunk_mesh: &ChunkMesh) {
-        let mut mesh_data = chunk_mesh.mesh().lock_mesh_data();
+    pub fn build(&mut self, chunk: &ChunkData, chunk_mesh: ChunkMeshRef) {
+        let mut mesh_data = chunk_mesh.mesh.lock_mesh_data();
         mesh_data.vertices_mut().clear();
         mesh_data.indices_mut().clear();
         for y in 0..32 {
@@ -229,7 +229,7 @@ impl<'res> ChunkBuilder<'res> {
 
 #[derive(Debug, Default)]
 pub struct ChunkMesh {
-    mesh: SharedMesh<BlockVertex>,
+    pub mesh: SharedMesh<BlockVertex>,
 }
 
 impl ChunkMesh {
@@ -237,11 +237,20 @@ impl ChunkMesh {
         Self::default()
     }
 
-    pub fn mesh(&self) -> &SharedMesh<BlockVertex> {
-        &self.mesh
+    pub fn borrow(&self) -> ChunkMeshRef {
+        ChunkMeshRef::new(self)
     }
+}
 
-    pub fn mesh_mut(&mut self) -> &mut SharedMesh<BlockVertex> {
-        &mut self.mesh
+#[derive(Debug, Clone)]
+pub struct ChunkMeshRef {
+    pub mesh: MeshRef<BlockVertex>,
+}
+
+impl ChunkMeshRef {
+    fn new(mesh: &ChunkMesh) -> Self {
+        Self {
+            mesh: mesh.mesh.borrow(),
+        }
     }
 }

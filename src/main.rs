@@ -30,8 +30,9 @@ fn main() {
     }
 
     let resources = GameResources::load(&display);
-    thread::scope(move |s| {
-        let mut game = Game::new(&resources, window, display, s);
+
+    thread::scope(|scope| {
+        let mut game = Game::new(&resources, window, display, scope);
         event_loop.run_app(&mut game).unwrap();
     });
 }

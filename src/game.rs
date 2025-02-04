@@ -1,4 +1,7 @@
-use std::{thread, time::{Duration, Instant}};
+use std::{
+    thread,
+    time::{Duration, Instant},
+};
 
 use cgmath::*;
 use glium::{
@@ -391,8 +394,11 @@ impl Default for FpsCounter {
 }
 
 #[derive(Debug)]
-pub struct Game<'scope, 'res> {
-    thread_scope: &'scope thread::Scope<'scope, 'static>,
+pub struct Game<'scope, 'res>
+where
+    'res: 'scope,
+{
+    thread_scope: &'scope thread::Scope<'scope, 'res>,
     window: winit::window::Window,
     display: glium::Display<glium::glutin::surface::WindowSurface>,
     resources: &'res GameResources,
@@ -412,7 +418,7 @@ impl<'scope, 'res> Game<'scope, 'res> {
         resources: &'res GameResources,
         window: winit::window::Window,
         display: glium::Display<glium::glutin::surface::WindowSurface>,
-        thread_scope: &'scope thread::Scope<'scope, 'static>,
+        thread_scope: &'scope thread::Scope<'scope, 'res>,
     ) -> Self {
         let mut world_generator = WorldGenerator::new(255, resources);
         let mut world = World::new(resources, thread_scope);
@@ -491,10 +497,13 @@ impl<'scope, 'res> Game<'scope, 'res> {
                         projection: mesh::matrix4_to_array(projection_matrix),
                         texture_atlas: mesh::texture_sampler(&self.resources.block_atlas),
                     };
-                    let chunk_mesh = self.world.get_chunk_mesh_mut(ChunkId::new(x, y, z)).unwrap();
-                    chunk_mesh.mesh_mut().update_if_needed(&self.display);
+                    let chunk_mesh = self
+                        .world
+                        .get_chunk_mesh_mut(ChunkId::new(x, y, z))
+                        .unwrap();
+                    chunk_mesh.mesh.update_if_needed(&self.display);
                     chunk_mesh
-                        .mesh()
+                        .mesh
                         .draw(&mut frame, uniforms, shader, draw_parameters);
                 }
             }
