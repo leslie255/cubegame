@@ -18,6 +18,10 @@ pub mod worldgen;
 use game::{Game, GameResources};
 
 fn main() {
+    unsafe {
+        utils::this_thread_is_main_thread_pinky_promise();
+    }
+
     let event_loop = winit::event_loop::EventLoop::builder().build().unwrap();
 
     let (window, display) = glutin::SimpleWindowBuilder::new()
@@ -25,7 +29,8 @@ fn main() {
         .with_inner_size(800, 480)
         .build(&event_loop);
     let scale_factor = window.scale_factor();
-    if dbg!(scale_factor) != 1. {
+    println!("[INFO] UI scale factor: {scale_factor}");
+    if scale_factor != 1. {
         let _ = window.request_inner_size(winit::dpi::LogicalSize::new(800, 480));
     }
 

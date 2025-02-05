@@ -1,13 +1,12 @@
 //! Utilities for drawing.
 
-use std::{
-    ops::Add,
-    sync::{Arc, Mutex, MutexGuard},
-};
+use std::ops::Add;
 
 use glium::Surface as _;
 
 use cgmath::*;
+
+use crate::utils::MainThreadOnly;
 
 pub fn matrix4_to_array<T>(matrix: Matrix4<T>) -> [[T; 4]; 4] {
     matrix.into()
@@ -221,57 +220,101 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> Default for Mesh<V,
     }
 }
 
-/// A mesh whose data can be offloaded to other threads as `Arc<MeshData>`.
-/// `MeshRef` can exist past the scope of its `SharedMesh`, at which point any mutations to it
-/// would never get to the GPU.
-#[derive(Debug)]
+/// A mesh that is `Send` and `Sync`.
+/// However only the main thread can make draw calls.
 pub struct SharedMesh<V: Copy + glium::Vertex, I: Copy + glium::index::Index = u32> {
-    vertex_buffer: Option<Box<glium::VertexBuffer<V>>>,
-    index_buffer: Option<Box<glium::IndexBuffer<I>>>,
-    ref_: MeshRef<V, I>,
+    vertex_buffer: MainThreadOnly<Option<Box<glium::VertexBuffer<V>>>>,
+    index_buffer: MainThreadOnly<Option<Box<glium::IndexBuffer<I>>>>,
+    vertices: Vec<V>,
+    indices: Vec<I>,
+    /// Whether the GL vertex and index buffer reflects the up-to-date content of the vertices/indices.
+    /// `true` for not updated.
+    needs_update: bool,
+}
+
+impl<V: Copy + glium::Vertex + std::fmt::Debug, I: Copy + glium::index::Index + std::fmt::Debug>
+    std::fmt::Debug for SharedMesh<V, I>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SharedMesh")
+            .field("vertices", &self.vertices)
+            .field("indices", &self.indices)
+            .field("needs_update", &self.needs_update)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> SharedMesh<V, I> {
     pub fn new() -> Self {
         Self {
-            vertex_buffer: None,
-            index_buffer: None,
-            ref_: MeshRef::new(Arc::new(Mutex::new(MeshData::new()))),
+            vertex_buffer: MainThreadOnly::new(None),
+            index_buffer: MainThreadOnly::new(None),
+            vertices: Vec::new(),
+            indices: Vec::new(),
+            needs_update: false,
         }
-    }
-
-    pub fn borrow(&self) -> MeshRef<V, I> {
-        self.ref_.clone()
     }
 
     #[track_caller]
-    pub fn lock_mesh_data(&self) -> MutexGuard<MeshData<V, I>> {
-        self.ref_.lock_mesh_data()
+    pub fn vertices(&self) -> &[V] {
+        &self.vertices
     }
 
+    #[track_caller]
+    pub fn indices(&self) -> &[I] {
+        &self.indices
+    }
+
+    pub fn vertices_indices_mut(&mut self) -> (&mut Vec<V>, &mut Vec<I>) {
+        self.needs_update = true;
+        (&mut self.vertices, &mut self.indices)
+    }
+
+    pub fn vertices_mut(&mut self) -> &mut Vec<V> {
+        self.vertices_indices_mut().0
+    }
+
+    pub fn indices_mut(&mut self) -> &mut Vec<I> {
+        self.vertices_indices_mut().1
+    }
+
+    pub fn append(&mut self, vertices: &[V], indices: &[I])
+    where
+        I: Add<u32, Output = I>,
+    {
+        let old_length = self.vertices().len() as u32;
+        let (self_vertices, self_indices) = self.vertices_indices_mut();
+        self_vertices.extend_from_slice(vertices);
+        self_indices.extend(indices.iter().map(|&i| i + old_length));
+    }
+
+    /// Must be called on main thread only.
     pub fn update_if_needed(&mut self, display: &impl glium::backend::Facade) {
-        let mut mesh_data = self.ref_.lock_mesh_data();
-        if !mesh_data.needs_update {
+        if !self.needs_update {
             return;
         }
-        mesh_data.needs_update = false;
-        if mesh_data.vertices.is_empty() || mesh_data.indices.is_empty() {
-            self.vertex_buffer = None;
-            self.index_buffer = None;
+        self.needs_update = false;
+        let vertex_buffer = self.vertex_buffer.get_mut();
+        let index_buffer = self.index_buffer.get_mut();
+        if self.vertices.is_empty() || self.indices.is_empty() {
+            *vertex_buffer = None;
+            *index_buffer = None;
+            return;
         }
-        self.vertex_buffer = Some(Box::new(
-            glium::VertexBuffer::dynamic(display, &mesh_data.vertices).unwrap(),
+        *vertex_buffer = Some(Box::new(
+            glium::VertexBuffer::dynamic(display, &self.vertices).unwrap(),
         ));
-        self.index_buffer = Some(Box::new(
+        *index_buffer = Some(Box::new(
             glium::IndexBuffer::dynamic(
                 display,
                 glium::index::PrimitiveType::TrianglesList,
-                &mesh_data.indices,
+                &self.indices,
             )
             .unwrap(),
         ));
     }
 
+    /// Must be called on main thread only.
     pub fn draw(
         &self,
         frame: &mut glium::Frame,
@@ -279,16 +322,16 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> SharedMesh<V, I> {
         shader: &glium::Program,
         draw_parameters: &glium::DrawParameters,
     ) {
-        let Some(vertex_buffer) = self.vertex_buffer.as_deref() else {
+        let Some(vertex_buffer) = self.vertex_buffer.get() else {
             return;
         };
-        let Some(index_buffer) = self.index_buffer.as_deref() else {
+        let Some(index_buffer) = self.index_buffer.get() else {
             return;
         };
         frame
             .draw(
-                vertex_buffer,
-                index_buffer,
+                vertex_buffer.as_ref(),
+                index_buffer.as_ref(),
                 shader,
                 &uniforms,
                 draw_parameters,
@@ -300,77 +343,5 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> SharedMesh<V, I> {
 impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> Default for SharedMesh<V, I> {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[derive(Debug)]
-pub struct MeshData<V: Copy + glium::Vertex, I: Copy + glium::index::Index = u32> {
-    vertices: Vec<V>,
-    indices: Vec<I>,
-    /// Whether the GL vertex and index buffer reflects the up-to-date content of the vertices/indices.
-    /// `true` for not updated.
-    needs_update: bool,
-}
-
-impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> MeshData<V, I> {
-    pub fn new() -> Self {
-        Self {
-            vertices: Vec::new(),
-            indices: Vec::new(),
-            needs_update: false,
-        }
-    }
-
-    pub fn vertices(&self) -> &[V] {
-        &self.vertices
-    }
-
-    pub fn indices(&self) -> &[I] {
-        &self.indices
-    }
-
-    pub fn vertices_mut(&mut self) -> &mut Vec<V> {
-        self.vertices_indices_mut().0
-    }
-
-    pub fn indices_mut(&mut self) -> &mut Vec<I> {
-        self.vertices_indices_mut().1
-    }
-
-    pub fn vertices_indices_mut(&mut self) -> (&mut Vec<V>, &mut Vec<I>) {
-        self.needs_update = true;
-        (&mut self.vertices, &mut self.indices)
-    }
-
-    pub fn append(&mut self, vertices: &[V], indices: &[I])
-    where
-        I: Add<u32, Output = I>,
-    {
-        let old_length = self.vertices().len() as u32;
-        self.vertices_mut().extend_from_slice(vertices);
-        self.indices_mut()
-            .extend(indices.iter().map(|&i| i + old_length));
-    }
-}
-
-impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> Default for MeshData<V, I> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct MeshRef<V: Copy + glium::Vertex, I: Copy + glium::index::Index = u32> {
-    data: Arc<Mutex<MeshData<V, I>>>,
-}
-
-impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> MeshRef<V, I> {
-    fn new(data: Arc<Mutex<MeshData<V, I>>>) -> Self {
-        Self { data }
-    }
-
-    #[track_caller]
-    pub fn lock_mesh_data(&self) -> MutexGuard<MeshData<V, I>> {
-        self.data.lock().unwrap()
     }
 }

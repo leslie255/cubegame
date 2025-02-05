@@ -4,13 +4,14 @@ use std::{
     ops::Range,
     sync::{Arc, Mutex},
     thread,
+    time::Duration,
 };
 
 use cgmath::*;
 
 use crate::{
     block::BlockId,
-    chunk::{ChunkBuilder, ChunkData, ChunkMesh, ChunkMeshRef, LocalCoord},
+    chunk::{ChunkBuilder, ChunkData, ChunkMesh, LocalCoord},
     game::GameResources,
     utils::vec_with,
 };
@@ -21,15 +22,13 @@ pub type BlockCoord = Point3<i32>;
 
 #[derive(Debug, Clone)]
 pub enum ChunkBuildingTask {
-    Rebuild {
-        chunk_id: ChunkId,
-        target_mesh: ChunkMeshRef,
-    },
+    Rebuild { chunk_id: ChunkId },
 }
 
-fn chunk_building_thread(
+fn chunk_building_worker(
     mut chunk_builder: ChunkBuilder,
     chunks: Arc<Mutex<Vec<Box<ChunkData>>>>,
+    chunk_meshes: Arc<Mutex<Vec<ChunkMesh>>>,
     tasks: Arc<Mutex<VecDeque<ChunkBuildingTask>>>,
 ) -> impl FnOnce() + '_ {
     move || {
@@ -38,17 +37,19 @@ fn chunk_building_thread(
                 Some(task) => task,
                 None => {
                     std::hint::spin_loop();
+                    thread::park_timeout(Duration::from_micros(500));
                     continue;
                 }
             };
             match task {
-                ChunkBuildingTask::Rebuild {
-                    chunk_id,
-                    target_mesh,
-                } => {
+                ChunkBuildingTask::Rebuild { chunk_id } => {
                     let chunk_index = World::index_for_chunk_id(chunk_id);
                     let chunk = chunks.lock().unwrap()[chunk_index].clone();
-                    chunk_builder.build(chunk.as_ref(), target_mesh.clone());
+                    let chunk_mesh = chunk_meshes.lock().unwrap()[chunk_index].clone();
+                    chunk_builder.build(chunk.as_ref(), &chunk_mesh);
+                    // Dirty thing to make sure the chunk building threads don't starve the main
+                    // thread.
+                    thread::park_timeout(Duration::from_micros(100));
                 }
             }
         }
@@ -62,7 +63,7 @@ where
 {
     thread_scope: &'scope thread::Scope<'scope, 'res>,
     chunks: Arc<Mutex<Vec<Box<ChunkData>>>>,
-    chunk_meshes: Vec<ChunkMesh>,
+    chunk_meshes: Arc<Mutex<Vec<ChunkMesh>>>,
     chunk_building_tasks: Arc<Mutex<VecDeque<ChunkBuildingTask>>>,
     chunk_building_threads: Vec<thread::ScopedJoinHandle<'scope, ()>>,
     chunk_builder: ChunkBuilder<'res>,
@@ -75,9 +76,9 @@ const WORLD_ASSERTIONS: () = {
 };
 
 impl<'scope, 'res> World<'scope, 'res> {
-    pub const SIZE_X: i32 = 32;
+    pub const SIZE_X: i32 = 16;
     pub const SIZE_Y: i32 = 8;
-    pub const SIZE_Z: i32 = 32;
+    pub const SIZE_Z: i32 = 16;
 
     pub const N_CHUNKS: usize =
         (Self::SIZE_X as usize) * (Self::SIZE_Y as usize) * (Self::SIZE_Z as usize);
@@ -100,12 +101,14 @@ impl<'scope, 'res> World<'scope, 'res> {
         let mut self_ = Self {
             thread_scope,
             chunks: Arc::new(Mutex::new(vec![ChunkData::new(); Self::N_CHUNKS])),
-            chunk_meshes: vec_with(Self::N_CHUNKS, ChunkMesh::new),
+            chunk_meshes: Arc::new(Mutex::new(vec_with(Self::N_CHUNKS, ChunkMesh::new))),
             chunk_building_tasks: Default::default(),
             chunk_building_threads: Vec::new(),
             chunk_builder: ChunkBuilder::new(resources),
         };
-        for _ in 0..4 {
+        let n_threads = num_cpus::get() * 2;
+        println!("[INFO] using {n_threads} chunk building threads");
+        for _ in 0..n_threads {
             let thread = self_.init_chunk_building_thread();
             self_.chunk_building_threads.push(thread);
         }
@@ -113,9 +116,10 @@ impl<'scope, 'res> World<'scope, 'res> {
     }
 
     fn init_chunk_building_thread(&mut self) -> thread::ScopedJoinHandle<'scope, ()> {
-        let chunk_building_thread = chunk_building_thread(
+        let chunk_building_thread = chunk_building_worker(
             self.chunk_builder.clone(),
             Arc::clone(&self.chunks),
+            Arc::clone(&self.chunk_meshes),
             Arc::clone(&self.chunk_building_tasks),
         );
         self.thread_scope.spawn(chunk_building_thread)
@@ -149,28 +153,22 @@ impl<'scope, 'res> World<'scope, 'res> {
         Some(f(chunk))
     }
 
-    pub fn get_chunk_mesh(&self, chunk_id: ChunkId) -> Option<&ChunkMesh> {
-        self.chunk_meshes.get(Self::index_for_chunk_id(chunk_id))
-    }
-
-    pub fn get_chunk_mesh_mut(&mut self, chunk_id: ChunkId) -> Option<&mut ChunkMesh> {
+    pub fn get_chunk_mesh(&self, chunk_id: ChunkId) -> Option<ChunkMesh> {
         self.chunk_meshes
-            .get_mut(Self::index_for_chunk_id(chunk_id))
+            .lock()
+            .unwrap()
+            .get(Self::index_for_chunk_id(chunk_id))
+            .cloned()
     }
 
     pub fn start_chunk_building(&mut self) {
         println!("[DEBUG] adding chunk building tasks...");
         let mut chunk_building_tasks = self.chunk_building_tasks.lock().unwrap();
-        for y in Self::CHUNK_ID_Y_RANGE {
-            for z in Self::CHUNK_ID_Z_RANGE {
-                for x in Self::CHUNK_ID_X_RANGE {
+        for z in Self::CHUNK_ID_Z_RANGE {
+            for x in Self::CHUNK_ID_X_RANGE {
+                for y in Self::CHUNK_ID_Y_RANGE {
                     let chunk_id = ChunkId::new(x, y, z);
-                    let index = Self::index_for_chunk_id(chunk_id);
-                    let target_mesh = self.chunk_meshes.get_mut(index).unwrap().borrow();
-                    chunk_building_tasks.push_front(ChunkBuildingTask::Rebuild {
-                        chunk_id,
-                        target_mesh,
-                    });
+                    chunk_building_tasks.push_front(ChunkBuildingTask::Rebuild { chunk_id });
                 }
             }
         }

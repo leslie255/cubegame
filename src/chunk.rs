@@ -1,11 +1,14 @@
-use std::alloc::Layout;
+use std::{
+    alloc::Layout,
+    sync::{Arc, Mutex},
+};
 
 use cgmath::*;
 
 use crate::{
     block::{BlockFace, BlockId, BlockRegistry, BlockTextureId, BlockTransparency},
     game::GameResources,
-    mesh::{MeshData, MeshRef, Quad2, SharedMesh},
+    mesh::{Quad2, SharedMesh},
 };
 
 pub type LocalCoord = Point3<u8>;
@@ -142,16 +145,16 @@ impl<'res> ChunkBuilder<'res> {
         }
     }
 
-    pub fn build(&mut self, chunk: &ChunkData, chunk_mesh: ChunkMeshRef) {
-        let mut mesh_data = chunk_mesh.mesh.lock_mesh_data();
-        mesh_data.vertices_mut().clear();
-        mesh_data.indices_mut().clear();
+    pub fn build(&mut self, chunk: &ChunkData, chunk_mesh: &ChunkMesh) {
+        let mut mesh = chunk_mesh.mesh.lock().unwrap();
+        mesh.vertices_mut().clear();
+        mesh.indices_mut().clear();
         for y in 0..32 {
             for x in 0..32 {
                 for z in 0..32 {
                     let local_coord = LocalCoord::new(y, z, x);
                     let block_id = unsafe { chunk.get_block_unchecked(local_coord) };
-                    self.build_block(chunk, local_coord, block_id, &mut mesh_data);
+                    self.build_block(chunk, local_coord, block_id, &mut mesh);
                 }
             }
         }
@@ -175,7 +178,7 @@ impl<'res> ChunkBuilder<'res> {
         chunk: &ChunkData,
         local_position: LocalCoord,
         block_id: BlockId,
-        mesh_data: &mut MeshData<BlockVertex>,
+        mesh: &mut SharedMesh<BlockVertex>,
     ) {
         let block_info = self.block_registry.lookup(block_id).unwrap();
         if block_info.transparency == BlockTransparency::Air {
@@ -208,7 +211,7 @@ impl<'res> ChunkBuilder<'res> {
                 ],
             });
             let indices = Self::FACE_INDICIES;
-            mesh_data.append(vertices.as_slice(), indices.as_slice());
+            mesh.append(vertices.as_slice(), indices.as_slice());
         }
     }
 
@@ -227,30 +230,13 @@ impl<'res> ChunkBuilder<'res> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ChunkMesh {
-    pub mesh: SharedMesh<BlockVertex>,
+    pub mesh: Arc<Mutex<SharedMesh<BlockVertex>>>,
 }
 
 impl ChunkMesh {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    pub fn borrow(&self) -> ChunkMeshRef {
-        ChunkMeshRef::new(self)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ChunkMeshRef {
-    pub mesh: MeshRef<BlockVertex>,
-}
-
-impl ChunkMeshRef {
-    fn new(mesh: &ChunkMesh) -> Self {
-        Self {
-            mesh: mesh.mesh.borrow(),
-        }
     }
 }

@@ -497,14 +497,10 @@ impl<'scope, 'res> Game<'scope, 'res> {
                         projection: mesh::matrix4_to_array(projection_matrix),
                         texture_atlas: mesh::texture_sampler(&self.resources.block_atlas),
                     };
-                    let chunk_mesh = self
-                        .world
-                        .get_chunk_mesh_mut(ChunkId::new(x, y, z))
-                        .unwrap();
-                    chunk_mesh.mesh.update_if_needed(&self.display);
-                    chunk_mesh
-                        .mesh
-                        .draw(&mut frame, uniforms, shader, draw_parameters);
+                    let chunk_mesh = self.world.get_chunk_mesh(ChunkId::new(x, y, z)).unwrap();
+                    let mut chunk_mesh = chunk_mesh.mesh.lock().unwrap();
+                    chunk_mesh.update_if_needed(&self.display);
+                    chunk_mesh.draw(&mut frame, uniforms, shader, draw_parameters);
                 }
             }
         }
