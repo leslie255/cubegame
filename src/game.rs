@@ -425,7 +425,7 @@ impl<'scope, 'res> Game<'scope, 'res> {
         let world = World::new(resources, thread_scope);
         world_generator.generate_world(&world);
         std::thread::sleep(Duration::from_secs_f64(1.));
-        world.rebuild_all_chunks();
+        world.chunks().rebuild_all_chunks();
         Self {
             thread_scope,
             window,
@@ -513,20 +513,22 @@ impl<'scope, 'res> Game<'scope, 'res> {
                         (z * 32) as f32,
                     ));
                     let uniforms = glium::uniform! {
-                        model: mesh::matrix4_to_array(model_matrix),
-                        view: mesh::matrix4_to_array(view_matrix),
+                        model_view: mesh::matrix4_to_array(view_matrix * model_matrix),
                         projection: mesh::matrix4_to_array(projection_matrix),
                         texture_atlas: mesh::texture_sampler(&self.resources.block_atlas),
                     };
-                    self.world
-                        .with_chunk(ChunkId::new(x, y, z), |chunk| {
-                            let client_chunk = chunk.client.as_ref().unwrap();
-                            if let Ok(mut client_chunk) = client_chunk.try_lock() {
-                                client_chunk.mesh.update_if_needed(&self.display);
-                                client_chunk.mesh.draw(frame, uniforms, shader, draw_parameters);
-                            }
-                        })
+                    let chunk = self
+                        .world
+                        .chunks()
+                        .get_chunk(ChunkId::new(x, y, z))
                         .unwrap();
+                    if let Ok(mut chunk) = chunk.try_lock() {
+                        chunk.client.mesh.update_if_needed(&self.display);
+                        chunk
+                            .client
+                            .mesh
+                            .draw(frame, uniforms, shader, draw_parameters);
+                    }
                 }
             }
         }

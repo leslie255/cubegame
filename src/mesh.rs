@@ -105,6 +105,8 @@ impl From<Color> for Vector4<f32> {
     }
 }
 
+/// A single threaded mesh.
+/// For `Send` and `Sync` mesh, use `SharedMesh`.
 #[derive(Debug)]
 pub struct Mesh<V: Copy + glium::Vertex, I: Copy + glium::index::Index = u32> {
     vertex_buffer: Option<Box<glium::VertexBuffer<V>>>,

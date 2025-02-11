@@ -1,7 +1,4 @@
-use std::{
-    alloc::Layout,
-    sync::{Arc, Mutex},
-};
+use std::alloc::Layout;
 
 use cgmath::*;
 
@@ -13,10 +10,10 @@ use crate::{
 
 pub type LocalCoord = Point3<u8>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Chunk {
     pub data: Box<ChunkData>,
-    pub client: Option<Arc<Mutex<ClientChunk>>>,
+    pub client: ClientChunk,
 }
 
 #[derive(Debug, Clone)]
@@ -151,49 +148,29 @@ impl<'res> ChunkBuilder<'res> {
         }
     }
 
-    pub fn build(&mut self, chunk: &ChunkData, chunk_mesh: &mut ClientChunk) {
-        let mesh = &mut chunk_mesh.mesh;
-        mesh.vertices_mut().clear();
-        mesh.indices_mut().clear();
+    pub fn build(&mut self, chunk: &mut Chunk) {
+        chunk.client.mesh.vertices_mut().clear();
+        chunk.client.mesh.indices_mut().clear();
         for y in 0..32 {
             for x in 0..32 {
                 for z in 0..32 {
                     let local_coord = LocalCoord::new(y, z, x);
-                    let block_id = unsafe { chunk.get_block_unchecked(local_coord) };
-                    self.build_block(chunk, local_coord, block_id, mesh);
+                    let block_id = unsafe { chunk.data.get_block_unchecked(local_coord) };
+                    self.build_block(chunk, local_coord, block_id);
                 }
             }
         }
     }
 
-    fn neighbor_local_coord(local_coord: LocalCoord, direction: BlockFace) -> Option<LocalCoord> {
-        let mut result = local_coord;
-        match direction {
-            BlockFace::South => result.z = (result.z + 1).min(31),
-            BlockFace::East => result.x = (result.x + 1).min(31),
-            BlockFace::Top => result.y = (result.y + 1).min(31),
-            BlockFace::North => result.z = result.z.saturating_sub(1),
-            BlockFace::West => result.x = result.x.saturating_sub(1),
-            BlockFace::Bottom => result.y = result.y.saturating_sub(1),
-        }
-        (result != local_coord).then_some(result)
-    }
-
-    fn build_block(
-        &mut self,
-        chunk: &ChunkData,
-        local_position: LocalCoord,
-        block_id: BlockId,
-        mesh: &mut SharedMesh<BlockVertex>,
-    ) {
+    fn build_block(&mut self, chunk: &mut Chunk, local_position: LocalCoord, block_id: BlockId) {
         let block_info = self.block_registry.lookup(block_id).unwrap();
         if block_info.transparency == BlockTransparency::Air {
             return;
         }
         for block_face in BlockFace::iter() {
-            if let Some(neighbor_position) = Self::neighbor_local_coord(local_position, block_face)
+            if let Some(neighbor_block_id) =
+                Self::neighbor_block(local_position, block_face, &chunk.data)
             {
-                let neighbor_block_id = unsafe { chunk.get_block_unchecked(neighbor_position) };
                 let neighbor_transparency = self
                     .block_registry
                     .lookup(neighbor_block_id)
@@ -217,8 +194,32 @@ impl<'res> ChunkBuilder<'res> {
                 ],
             });
             let indices = Self::FACE_INDICIES;
-            mesh.append(vertices.as_slice(), indices.as_slice());
+            chunk
+                .client
+                .mesh
+                .append(vertices.as_slice(), indices.as_slice());
         }
+    }
+
+    fn neighbor_local_coord(local_coord: LocalCoord, direction: BlockFace) -> Option<LocalCoord> {
+        let mut result = local_coord;
+        match direction {
+            BlockFace::South => result.z = (result.z + 1).min(31),
+            BlockFace::East => result.x = (result.x + 1).min(31),
+            BlockFace::Top => result.y = (result.y + 1).min(31),
+            BlockFace::North => result.z = result.z.saturating_sub(1),
+            BlockFace::West => result.x = result.x.saturating_sub(1),
+            BlockFace::Bottom => result.y = result.y.saturating_sub(1),
+        }
+        (result != local_coord).then_some(result)
+    }
+
+    fn neighbor_block(
+        local_coord: LocalCoord,
+        direction: BlockFace,
+        chunk: &ChunkData,
+    ) -> Option<BlockId> {
+        chunk.try_get_block(Self::neighbor_local_coord(local_coord, direction)?)
     }
 
     /// The normalized texture coord for a block texture ID.
