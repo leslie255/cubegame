@@ -367,6 +367,7 @@ impl FpsCounter {
         }
     }
 
+    /// Should be called after every frame is drawn.
     /// Returns `Some(fps)` if FPS is updated.
     pub fn frame(&mut self) -> Option<f64> {
         self.counter += 1;
@@ -421,9 +422,10 @@ impl<'scope, 'res> Game<'scope, 'res> {
         thread_scope: &'scope thread::Scope<'scope, 'res>,
     ) -> Self {
         let mut world_generator = WorldGenerator::new(255, resources);
-        let mut world = World::new(resources, thread_scope);
+        let world = World::new(resources, thread_scope);
         world_generator.generate_world(&world);
-        world.start_chunk_building();
+        std::thread::sleep(Duration::from_secs_f64(1.));
+        world.rebuild_all_chunks();
         Self {
             thread_scope,
             window,
@@ -451,20 +453,39 @@ impl<'scope, 'res> Game<'scope, 'res> {
 
     fn draw(&mut self) {
         let mut frame = self.display.draw();
+
+        self.clear_frame(&mut frame);
+
+        self.draw_chunks(&mut frame);
+        self.draw_info_text(&mut frame);
+
+        frame.finish().unwrap();
+
+        self.update_fps();
+    }
+
+    fn update_fps(&mut self) {
+        if let Some(fps) = self.fps_counter.frame() {
+            self.info_text.set_fps(&self.display, fps);
+        }
+    }
+
+    fn clear_frame(&mut self, frame: &mut glium::Frame) {
         let clear_color = if self.debug_options.wireframe_mode {
             (0.1, 0.1, 0.1, 1.)
         } else {
             (0.8, 0.95, 1.0, 1.0)
         };
         frame.clear_color_and_depth(clear_color, 1.);
+    }
 
+    fn draw_chunks(&mut self, frame: &mut glium::Frame) {
         let view_matrix = self.player_camera.camera.view_matrix();
         let frame_size = self.window.inner_size();
         let projection_matrix = self.player_camera.camera.projection_matrix(Vector2::new(
             frame_size.width as f32,
             frame_size.height as f32,
         ));
-
         let draw_parameters = &glium::DrawParameters {
             polygon_mode: if self.debug_options.wireframe_mode {
                 glium::PolygonMode::Line
@@ -497,14 +518,21 @@ impl<'scope, 'res> Game<'scope, 'res> {
                         projection: mesh::matrix4_to_array(projection_matrix),
                         texture_atlas: mesh::texture_sampler(&self.resources.block_atlas),
                     };
-                    let chunk_mesh = self.world.get_chunk_mesh(ChunkId::new(x, y, z)).unwrap();
-                    let mut chunk_mesh = chunk_mesh.mesh.lock().unwrap();
-                    chunk_mesh.update_if_needed(&self.display);
-                    chunk_mesh.draw(&mut frame, uniforms, shader, draw_parameters);
+                    self.world
+                        .with_chunk(ChunkId::new(x, y, z), |chunk| {
+                            let client_chunk = chunk.client.as_ref().unwrap();
+                            if let Ok(mut client_chunk) = client_chunk.try_lock() {
+                                client_chunk.mesh.update_if_needed(&self.display);
+                                client_chunk.mesh.draw(frame, uniforms, shader, draw_parameters);
+                            }
+                        })
+                        .unwrap();
                 }
             }
         }
+    }
 
+    fn draw_info_text(&mut self, frame: &mut glium::Frame) {
         self.info_text
             .set_camera_xyz(&self.display, self.player_camera.camera.position);
         self.info_text.set_camera_direction(
@@ -512,15 +540,8 @@ impl<'scope, 'res> Game<'scope, 'res> {
             self.player_camera.pitch_yaw(),
             self.player_camera.camera.direction,
         );
-
         self.info_text
-            .draw(&mut frame, self.window.scale_factor() as f32);
-
-        frame.finish().unwrap();
-
-        if let Some(fps) = self.fps_counter.frame() {
-            self.info_text.set_fps(&self.display, fps);
-        }
+            .draw(frame, self.window.scale_factor() as f32);
     }
 
     fn grab_cursor(&mut self) {

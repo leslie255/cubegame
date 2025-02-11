@@ -14,6 +14,12 @@ use crate::{
 pub type LocalCoord = Point3<u8>;
 
 #[derive(Debug, Clone)]
+pub struct Chunk {
+    pub data: Box<ChunkData>,
+    pub client: Option<Arc<Mutex<ClientChunk>>>,
+}
+
+#[derive(Debug, Clone)]
 pub struct ChunkData {
     blocks: [BlockId; 32 * 32 * 32],
 }
@@ -145,8 +151,8 @@ impl<'res> ChunkBuilder<'res> {
         }
     }
 
-    pub fn build(&mut self, chunk: &ChunkData, chunk_mesh: &ChunkMesh) {
-        let mut mesh = chunk_mesh.mesh.lock().unwrap();
+    pub fn build(&mut self, chunk: &ChunkData, chunk_mesh: &mut ClientChunk) {
+        let mesh = &mut chunk_mesh.mesh;
         mesh.vertices_mut().clear();
         mesh.indices_mut().clear();
         for y in 0..32 {
@@ -154,7 +160,7 @@ impl<'res> ChunkBuilder<'res> {
                 for z in 0..32 {
                     let local_coord = LocalCoord::new(y, z, x);
                     let block_id = unsafe { chunk.get_block_unchecked(local_coord) };
-                    self.build_block(chunk, local_coord, block_id, &mut mesh);
+                    self.build_block(chunk, local_coord, block_id, mesh);
                 }
             }
         }
@@ -230,12 +236,12 @@ impl<'res> ChunkBuilder<'res> {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct ChunkMesh {
-    pub mesh: Arc<Mutex<SharedMesh<BlockVertex>>>,
+#[derive(Debug, Default)]
+pub struct ClientChunk {
+    pub mesh: SharedMesh<BlockVertex>,
 }
 
-impl ChunkMesh {
+impl ClientChunk {
     pub fn new() -> Self {
         Self::default()
     }
