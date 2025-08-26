@@ -1,8 +1,7 @@
 use std::{
-    collections::VecDeque,
     mem,
     ops::Range,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, mpmc},
     thread,
     time::Duration,
 };
@@ -31,11 +30,13 @@ pub enum ChunkBuildingTask {
 #[derive(Debug)]
 pub struct ChunkManager {
     chunks: Vec<Arc<Mutex<Chunk>>>,
-    chunk_builder_tasks: Mutex<VecDeque<ChunkBuildingTask>>,
+    tasks_tx: mpmc::Sender<ChunkBuildingTask>,
+    tasks_rx: mpmc::Receiver<ChunkBuildingTask>,
 }
 
 impl ChunkManager {
     pub fn new() -> Self {
+        let (tasks_tx, tasks_rx) = mpmc::sync_channel(128);
         Self {
             chunks: vec_with(World::N_CHUNKS, || {
                 arc_mutex(Chunk {
@@ -43,7 +44,8 @@ impl ChunkManager {
                     client: ClientChunk::new(),
                 })
             }),
-            chunk_builder_tasks: Mutex::new(VecDeque::new()),
+            tasks_tx,
+            tasks_rx,
         }
     }
 
@@ -62,20 +64,11 @@ impl ChunkManager {
         }
     }
 
-    pub fn push_task(&self, task: ChunkBuildingTask) {
-        self.chunk_builder_tasks.lock().unwrap().push_back(task)
-    }
-
-    pub fn pop_task(&self) -> Option<ChunkBuildingTask> {
-        self.chunk_builder_tasks.lock().unwrap().pop_front()
-    }
-
-    pub fn task_count(&self) -> usize {
-        self.chunk_builder_tasks.lock().unwrap().len()
+    pub fn send_task(&self, task: ChunkBuildingTask) {
+        self.tasks_tx.send(task).unwrap();
     }
 
     pub fn rebuild_all_chunks(&self) {
-        println!("[DEBUG] adding chunk building tasks...");
         for z in World::CHUNK_ID_Z_RANGE {
             for x in World::CHUNK_ID_X_RANGE {
                 for y in World::CHUNK_ID_Y_RANGE {
@@ -83,11 +76,10 @@ impl ChunkManager {
                 }
             }
         }
-        println!("[DEBUG] finished adding chunk building tasks");
     }
 
     pub fn rebuild_chunk(&self, chunk_id: ChunkId) {
-        self.push_task(ChunkBuildingTask::Rebuild { chunk_id });
+        self.send_task(ChunkBuildingTask::Rebuild { chunk_id });
     }
 }
 
@@ -102,15 +94,18 @@ fn chunk_building_worker<'res>(
     chunk_builder: &ChunkBuilder<'res>,
 ) -> impl FnOnce() + 'res {
     let mut chunk_builder = chunk_builder.clone();
+    let tasks_rx = chunk_manager.tasks_rx.clone();
     move || {
         let mut idle_cycles = 0usize;
         loop {
-            let Some(task) = chunk_manager.pop_task() else {
+            let Ok(task) = tasks_rx.recv() else {
                 idle_cycles = idle_cycles.saturating_add(1);
-                if idle_cycles >= 1000 {
+                if idle_cycles >= 6000 {
                     thread::park_timeout(Duration::from_micros(1000));
+                } else if idle_cycles >= 1000 {
+                    thread::park_timeout(Duration::from_micros(200));
                 } else {
-                    thread::park_timeout(Duration::from_micros(50));
+                    thread::park_timeout(Duration::from_micros(5000));
                 }
                 continue;
             };
@@ -120,6 +115,7 @@ fn chunk_building_worker<'res>(
                     let chunk = chunk_manager.get_chunk(chunk_id).unwrap();
                     let mut chunk = chunk.lock().unwrap();
                     chunk_builder.build(&mut chunk);
+                    // thread::park_timeout(Duration::from_micros(50));
                 }
             }
         }
@@ -152,15 +148,20 @@ where
                 let n_threads = num_cpus::get() * 2;
                 // let n_threads = 1;
                 println!("[INFO] using {n_threads} chunk building threads");
-                let make_worker = || {
+                vec_with(n_threads, || {
                     let worker = chunk_building_worker(Arc::clone(&chunks), &chunk_builder);
                     thread_scope.spawn(worker)
-                };
-                vec_with(n_threads, make_worker)
+                })
             },
             chunk_builder,
             thread_scope,
             chunks,
+        }
+    }
+
+    pub fn unpark_workers(&self) {
+        for worker in &self.workers {
+            worker.thread().unpark();
         }
     }
 }

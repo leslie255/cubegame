@@ -224,8 +224,8 @@ impl<'res> ChunkBuilder<'res> {
 
     /// The normalized texture coord for a block texture ID.
     fn texture_coord(&self, texture_id: BlockTextureId) -> Quad2 {
-        let block_width: f32 = const { 16. / 256. };
-        let block_height: f32 = const { 16. / 256. };
+        let block_width = 16. / 256.;
+        let block_height = 16. / 256.;
         let i_x = texture_id.0 % 16;
         let i_y = texture_id.0 / 16;
         Quad2 {

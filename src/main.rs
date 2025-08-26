@@ -1,4 +1,6 @@
-#![allow(dead_code)]
+#![feature(mpmc_channel)]
+
+#![allow(dead_code, linker_messages)]
 
 use std::thread;
 

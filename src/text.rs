@@ -117,7 +117,7 @@ impl Font {
         self.glyph_size
     }
 
-    pub fn texture_sampler(&self) -> glium::uniforms::Sampler<glium::Texture2d> {
+    pub fn texture_sampler(&self) -> glium::uniforms::Sampler<'_, glium::Texture2d> {
         mesh::texture_sampler(self.gl_texture.as_ref().unwrap())
     }
 }

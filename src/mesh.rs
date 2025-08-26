@@ -16,7 +16,7 @@ pub fn matrix3_to_array<T>(matrix: Matrix3<T>) -> [[T; 3]; 3] {
     matrix.into()
 }
 
-pub fn texture_sampler(texture: &glium::Texture2d) -> glium::uniforms::Sampler<glium::Texture2d> {
+pub fn texture_sampler(texture: &glium::Texture2d) -> glium::uniforms::Sampler<'_, glium::Texture2d> {
     texture
         .sampled()
         .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)

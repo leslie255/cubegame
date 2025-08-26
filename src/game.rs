@@ -432,7 +432,7 @@ impl<'scope, 'res> Game<'scope, 'res> {
             input_helper: InputHelper::new(),
             fps_counter: FpsCounter::new(),
             debug_options: DebugOptions::default(),
-            player_camera: PlayerCamera::new(Point3::new(0., 15., 0.), 0., -90.),
+            player_camera: PlayerCamera::new(Point3::new(0., 0., 2.), 0., -90.),
             world,
             world_generator,
             info_text: InfoText::new(&display, &resources.font, &resources.shader_text),
@@ -597,10 +597,11 @@ impl<'scope, 'res> Game<'scope, 'res> {
             if self.input_helper.key_is_down(KeyCode::KeyR) {
                 movement.y -= 1.0;
             }
-            if self.input_helper.key_is_down(KeyCode::ControlLeft) {
-                movement.z *= 2.;
-            }
+            movement.normalize();
             movement *= 4.;
+            if self.input_helper.key_is_down(KeyCode::ControlLeft) {
+                movement *= 2.;
+            }
             movement *= duration_since_last_window_event.as_secs_f32();
             self.player_camera.move_(movement);
         }
