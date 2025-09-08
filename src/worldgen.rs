@@ -1,18 +1,21 @@
+use std::iter;
+
 use cgmath::*;
 use rand::prelude::*;
 use rand_xoshiro::Xoshiro256StarStar;
 
 use crate::{
     block::GameBlocks,
+    chunk::{ChunkData, LocalCoord},
     game::GameResources,
-    world::{BlockCoord, World},
+    world::{BlockCoord, ChunkId, World},
 };
 
 #[derive(Debug, Clone, Copy)]
 struct WaveComponent {
     amplitude: f32,
     /// Bigger is more gentle waves.
-    /// `1` is wave with period of 2π.
+    /// `1` is wave with period of 2.
     scale: f32,
     /// Positive is right shift.
     offset: Vector2<f32>,
@@ -29,12 +32,8 @@ impl WaveComponent {
     }
 
     fn sample(self, xz: Point2<f32>) -> f32 {
-        let xz = (xz - self.offset).map(|i| i / self.scale);
-        let mut result = 0.;
-        result += f32::sin(xz.x) * self.amplitude;
-        result += f32::sin(xz.y) * self.amplitude;
-        result /= 2.;
-        result
+        let xz = (xz - self.offset).div_element_wise(self.scale);
+        (f32::sin(xz.x) + f32::sin(xz.y)) / 2. * self.amplitude
     }
 }
 
@@ -72,48 +71,106 @@ impl<'res> WorldGenerator<'res> {
         height.floor() as i32
     }
 
-    pub fn generate_world(&mut self, world: &World) {
-        println!("[DEBUG] begining worldgen");
-        for z in World::COORD_Z_RANGE {
-            for x in World::COORD_X_RANGE {
-                let terrain_height = self.terrain_height_at(x, z);
-                for y in (-32)..(terrain_height - 4) {
-                    world.set_block(BlockCoord::new(x, y, z), self.game_blocks.stone);
-                }
-                for y in (terrain_height - 4)..(terrain_height) {
-                    world.set_block(BlockCoord::new(x, y, z), self.game_blocks.dirt);
-                }
-                if terrain_height < 0 {
-                    world.set_block(
-                        BlockCoord::new(x, terrain_height, z),
-                        self.game_blocks.sand,
-                    );
-                } else {
-                    world.set_block(
-                        BlockCoord::new(x, terrain_height, z),
-                        self.game_blocks.grass,
-                    );
+    pub fn generate_strip(
+        &self,
+        x_chunk: i32,
+        z_chunk: i32,
+        chunks_negative_y: &mut [Box<ChunkData>],
+        chunks_positive_y: &mut [Box<ChunkData>],
+    ) {
+        for x_local in 0..32u8 {
+            for z_local in 0..32u8 {
+                let x_world = World::local_to_world_coord_axis(x_chunk, x_local);
+                let z_world = World::local_to_world_coord_axis(z_chunk, z_local);
+                let terrain_height = self.terrain_height_at(x_world, z_world);
+                for y_world in World::COORD_Y_RANGE.start..=terrain_height {
+                    let (y_chunk, y_local) = World::world_to_local_coord_axis(y_world);
+                    let dist_to_surface = terrain_height - y_world;
+                    let block = match dist_to_surface {
+                        0 if terrain_height <= 0 => self.game_blocks.sand,
+                        0 => self.game_blocks.grass,
+                        1..=4 => self.game_blocks.dirt,
+                        _ => self.game_blocks.stone,
+                    };
+                    let local_coord = LocalCoord::new(x_local, y_local, z_local);
+                    let chunk_data = match y_chunk {
+                        ..0 => &mut chunks_negative_y[(-y_chunk) as usize - 1],
+                        0.. => &mut chunks_positive_y[y_chunk as usize],
+                    };
+                    *chunk_data.get_block_mut(local_coord) = block;
                 }
             }
         }
+    }
 
-        // Features.
-        let n_trees = (1.92 * (World::SIZE_X * World::SIZE_Z) as f32) as u32;
-        for _ in 0..n_trees {
-            let x = self.rng.random_range(World::COORD_X_RANGE);
-            let z = self.rng.random_range(World::COORD_X_RANGE);
-            self.place_tree(x, z, world);
+    /// Generates the world and builds the chunks into meshes.
+    pub fn generate_world(&mut self, world: &World) {
+        println!("[DEBUG] begining worldgen");
+        for z_chunk in World::CHUNK_ID_Z_RANGE {
+            for x_chunk in World::CHUNK_ID_X_RANGE {
+                let mut chunks_positive_y: Vec<Box<ChunkData>> =
+                    iter::repeat_with(ChunkData::new_boxed)
+                        .take((World::SIZE_Y / 2) as usize)
+                        .collect();
+                let mut chunks_negative_y: Vec<Box<ChunkData>> =
+                    iter::repeat_with(ChunkData::new_boxed)
+                        .take((World::SIZE_Y / 2) as usize)
+                        .collect();
+                self.generate_strip(
+                    x_chunk,
+                    z_chunk,
+                    &mut chunks_negative_y,
+                    &mut chunks_positive_y,
+                );
+                for (i, chunk_data) in chunks_positive_y.into_iter().enumerate() {
+                    let y_chunk = i as i32;
+                    let chunk_id = ChunkId::new(x_chunk, y_chunk, z_chunk);
+                    world.chunks().insert_chunk(chunk_id, chunk_data);
+                }
+                for (i, chunk_data) in chunks_negative_y.into_iter().enumerate() {
+                    let y_chunk = -(i as i32 + 1);
+                    let chunk_id = ChunkId::new(x_chunk, y_chunk, z_chunk);
+                    world.chunks().insert_chunk(chunk_id, chunk_data);
+                }
+            }
         }
-
-        // Features.
-        let n_cherry_trees = (0.3 * (World::SIZE_X * World::SIZE_Z) as f32) as u32;
-        for _ in 0..n_cherry_trees {
-            let x = self.rng.random_range(World::COORD_X_RANGE);
-            let z = self.rng.random_range(World::COORD_X_RANGE);
-            self.place_cherry_tree(x, z, world);
-        }
-
         println!("[DEBUG] finished worldgen");
+        // let y_start = World::COORD_Y_RANGE.start;
+        // for z in World::COORD_Z_RANGE {
+        //     for x in World::COORD_X_RANGE {
+        //         let terrain_height = self.terrain_height_at(x, z);
+        //         for y in y_start..(terrain_height - 4) {
+        //             world.set_block(BlockCoord::new(x, y, z), self.game_blocks.stone);
+        //         }
+        //         for y in (terrain_height - 4)..(terrain_height) {
+        //             world.set_block(BlockCoord::new(x, y, z), self.game_blocks.dirt);
+        //         }
+        //         if terrain_height < 0 {
+        //             world.set_block(BlockCoord::new(x, terrain_height, z), self.game_blocks.sand);
+        //         } else {
+        //             world.set_block(
+        //                 BlockCoord::new(x, terrain_height, z),
+        //                 self.game_blocks.grass,
+        //             );
+        //         }
+        //     }
+        // }
+
+        // // Features.
+
+        // let n_trees = (1.92 * (World::SIZE_X * World::SIZE_Z) as f32) as u32;
+        // for _ in 0..n_trees {
+        //     let x = self.rng.random_range(World::COORD_X_RANGE);
+        //     let z = self.rng.random_range(World::COORD_X_RANGE);
+        //     self.place_tree(x, z, world);
+        // }
+
+        // let n_cherry_trees = (0.3 * (World::SIZE_X * World::SIZE_Z) as f32) as u32;
+        // for _ in 0..n_cherry_trees {
+        //     let x = self.rng.random_range(World::COORD_X_RANGE);
+        //     let z = self.rng.random_range(World::COORD_X_RANGE);
+        //     self.place_cherry_tree(x, z, world);
+        // }
     }
 
     #[allow(unused_variables)]

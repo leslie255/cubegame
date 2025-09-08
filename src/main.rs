@@ -1,10 +1,12 @@
 #![feature(mpmc_channel)]
-
 #![allow(dead_code, linker_messages)]
 
 use std::thread;
 
-use glium::{backend::glutin, winit};
+use glium::{
+    backend::glutin,
+    winit::{self, dpi::LogicalSize, window::WindowAttributes},
+};
 
 pub mod block;
 pub mod chunk;
@@ -26,15 +28,13 @@ fn main() {
 
     let event_loop = winit::event_loop::EventLoop::builder().build().unwrap();
 
-    let (window, display) = glutin::SimpleWindowBuilder::new()
+    let window_attributes = WindowAttributes::default()
         .with_title("Cube Game")
-        .with_inner_size(800, 480)
+        .with_inner_size(LogicalSize::new(800, 480));
+
+    let (window, display) = glutin::SimpleWindowBuilder::new()
+        .set_window_builder(window_attributes)
         .build(&event_loop);
-    let scale_factor = window.scale_factor();
-    println!("[INFO] UI scale factor: {scale_factor}");
-    if scale_factor != 1. {
-        let _ = window.request_inner_size(winit::dpi::LogicalSize::new(800, 480));
-    }
 
     let resources = GameResources::load(&display);
 

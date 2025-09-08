@@ -180,6 +180,12 @@ impl<'res> InfoText<'res> {
                     "Camera pitch/yaw: ---.---deg, ---.---deg".into(),
                 ),
                 Line::with_string(font, shader, display, "Facing: ----".into()),
+                Line::with_string(
+                    font,
+                    shader,
+                    display,
+                    "Terrain height: ---".into(),
+                ),
                 Line::new(font, shader),
                 Line::new(font, shader),
             ],
@@ -207,7 +213,7 @@ impl<'res> InfoText<'res> {
         if fps.is_nan() {
             self.set_line(display, 1, "FPS: ---.---");
         } else {
-            self.set_line(display, 1, format!("FPS: {fps:.3}").as_str());
+            self.set_line(display, 1, &format!("FPS: {fps:.3}"));
         }
     }
 
@@ -215,11 +221,11 @@ impl<'res> InfoText<'res> {
         self.set_line(
             display,
             2,
-            format!(
+            &format!(
                 "Camera XYZ: {:.3}, {:.3}, {:.3}",
                 camera_xyz.x, camera_xyz.y, camera_xyz.z
             )
-            .as_str(),
+            ,
         );
     }
 
@@ -243,13 +249,13 @@ impl<'res> InfoText<'res> {
         self.set_line(
             display,
             3,
-            format!(
+            &format!(
                 "Camera pitch/yaw: {:.3}deg, {:.3}deg",
                 pitch_yaw.0, pitch_yaw.1
             )
-            .as_str(),
+            ,
         );
-        self.set_line(display, 4, format!("Facing: {facing}").as_str());
+        self.set_line(display, 4, &format!("Facing: {facing}"));
     }
 
     fn update_debug_options(
@@ -258,15 +264,19 @@ impl<'res> InfoText<'res> {
         debug_options: &DebugOptions,
     ) {
         if debug_options.wireframe_mode {
-            self.set_line(display, 5, "[F3+L] DEBUG: Wire frame mode")
-        } else {
-            self.set_line(display, 5, "")
-        }
-        if debug_options.disable_gl_backface_culling {
-            self.set_line(display, 6, "[F3+F] DEBUG: Disable OpenGL backface culling")
+            self.set_line(display, 6, "[F3+L] DEBUG: Wire frame mode")
         } else {
             self.set_line(display, 6, "")
         }
+        if debug_options.disable_gl_backface_culling {
+            self.set_line(display, 7, "[F3+F] DEBUG: Disable OpenGL backface culling")
+        } else {
+            self.set_line(display, 7, "")
+        }
+    }
+
+    fn set_terrain_height(&mut self, display: &impl glium::backend::Facade, terrain_height: i32) {
+        self.set_line(display, 5, &format!("Terrain height: {terrain_height}"));
     }
 
     fn draw(&self, frame: &mut glium::Frame, content_scale: f32) {
@@ -289,7 +299,6 @@ pub struct GameResources {
     pub loader: ResourceLoader,
     pub shader_text: glium::Program,
     pub shader_chunk: glium::Program,
-    pub shader_chunk_wireframe: glium::Program,
     pub block_atlas: glium::Texture2d,
     pub font: Font,
     pub block_registry: BlockRegistry,
@@ -303,7 +312,6 @@ impl GameResources {
         Self {
             shader_text: Self::load_shader(display, &loader, "shader/text"),
             shader_chunk: Self::load_shader(display, &loader, "shader/chunk"),
-            shader_chunk_wireframe: Self::load_shader(display, &loader, "shader/chunk_wireframe"),
             block_atlas: Self::load_texture(display, &loader, "texture/block_atlas.png"),
             font: Self::load_font(display, &loader, "font/big_blue_terminal.json"),
             loader,
@@ -424,8 +432,6 @@ impl<'scope, 'res> Game<'scope, 'res> {
         let mut world_generator = WorldGenerator::new(255, resources);
         let world = World::new(resources, thread_scope);
         world_generator.generate_world(&world);
-        std::thread::sleep(Duration::from_secs_f64(1.));
-        world.chunks().rebuild_all_chunks();
         Self {
             thread_scope,
             window,
@@ -499,11 +505,7 @@ impl<'scope, 'res> Game<'scope, 'res> {
             },
             ..mesh::default_3d_draw_parameters()
         };
-        let shader = if self.debug_options.wireframe_mode {
-            &self.resources.shader_chunk_wireframe
-        } else {
-            &self.resources.shader_chunk
-        };
+        let shader = &self.resources.shader_chunk;
         for y in World::CHUNK_ID_Y_RANGE {
             for z in World::CHUNK_ID_Z_RANGE {
                 for x in World::CHUNK_ID_X_RANGE {
@@ -542,6 +544,12 @@ impl<'scope, 'res> Game<'scope, 'res> {
             self.player_camera.pitch_yaw(),
             self.player_camera.camera.direction,
         );
+        let terrain_height = {
+            let x: i32 = self.player_camera.camera.position.x.round() as i32;
+            let z: i32 = self.player_camera.camera.position.z.round() as i32;
+            self.world_generator.terrain_height_at(x, z)
+        };
+        self.info_text.set_terrain_height(&self.display, terrain_height);
         self.info_text
             .draw(frame, self.window.scale_factor() as f32);
     }
@@ -599,8 +607,10 @@ impl<'scope, 'res> Game<'scope, 'res> {
             }
             movement.normalize();
             movement *= 4.;
-            if self.input_helper.key_is_down(KeyCode::ControlLeft) {
-                movement *= 2.;
+            if self.input_helper.key_is_down(KeyCode::F3) {
+                movement *= 32.;
+            } else if self.input_helper.key_is_down(KeyCode::ControlLeft) {
+                movement *= 4.;
             }
             movement *= duration_since_last_window_event.as_secs_f32();
             self.player_camera.move_(movement);

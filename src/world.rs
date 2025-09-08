@@ -40,7 +40,7 @@ impl ChunkManager {
         Self {
             chunks: vec_with(World::N_CHUNKS, || {
                 arc_mutex(Chunk {
-                    data: ChunkData::new(),
+                    data: ChunkData::new_boxed(),
                     client: ClientChunk::new(),
                 })
             }),
@@ -55,6 +55,12 @@ impl ChunkManager {
             && World::CHUNK_ID_Z_RANGE.contains(&chunk_id.z)
     }
 
+    pub fn with_chunk<T>(&self, chunk_id: ChunkId, f: impl FnOnce(&mut Chunk) -> T) -> Option<T> {
+        let chunk = self.get_chunk(chunk_id)?;
+        let mut chunk_locked = chunk.lock().unwrap();
+        Some(f(&mut chunk_locked))
+    }
+
     pub fn get_chunk(&self, chunk_id: ChunkId) -> Option<Arc<Mutex<Chunk>>> {
         if self.chunk_is_loaded(chunk_id) {
             let chunk_index = World::index_for_chunk_id(chunk_id);
@@ -62,6 +68,16 @@ impl ChunkManager {
         } else {
             None
         }
+    }
+
+    pub fn insert_chunk(&self, chunk_id: ChunkId, chunk_data: Box<ChunkData>) {
+        let chunk = Chunk {
+            data: chunk_data,
+            client: ClientChunk::new(),
+        };
+        self.with_chunk(chunk_id, |chunk_| *chunk_ = chunk)
+            .expect("TODO: infinite world");
+        self.rebuild_chunk(chunk_id);
     }
 
     pub fn send_task(&self, task: ChunkBuildingTask) {
@@ -182,9 +198,9 @@ const WORLD_ASSERTIONS: () = {
 };
 
 impl<'scope, 'res> World<'scope, 'res> {
-    pub const SIZE_X: i32 = 32;
-    pub const SIZE_Y: i32 = 8;
-    pub const SIZE_Z: i32 = 32;
+    pub const SIZE_X: i32 = 16;
+    pub const SIZE_Y: i32 = 16;
+    pub const SIZE_Z: i32 = 16;
 
     pub const N_CHUNKS: usize =
         (Self::SIZE_X as usize) * (Self::SIZE_Y as usize) * (Self::SIZE_Z as usize);
@@ -193,12 +209,21 @@ impl<'scope, 'res> World<'scope, 'res> {
     pub const CHUNK_ID_Y_RANGE: Range<i32> = (-Self::SIZE_Y / 2)..(Self::SIZE_Y / 2);
     pub const CHUNK_ID_Z_RANGE: Range<i32> = (-Self::SIZE_Z / 2)..(Self::SIZE_Z / 2);
 
+    // pub const COORD_X_RANGE: Range<i32> =
+    //     Self::CHUNK_ID_X_RANGE.start * 32..Self::CHUNK_ID_X_RANGE.end * 32;
+    // pub const COORD_Y_RANGE: Range<i32> =
+    //     Self::CHUNK_ID_Y_RANGE.start * 32..Self::CHUNK_ID_Y_RANGE.end * 32;
+    // pub const COORD_Z_RANGE: Range<i32> =
+    //     Self::CHUNK_ID_Z_RANGE.start * 32..Self::CHUNK_ID_Z_RANGE.end * 32;
     pub const COORD_X_RANGE: Range<i32> =
-        Self::CHUNK_ID_X_RANGE.start * 32..Self::CHUNK_ID_X_RANGE.end * 32;
+        Self::local_to_world_coord_axis(Self::CHUNK_ID_X_RANGE.start, 0)
+            ..Self::local_to_world_coord_axis(Self::CHUNK_ID_X_RANGE.end, 31);
     pub const COORD_Y_RANGE: Range<i32> =
-        Self::CHUNK_ID_Y_RANGE.start * 32..Self::CHUNK_ID_Y_RANGE.end * 32;
+        Self::local_to_world_coord_axis(Self::CHUNK_ID_Y_RANGE.start, 0)
+            ..Self::local_to_world_coord_axis(Self::CHUNK_ID_Y_RANGE.end, 31);
     pub const COORD_Z_RANGE: Range<i32> =
-        Self::CHUNK_ID_Z_RANGE.start * 32..Self::CHUNK_ID_Z_RANGE.end * 32;
+        Self::local_to_world_coord_axis(Self::CHUNK_ID_Z_RANGE.start, 0)
+            ..Self::local_to_world_coord_axis(Self::CHUNK_ID_Z_RANGE.end, 31);
 
     pub fn new(
         resources: &'res GameResources,
@@ -219,10 +244,33 @@ impl<'scope, 'res> World<'scope, 'res> {
             + (chunk_id.x - Self::CHUNK_ID_X_RANGE.start) as usize
     }
 
-    pub fn world_to_local_coord(&self, world_coord: BlockCoord) -> (ChunkId, LocalCoord) {
-        let chunk_id = world_coord.map(|i| i.div_euclid(32));
-        let local_coord = world_coord.map(|i| i.rem_euclid(32) as u8);
+    /// Convert world coord to local coord.
+    pub const fn world_to_local_coord(world_coord: BlockCoord) -> (ChunkId, LocalCoord) {
+        let (x_chunk, x_local) = Self::world_to_local_coord_axis(world_coord.x);
+        let (y_chunk, y_local) = Self::world_to_local_coord_axis(world_coord.y);
+        let (z_chunk, z_local) = Self::world_to_local_coord_axis(world_coord.z);
+        let chunk_id = ChunkId::new(x_chunk, y_chunk, z_chunk);
+        let local_coord = LocalCoord::new(x_local, y_local, z_local);
         (chunk_id, local_coord)
+    }
+
+    /// Convert world coord to local coord for a single axis (any one of X, Y, or Z).
+    pub const fn world_to_local_coord_axis(x: i32) -> (i32, u8) {
+        (x.div_euclid(32), x.rem_euclid(32) as u8)
+    }
+
+    /// Convert local coord to world coord.
+    pub const fn local_to_world_coord(chunk_id: ChunkId, local_coord: LocalCoord) -> BlockCoord {
+        BlockCoord::new(
+            Self::local_to_world_coord_axis(chunk_id.x, local_coord.x),
+            Self::local_to_world_coord_axis(chunk_id.y, local_coord.y),
+            Self::local_to_world_coord_axis(chunk_id.z, local_coord.z),
+        )
+    }
+
+    /// Convert local coord to world coord for a single axis (any one of X, Y, or Z).
+    pub const fn local_to_world_coord_axis(xyz_chunk: i32, xyz_local: u8) -> i32 {
+        xyz_chunk * 32 + xyz_local as i32
     }
 
     pub fn with_block<T>(
@@ -230,7 +278,7 @@ impl<'scope, 'res> World<'scope, 'res> {
         world_coord: BlockCoord,
         f: impl FnOnce(&mut BlockId) -> T,
     ) -> Option<T> {
-        let (chunk_id, local_coord) = self.world_to_local_coord(world_coord);
+        let (chunk_id, local_coord) = Self::world_to_local_coord(world_coord);
         let chunk = self.chunks().get_chunk(chunk_id);
         chunk.map(|chunk| f(chunk.lock().unwrap().data.get_block_mut(local_coord)))
     }

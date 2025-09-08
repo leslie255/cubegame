@@ -74,7 +74,7 @@ impl ResourceLoader {
     #[cfg_attr(debug_assertions, track_caller)]
     fn handle_resource_not_exist(&self, subpath: impl AsRef<Path>) -> ! {
         let subpath = subpath.as_ref();
-        panic!("Resource does not exist: {subpath:?}")
+        panic!("Required resource does not exist: {subpath:?}")
     }
 
     #[cfg_attr(debug_assertions, track_caller)]
@@ -91,13 +91,13 @@ impl ResourceLoader {
 
     pub fn read_to_string(&self, subpath: impl AsRef<Path>) -> String {
         let path = self.path_for(subpath);
-        println!("[INFO] loading resource at {path:?}");
+        println!("[INFO] loading {path:?}");
         std::fs::read_to_string(path).unwrap()
     }
 
     pub fn open_file(&self, subpath: impl AsRef<Path>) -> File {
         let path = self.path_for(&subpath);
-        println!("[INFO] loading resource at {path:?}");
+        println!("[INFO] loading {path:?}");
         File::open(&path).unwrap_or_else(|_| self.handle_resource_not_exist(&path))
     }
 
@@ -113,7 +113,7 @@ impl ResourceLoader {
         if !path.is_file() {
             self.handle_resource_not_exist(subpath);
         }
-        println!("[INFO] loading resource at {path:?}");
+        println!("[INFO] loading {path:?}");
         image::open(&path)
             .unwrap_or_else(|_| self.handle_malformed_image_encoding(subpath))
     }

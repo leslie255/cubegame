@@ -12,6 +12,7 @@ pub type LocalCoord = Point3<u8>;
 
 #[derive(Debug)]
 pub struct Chunk {
+    /// Box here because `ChunkData` is quite large.
     pub data: Box<ChunkData>,
     pub client: ClientChunk,
 }
@@ -23,7 +24,7 @@ pub struct ChunkData {
 
 impl ChunkData {
     /// A new chunk filled with block ID 0.
-    pub fn new() -> Box<Self> {
+    pub fn new_boxed() -> Box<Self> {
         unsafe {
             let ptr = std::alloc::alloc_zeroed(Layout::new::<Self>()) as *mut Self;
             Box::from_raw(ptr)
