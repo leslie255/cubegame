@@ -14,7 +14,7 @@ pub struct ResourceLoader {
 
 impl ResourceLoader {
     /// Find the default resource directory.
-    pub fn default_res_directory() -> Option<PathBuf> {
+    pub fn default_res_directory() -> PathBuf {
         let path: PathBuf = match std::env::var("CARGO_MANIFEST_DIR") {
             Ok(path) => {
                 let mut path = PathBuf::from(path);
@@ -23,15 +23,12 @@ impl ResourceLoader {
             }
             Err(_) => "res/".into(),
         };
-        assert!(path.is_dir());
-        Some(path)
+        path
     }
 
     /// Returns `None` if the resource directory does not exist.
     pub fn with_default_res_directory() -> Option<Self> {
-        Some(Self::with_res_directory_unchecked(
-            Self::default_res_directory()?,
-        ))
+        Self::with_res_directory(Self::default_res_directory())
     }
 
     /// Returns `None` if path directory does not exist.

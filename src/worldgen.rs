@@ -1,8 +1,8 @@
 use std::iter;
 
-use cgmath::*;
+use noise::{Fbm, MultiFractal, NoiseFn, ScaleBias, ScalePoint, Simplex, SuperSimplex};
 use rand::prelude::*;
-use rand_xoshiro::Xoshiro256StarStar;
+use rand_xoshiro::Xoshiro128StarStar;
 
 use crate::{
     block::GameBlocks,
@@ -11,64 +11,86 @@ use crate::{
     world::{BlockCoord, ChunkId, World},
 };
 
-#[derive(Debug, Clone, Copy)]
-struct WaveComponent {
-    amplitude: f32,
-    /// Bigger is more gentle waves.
-    /// `1` is wave with period of 2.
-    scale: f32,
-    /// Positive is right shift.
-    offset: Vector2<f32>,
-}
-
-impl WaveComponent {
-    fn random(rng: &mut impl Rng, scale: f32, amplitude: f32) -> Self {
-        const PI: f32 = std::f32::consts::PI;
-        Self {
-            amplitude,
-            scale,
-            offset: vec2(rng.random_range((-PI)..PI), rng.random_range((-PI)..PI)),
-        }
-    }
-
-    fn sample(self, xz: Point2<f32>) -> f32 {
-        let xz = (xz - self.offset).div_element_wise(self.scale);
-        (f32::sin(xz.x) + f32::sin(xz.y)) / 2. * self.amplitude
-    }
-}
-
 #[derive(Debug)]
+pub struct NoiseComponent {}
+
 pub struct WorldGenerator<'res> {
     seed: u64,
-    wave_components: [WaveComponent; 5],
-    rng: Xoshiro256StarStar,
+    terrain_noise_components: Vec<Box<dyn NoiseFn<f64, 2>>>,
     game_blocks: &'res GameBlocks,
+}
+
+impl<'res> std::fmt::Debug for WorldGenerator<'res> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WorldGenerator")
+            .field("seed", &self.seed)
+            .field("game_blocks", &self.game_blocks)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'res> WorldGenerator<'res> {
     pub fn new(seed: u64, resources: &'res GameResources) -> Self {
-        let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
+        println!("[INFO] seed: {seed}");
+        let mut rng_simplex_positive = Xoshiro128StarStar::seed_from_u64(seed);
+        let mut rng_simplex_negative = Xoshiro128StarStar::seed_from_u64(seed);
+        fn scale(
+            noise: impl NoiseFn<f64, 2> + 'static,
+            input_scale: f64,
+            output_scale: f64,
+        ) -> Box<dyn NoiseFn<f64, 2>> {
+            let input_scaled = ScalePoint::new(noise).set_scale(input_scale);
+            let input_output_scaled = ScaleBias::<_, _, 2>::new(input_scaled)
+                .set_scale(output_scale)
+                .set_bias(0.15 * output_scale);
+            Box::new(input_output_scaled)
+        }
+        let mut simplex = |input_scale, output_scale| {
+            let rng = match input_scale {
+                ..=0.0 => &mut rng_simplex_negative,
+                _ => &mut rng_simplex_positive,
+            };
+            let noise = SuperSimplex::new(rng.next_u32());
+            scale(noise, input_scale, output_scale)
+        };
+        let mut rng_fbm = Xoshiro128StarStar::seed_from_u64(seed);
+        let mut fbm = |input_scale, output_scale| {
+            let sources = [
+                Simplex::new(rng_fbm.next_u32()),
+                Simplex::new(rng_fbm.next_u32()),
+                Simplex::new(rng_fbm.next_u32()),
+                Simplex::new(rng_fbm.next_u32()),
+            ];
+            let noise = Fbm::new(rng_fbm.next_u32())
+                .set_octaves(sources.len())
+                .set_sources(Vec::from(sources));
+            scale(noise, input_scale, output_scale)
+        };
+        let si = 0.016;
+        let so = 10.0;
+        let terrain_noise_components: [Box<dyn NoiseFn<f64, 2>>; _] = [
+            simplex(si * 1.5f64.powf(-4.5), so * 0.75f64.powf(-2.0)),
+            simplex(si * 1.5f64.powf(-3.0), so * 0.75f64.powf(-1.25)),
+            simplex(si * 1.5f64.powf(-1.5), so * 0.75f64.powf(-0.75)),
+            simplex(si * 1.5f64.powf(0.0), so * 0.75f64.powf(0.0)),
+            simplex(si * 1.5f64.powf(1.5), so * 0.75f64.powf(2.5)),
+            simplex(si * 1.5f64.powf(3.0), so * 0.75f64.powf(5.0)),
+            simplex(si * 1.5f64.powf(4.5), so * 0.75f64.powf(7.5)),
+            fbm(si, so),
+        ];
         Self {
             seed,
-            wave_components: [
-                WaveComponent::random(&mut rng, 1.8, 0.6),
-                WaveComponent::random(&mut rng, 1.5, 0.7),
-                WaveComponent::random(&mut rng, 3.0, 2.5),
-                WaveComponent::random(&mut rng, 7.0, 3.0),
-                WaveComponent::random(&mut rng, 8.5, 5.3),
-            ],
-            rng,
+            terrain_noise_components: Vec::from_iter(terrain_noise_components),
             game_blocks: &resources.game_blocks,
         }
     }
 
     pub fn terrain_height_at(&self, x: i32, z: i32) -> i32 {
-        let mut height = 0.0f32;
-        for wave_component in self.wave_components {
-            height += wave_component.sample(point2(x as f32, z as f32));
+        let mut height = 0.;
+        for noise_component in &self.terrain_noise_components {
+            height += noise_component.get([x as f64, z as f64]);
         }
-        height += 6.;
-        height.floor() as i32
+        height.round() as i32
     }
 
     pub fn generate_strip(
@@ -83,10 +105,14 @@ impl<'res> WorldGenerator<'res> {
                 let x_world = World::local_to_world_coord_axis(x_chunk, x_local);
                 let z_world = World::local_to_world_coord_axis(z_chunk, z_local);
                 let terrain_height = self.terrain_height_at(x_world, z_world);
-                for y_world in World::COORD_Y_RANGE.start..=terrain_height {
+                for y_world in World::COORD_Y_RANGE.start..=(terrain_height.max(-2)) {
+                    if !World::COORD_Y_RANGE.contains(&y_world) {
+                        break;
+                    }
                     let (y_chunk, y_local) = World::world_to_local_coord_axis(y_world);
                     let dist_to_surface = terrain_height - y_world;
                     let block = match dist_to_surface {
+                        ..0 => self.game_blocks.water,
                         0 if terrain_height <= 0 => self.game_blocks.sand,
                         0 => self.game_blocks.grass,
                         1..=4 => self.game_blocks.dirt,
@@ -97,7 +123,12 @@ impl<'res> WorldGenerator<'res> {
                         ..0 => &mut chunks_negative_y[(-y_chunk) as usize - 1],
                         0.. => &mut chunks_positive_y[y_chunk as usize],
                     };
-                    *chunk_data.get_block_mut(local_coord) = block;
+                    unsafe {
+                        // SAFETY:
+                        // - X and Z is bounded in 0..32 from the for loop range.
+                        // - Y is bounded by a check ealier.
+                        *chunk_data.get_block_unchecked_mut(local_coord) = block;
+                    }
                 }
             }
         }
@@ -135,48 +166,12 @@ impl<'res> WorldGenerator<'res> {
             }
         }
         println!("[DEBUG] finished worldgen");
-        // let y_start = World::COORD_Y_RANGE.start;
-        // for z in World::COORD_Z_RANGE {
-        //     for x in World::COORD_X_RANGE {
-        //         let terrain_height = self.terrain_height_at(x, z);
-        //         for y in y_start..(terrain_height - 4) {
-        //             world.set_block(BlockCoord::new(x, y, z), self.game_blocks.stone);
-        //         }
-        //         for y in (terrain_height - 4)..(terrain_height) {
-        //             world.set_block(BlockCoord::new(x, y, z), self.game_blocks.dirt);
-        //         }
-        //         if terrain_height < 0 {
-        //             world.set_block(BlockCoord::new(x, terrain_height, z), self.game_blocks.sand);
-        //         } else {
-        //             world.set_block(
-        //                 BlockCoord::new(x, terrain_height, z),
-        //                 self.game_blocks.grass,
-        //             );
-        //         }
-        //     }
-        // }
-
-        // // Features.
-
-        // let n_trees = (1.92 * (World::SIZE_X * World::SIZE_Z) as f32) as u32;
-        // for _ in 0..n_trees {
-        //     let x = self.rng.random_range(World::COORD_X_RANGE);
-        //     let z = self.rng.random_range(World::COORD_X_RANGE);
-        //     self.place_tree(x, z, world);
-        // }
-
-        // let n_cherry_trees = (0.3 * (World::SIZE_X * World::SIZE_Z) as f32) as u32;
-        // for _ in 0..n_cherry_trees {
-        //     let x = self.rng.random_range(World::COORD_X_RANGE);
-        //     let z = self.rng.random_range(World::COORD_X_RANGE);
-        //     self.place_cherry_tree(x, z, world);
-        // }
     }
 
     #[allow(unused_variables)]
-    pub fn place_tree(&mut self, x: i32, z: i32, world: &World) {
+    pub fn place_tree(&mut self, rng: &mut impl Rng, x: i32, z: i32, world: &World) {
         let terrain_height = self.terrain_height_at(x, z);
-        let height = self.rng.random_range(1..4); // The exposed part of the trunk.
+        let height = rng.random_range(1..4); // The exposed part of the trunk.
 
         // The dirt block below.
         world.with_block(BlockCoord::new(x, terrain_height, z), |block| {
@@ -228,9 +223,9 @@ impl<'res> WorldGenerator<'res> {
     }
 
     #[allow(unused_variables)]
-    pub fn place_cherry_tree(&mut self, x: i32, z: i32, world: &World) {
+    pub fn place_cherry_tree(&mut self, rng: &mut impl Rng, x: i32, z: i32, world: &World) {
         let terrain_height = self.terrain_height_at(x, z);
-        let height = self.rng.random_range(2..6); // The exposed part of the trunk.
+        let height = rng.random_range(2..6); // The exposed part of the trunk.
 
         // The dirt block below.
         world.with_block(BlockCoord::new(x, terrain_height, z), |block| {

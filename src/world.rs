@@ -198,9 +198,9 @@ const WORLD_ASSERTIONS: () = {
 };
 
 impl<'scope, 'res> World<'scope, 'res> {
-    pub const SIZE_X: i32 = 16;
-    pub const SIZE_Y: i32 = 16;
-    pub const SIZE_Z: i32 = 16;
+    pub const SIZE_X: i32 = 32;
+    pub const SIZE_Y: i32 = 8;
+    pub const SIZE_Z: i32 = 32;
 
     pub const N_CHUNKS: usize =
         (Self::SIZE_X as usize) * (Self::SIZE_Y as usize) * (Self::SIZE_Z as usize);
@@ -209,12 +209,6 @@ impl<'scope, 'res> World<'scope, 'res> {
     pub const CHUNK_ID_Y_RANGE: Range<i32> = (-Self::SIZE_Y / 2)..(Self::SIZE_Y / 2);
     pub const CHUNK_ID_Z_RANGE: Range<i32> = (-Self::SIZE_Z / 2)..(Self::SIZE_Z / 2);
 
-    // pub const COORD_X_RANGE: Range<i32> =
-    //     Self::CHUNK_ID_X_RANGE.start * 32..Self::CHUNK_ID_X_RANGE.end * 32;
-    // pub const COORD_Y_RANGE: Range<i32> =
-    //     Self::CHUNK_ID_Y_RANGE.start * 32..Self::CHUNK_ID_Y_RANGE.end * 32;
-    // pub const COORD_Z_RANGE: Range<i32> =
-    //     Self::CHUNK_ID_Z_RANGE.start * 32..Self::CHUNK_ID_Z_RANGE.end * 32;
     pub const COORD_X_RANGE: Range<i32> =
         Self::local_to_world_coord_axis(Self::CHUNK_ID_X_RANGE.start, 0)
             ..Self::local_to_world_coord_axis(Self::CHUNK_ID_X_RANGE.end, 31);

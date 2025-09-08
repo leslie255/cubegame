@@ -1,4 +1,5 @@
 use std::{
+    path::PathBuf,
     thread,
     time::{Duration, Instant},
 };
@@ -180,12 +181,7 @@ impl<'res> InfoText<'res> {
                     "Camera pitch/yaw: ---.---deg, ---.---deg".into(),
                 ),
                 Line::with_string(font, shader, display, "Facing: ----".into()),
-                Line::with_string(
-                    font,
-                    shader,
-                    display,
-                    "Terrain height: ---".into(),
-                ),
+                Line::with_string(font, shader, display, "Terrain height: ---".into()),
                 Line::new(font, shader),
                 Line::new(font, shader),
             ],
@@ -224,8 +220,7 @@ impl<'res> InfoText<'res> {
             &format!(
                 "Camera XYZ: {:.3}, {:.3}, {:.3}",
                 camera_xyz.x, camera_xyz.y, camera_xyz.z
-            )
-            ,
+            ),
         );
     }
 
@@ -252,8 +247,7 @@ impl<'res> InfoText<'res> {
             &format!(
                 "Camera pitch/yaw: {:.3}deg, {:.3}deg",
                 pitch_yaw.0, pitch_yaw.1
-            )
-            ,
+            ),
         );
         self.set_line(display, 4, &format!("Facing: {facing}"));
     }
@@ -306,8 +300,11 @@ pub struct GameResources {
 }
 
 impl GameResources {
-    pub fn load(display: &impl glium::backend::Facade) -> Self {
-        let loader = ResourceLoader::with_default_res_directory().unwrap();
+    /// Uses the default resource directory if `res_directory` is `None`.
+    pub fn load(display: &impl glium::backend::Facade, res_directory: Option<PathBuf>) -> Self {
+        let res_directory = res_directory.unwrap_or_else(ResourceLoader::default_res_directory);
+        let loader = ResourceLoader::with_res_directory(res_directory.clone())
+            .unwrap_or_else(|| panic!("Cannot find resource directory {res_directory:?}"));
         let mut block_registry = BlockRegistry::default();
         Self {
             shader_text: Self::load_shader(display, &loader, "shader/text"),
@@ -428,8 +425,9 @@ impl<'scope, 'res> Game<'scope, 'res> {
         window: winit::window::Window,
         display: glium::Display<glium::glutin::surface::WindowSurface>,
         thread_scope: &'scope thread::Scope<'scope, 'res>,
+        world_seed: u64,
     ) -> Self {
-        let mut world_generator = WorldGenerator::new(255, resources);
+        let mut world_generator = WorldGenerator::new(world_seed, resources);
         let world = World::new(resources, thread_scope);
         world_generator.generate_world(&world);
         Self {
@@ -549,7 +547,8 @@ impl<'scope, 'res> Game<'scope, 'res> {
             let z: i32 = self.player_camera.camera.position.z.round() as i32;
             self.world_generator.terrain_height_at(x, z)
         };
-        self.info_text.set_terrain_height(&self.display, terrain_height);
+        self.info_text
+            .set_terrain_height(&self.display, terrain_height);
         self.info_text
             .draw(frame, self.window.scale_factor() as f32);
     }

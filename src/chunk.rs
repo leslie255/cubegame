@@ -172,13 +172,16 @@ impl<'res> ChunkBuilder<'res> {
             if let Some(neighbor_block_id) =
                 Self::neighbor_block(local_position, block_face, &chunk.data)
             {
+                let block_transparency = block_info.transparency;
                 let neighbor_transparency = self
                     .block_registry
                     .lookup(neighbor_block_id)
                     .unwrap()
                     .transparency;
-                if neighbor_transparency == BlockTransparency::Solid {
-                    continue;
+                use BlockTransparency::*;
+                match (block_transparency, neighbor_transparency) {
+                    (_, Solid) | (Transparent, Transparent) => continue,
+                    _ => (),
                 }
             }
             let texture_id = block_info.model.texture_for_face(block_face);
