@@ -1,4 +1,4 @@
-#version 140
+#version 330
 
 in vec2 vert_uv;
 out vec4 color;

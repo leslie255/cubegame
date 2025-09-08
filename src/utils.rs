@@ -97,6 +97,9 @@ impl<T> MainThreadOnly<T> {
     /// Panic if current thread is not the main thread.
     #[track_caller]
     pub fn get(&self) -> &T {
+        if !cfg!(debug_assertions) {
+            return unsafe { self.get_unchecked() };
+        }
         self.try_get()
             .expect("Called `MainThreadOnly` on non-main thread")
     }
@@ -105,6 +108,9 @@ impl<T> MainThreadOnly<T> {
     /// Panic if current thread is not the main thread.
     #[track_caller]
     pub fn get_mut(&mut self) -> &mut T {
+        if !cfg!(debug_assertions) {
+            return unsafe { self.get_unchecked_mut() };
+        }
         self.try_get_mut()
             .expect("Called `MainThreadOnly` on non-main thread")
     }

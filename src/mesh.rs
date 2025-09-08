@@ -19,9 +19,9 @@ pub fn matrix3_to_array<T>(matrix: Matrix3<T>) -> [[T; 3]; 3] {
 pub fn texture_sampler(texture: &glium::Texture2d) -> glium::uniforms::Sampler<'_, glium::Texture2d> {
     texture
         .sampled()
+        .minify_filter(glium::uniforms::MinifySamplerFilter::NearestMipmapLinear)
         .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
-        .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
-        .wrap_function(glium::uniforms::SamplerWrapFunction::Repeat)
+        .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp)
 }
 
 pub fn default_3d_draw_parameters() -> glium::DrawParameters<'static> {
@@ -146,12 +146,12 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> Mesh<V, I> {
             return;
         }
         self.vertex_buffer = Some(
-            glium::VertexBuffer::dynamic(display, self.vertices())
+            glium::VertexBuffer::immutable(display, self.vertices())
                 .unwrap()
                 .into(),
         );
         self.index_buffer = Some(
-            glium::IndexBuffer::dynamic(
+            glium::IndexBuffer::immutable(
                 display,
                 glium::index::PrimitiveType::TrianglesList,
                 self.indices(),
@@ -291,9 +291,9 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> SharedMesh<V, I> {
     }
 
     /// Must be called on main thread only.
-    pub fn update_if_needed(&mut self, display: &impl glium::backend::Facade) {
+    pub fn update_if_needed(&mut self, display: &impl glium::backend::Facade) -> bool {
         if !self.needs_update {
-            return;
+            return false;
         }
         self.needs_update = false;
         let vertex_buffer = self.vertex_buffer.get_mut();
@@ -301,7 +301,7 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> SharedMesh<V, I> {
         if self.vertices.is_empty() || self.indices.is_empty() {
             *vertex_buffer = None;
             *index_buffer = None;
-            return;
+            return true;
         }
         *vertex_buffer = Some(Box::new(
             glium::VertexBuffer::dynamic(display, &self.vertices).unwrap(),
@@ -314,6 +314,7 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> SharedMesh<V, I> {
             )
             .unwrap(),
         ));
+        true
     }
 
     /// Must be called on main thread only.

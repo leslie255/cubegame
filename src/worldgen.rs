@@ -1,4 +1,4 @@
-use std::iter;
+use std::{iter, ops::Range};
 
 use noise::{Fbm, MultiFractal, NoiseFn, ScaleBias, ScalePoint, Simplex, SuperSimplex};
 use rand::prelude::*;
@@ -6,10 +6,58 @@ use rand_xoshiro::Xoshiro128StarStar;
 
 use crate::{
     block::GameBlocks,
-    chunk::{ChunkData, LocalCoord},
+    chunk::ChunkData,
     game::GameResources,
-    world::{BlockCoord, ChunkId, World},
+    world::{ChunkId, LocalCoordU8, World, WorldCoordI32},
 };
+
+/// Storage for a "strip" of chunk data - chunks that have the same X and Z component in their ID's.
+/// Used for world gen to pass out a generated strip.
+#[derive(Debug, Clone)]
+pub struct ChunkDataStrip {
+    /// The starting Y level (in chunk ID, not block coordinate).
+    x: i32,
+    z: i32,
+    y_min: i32,
+    chunks: Vec<Box<ChunkData>>,
+}
+
+impl ChunkDataStrip {
+    pub fn new(x: i32, z: i32, y_range: Range<i32>) -> Self {
+        Self {
+            x,
+            z,
+            y_min: y_range.start,
+            chunks: iter::repeat_with(ChunkData::new_boxed)
+                .take((y_range.end - y_range.start) as usize)
+                .collect(),
+        }
+    }
+
+    fn index_for(&self, y: i32) -> Option<usize> {
+        usize::try_from(y - self.y_min).ok()
+    }
+
+    pub fn get(&self, y: i32) -> Option<&ChunkData> {
+        self.chunks.get(self.index_for(y)?).map(Box::as_ref)
+    }
+
+    pub fn get_mut(&mut self, y: i32) -> Option<&mut ChunkData> {
+        let index = self.index_for(y)?;
+        self.chunks.get_mut(index).map(Box::as_mut)
+    }
+
+    pub fn into_chunks(self) -> impl Iterator<Item = (ChunkId, Box<ChunkData>)> {
+        self.chunks
+            .into_iter()
+            .enumerate()
+            .map(move |(i, chunk_data)| {
+                let y = (i as i32) + self.y_min;
+                let chunk_id = ChunkId::new(self.x, y, self.z);
+                (chunk_id, chunk_data)
+            })
+    }
+}
 
 #[derive(Debug)]
 pub struct NoiseComponent {}
@@ -97,18 +145,16 @@ impl<'res> WorldGenerator<'res> {
         &self,
         x_chunk: i32,
         z_chunk: i32,
-        chunks_negative_y: &mut [Box<ChunkData>],
-        chunks_positive_y: &mut [Box<ChunkData>],
-    ) {
+        y_chunks: Range<i32>,
+    ) -> ChunkDataStrip {
+        let mut strip = ChunkDataStrip::new(x_chunk, z_chunk, y_chunks.clone());
+        let y_coord_min = World::local_to_world_coord_axis(y_chunks.start, 0);
         for x_local in 0..32u8 {
             for z_local in 0..32u8 {
                 let x_world = World::local_to_world_coord_axis(x_chunk, x_local);
                 let z_world = World::local_to_world_coord_axis(z_chunk, z_local);
                 let terrain_height = self.terrain_height_at(x_world, z_world);
-                for y_world in World::COORD_Y_RANGE.start..=(terrain_height.max(-2)) {
-                    if !World::COORD_Y_RANGE.contains(&y_world) {
-                        break;
-                    }
+                for y_world in y_coord_min..=(terrain_height.max(-2)) {
                     let (y_chunk, y_local) = World::world_to_local_coord_axis(y_world);
                     let dist_to_surface = terrain_height - y_world;
                     let block = match dist_to_surface {
@@ -118,54 +164,16 @@ impl<'res> WorldGenerator<'res> {
                         1..=4 => self.game_blocks.dirt,
                         _ => self.game_blocks.stone,
                     };
-                    let local_coord = LocalCoord::new(x_local, y_local, z_local);
-                    let chunk_data = match y_chunk {
-                        ..0 => &mut chunks_negative_y[(-y_chunk) as usize - 1],
-                        0.. => &mut chunks_positive_y[y_chunk as usize],
-                    };
-                    unsafe {
-                        // SAFETY:
-                        // - X and Z is bounded in 0..32 from the for loop range.
-                        // - Y is bounded by a check ealier.
-                        *chunk_data.get_block_unchecked_mut(local_coord) = block;
+                    let local_coord = LocalCoordU8::new(x_local, y_local, z_local);
+                    if let Some(chunk_data) = strip.get_mut(y_chunk)
+                        && let Some(block_) = chunk_data.try_get_block_mut(local_coord)
+                    {
+                        *block_ = block;
                     }
                 }
             }
         }
-    }
-
-    /// Generates the world and builds the chunks into meshes.
-    pub fn generate_world(&mut self, world: &World) {
-        println!("[DEBUG] begining worldgen");
-        for z_chunk in World::CHUNK_ID_Z_RANGE {
-            for x_chunk in World::CHUNK_ID_X_RANGE {
-                let mut chunks_positive_y: Vec<Box<ChunkData>> =
-                    iter::repeat_with(ChunkData::new_boxed)
-                        .take((World::SIZE_Y / 2) as usize)
-                        .collect();
-                let mut chunks_negative_y: Vec<Box<ChunkData>> =
-                    iter::repeat_with(ChunkData::new_boxed)
-                        .take((World::SIZE_Y / 2) as usize)
-                        .collect();
-                self.generate_strip(
-                    x_chunk,
-                    z_chunk,
-                    &mut chunks_negative_y,
-                    &mut chunks_positive_y,
-                );
-                for (i, chunk_data) in chunks_positive_y.into_iter().enumerate() {
-                    let y_chunk = i as i32;
-                    let chunk_id = ChunkId::new(x_chunk, y_chunk, z_chunk);
-                    world.chunks().insert_chunk(chunk_id, chunk_data);
-                }
-                for (i, chunk_data) in chunks_negative_y.into_iter().enumerate() {
-                    let y_chunk = -(i as i32 + 1);
-                    let chunk_id = ChunkId::new(x_chunk, y_chunk, z_chunk);
-                    world.chunks().insert_chunk(chunk_id, chunk_data);
-                }
-            }
-        }
-        println!("[DEBUG] finished worldgen");
+        strip
     }
 
     #[allow(unused_variables)]
@@ -174,7 +182,7 @@ impl<'res> WorldGenerator<'res> {
         let height = rng.random_range(1..4); // The exposed part of the trunk.
 
         // The dirt block below.
-        world.with_block(BlockCoord::new(x, terrain_height, z), |block| {
+        world.with_block(WorldCoordI32::new(x, terrain_height, z), |block| {
             if *block != self.game_blocks.grass {
                 return;
             }
@@ -183,7 +191,7 @@ impl<'res> WorldGenerator<'res> {
 
         // Trunk.
         for y in (terrain_height + 1)..=(terrain_height + height + 3) {
-            world.set_block(BlockCoord::new(x, y, z), self.game_blocks.log);
+            world.set_block(WorldCoordI32::new(x, y, z), self.game_blocks.log);
         }
 
         // Leaves.
@@ -195,7 +203,7 @@ impl<'res> WorldGenerator<'res> {
                     }
                     let z = z + dz;
                     let x = x + dx;
-                    world.with_block(BlockCoord::new(x, y, z), |block| {
+                    world.with_block(WorldCoordI32::new(x, y, z), |block| {
                         if *block != self.game_blocks.log && *block != self.game_blocks.cherry_log {
                             *block = self.game_blocks.leaves;
                         }
@@ -211,7 +219,7 @@ impl<'res> WorldGenerator<'res> {
                 let z = z + dz;
                 let x = x + dx;
                 world.with_block(
-                    BlockCoord::new(x, terrain_height + height + 5, z),
+                    WorldCoordI32::new(x, terrain_height + height + 5, z),
                     |block| {
                         if *block != self.game_blocks.log && *block != self.game_blocks.cherry_log {
                             *block = self.game_blocks.leaves;
@@ -228,7 +236,7 @@ impl<'res> WorldGenerator<'res> {
         let height = rng.random_range(2..6); // The exposed part of the trunk.
 
         // The dirt block below.
-        world.with_block(BlockCoord::new(x, terrain_height, z), |block| {
+        world.with_block(WorldCoordI32::new(x, terrain_height, z), |block| {
             if *block != self.game_blocks.grass {
                 return;
             }
@@ -237,7 +245,7 @@ impl<'res> WorldGenerator<'res> {
 
         // Trunk.
         for y in (terrain_height + 1)..=(terrain_height + height + 3) {
-            world.set_block(BlockCoord::new(x, y, z), self.game_blocks.cherry_log);
+            world.set_block(WorldCoordI32::new(x, y, z), self.game_blocks.cherry_log);
         }
 
         // Leaves.
@@ -249,7 +257,7 @@ impl<'res> WorldGenerator<'res> {
                     }
                     let z = z + dz;
                     let x = x + dx;
-                    world.with_block(BlockCoord::new(x, y, z), |block| {
+                    world.with_block(WorldCoordI32::new(x, y, z), |block| {
                         if *block != self.game_blocks.log && *block != self.game_blocks.cherry_log {
                             *block = self.game_blocks.cherry_leaves;
                         }
@@ -265,7 +273,7 @@ impl<'res> WorldGenerator<'res> {
                 let z = z + dz;
                 let x = x + dx;
                 world.with_block(
-                    BlockCoord::new(x, terrain_height + height + 1, z),
+                    WorldCoordI32::new(x, terrain_height + height + 1, z),
                     |block| {
                         if *block != self.game_blocks.log && *block != self.game_blocks.cherry_log {
                             *block = self.game_blocks.cherry_leaves;
@@ -273,7 +281,7 @@ impl<'res> WorldGenerator<'res> {
                     },
                 );
                 world.with_block(
-                    BlockCoord::new(x, terrain_height + height + 5, z),
+                    WorldCoordI32::new(x, terrain_height + height + 5, z),
                     |block| {
                         if *block != self.game_blocks.log && *block != self.game_blocks.cherry_log {
                             *block = self.game_blocks.cherry_leaves;

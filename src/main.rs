@@ -28,6 +28,12 @@ pub struct ProgramArgs {
     pub seed: Option<u64>,
     #[arg(long)]
     pub res: Option<PathBuf>,
+    /// The view radius, in chunks.
+    #[arg(long, default_value_t = 8)]
+    pub view: u16,
+    /// The world height, in chunks.
+    #[arg(long, default_value_t = 8)]
+    pub height: u16,
 }
 
 fn main() {
@@ -47,14 +53,10 @@ fn main() {
         .set_window_builder(window_attributes)
         .build(&event_loop);
 
-    let resources = GameResources::load(&display, program_args.res);
-
-    let world_seed = program_args
-        .seed
-        .unwrap_or_else(|| getrandom::u64().unwrap_or(255));
+    let resources = GameResources::load(&display, program_args.res.clone());
 
     thread::scope(|scope| {
-        let mut game = Game::new(&resources, window, display, scope, world_seed);
+        let mut game = Game::new(&resources, window, display, scope, program_args);
         event_loop.run_app(&mut game).unwrap();
     });
 }

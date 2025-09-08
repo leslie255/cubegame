@@ -1,18 +1,15 @@
 use std::alloc::Layout;
 
-use cgmath::*;
-
 use crate::{
     block::{BlockFace, BlockId, BlockRegistry, BlockTextureId, BlockTransparency},
     game::GameResources,
-    mesh::{Quad2, SharedMesh},
+    mesh::{Quad2, SharedMesh}, world::LocalCoordU8,
 };
-
-pub type LocalCoord = Point3<u8>;
 
 #[derive(Debug)]
 pub struct Chunk {
-    /// Box here because `ChunkData` is quite large.
+    /// Note that `data` is boxed here because `ChunkData` almost always exist boxed due to its
+    /// size.
     pub data: Box<ChunkData>,
     pub client: ClientChunk,
 }
@@ -39,39 +36,39 @@ impl ChunkData {
         self.blocks.as_mut_slice()
     }
 
-    fn index(local_coord: LocalCoord) -> usize {
+    fn index(local_coord: LocalCoordU8) -> usize {
         (local_coord.y as usize) * 32 * 32
             + (local_coord.z as usize) * 32
             + (local_coord.x as usize)
     }
 
-    pub fn try_get_block(&self, local_coord: LocalCoord) -> Option<BlockId> {
+    pub fn try_get_block(&self, local_coord: LocalCoordU8) -> Option<BlockId> {
         self.blocks.get(Self::index(local_coord)).copied()
     }
 
-    pub fn try_get_block_mut(&mut self, local_coord: LocalCoord) -> Option<&mut BlockId> {
+    pub fn try_get_block_mut(&mut self, local_coord: LocalCoordU8) -> Option<&mut BlockId> {
         self.blocks.get_mut(Self::index(local_coord))
     }
 
     #[track_caller]
-    pub fn get_block(&self, local_coord: LocalCoord) -> BlockId {
+    pub fn get_block(&self, local_coord: LocalCoordU8) -> BlockId {
         self.try_get_block(local_coord).unwrap()
     }
 
     #[track_caller]
-    pub fn get_block_mut(&mut self, local_coord: LocalCoord) -> &mut BlockId {
+    pub fn get_block_mut(&mut self, local_coord: LocalCoordU8) -> &mut BlockId {
         self.try_get_block_mut(local_coord).unwrap()
     }
 
     /// # Safety
     /// `local_coord` must be in range.
-    pub unsafe fn get_block_unchecked(&self, local_coord: LocalCoord) -> BlockId {
+    pub unsafe fn get_block_unchecked(&self, local_coord: LocalCoordU8) -> BlockId {
         unsafe { *self.blocks.get_unchecked(Self::index(local_coord)) }
     }
 
     /// # Safety
     /// `local_coord` must be in range.
-    pub unsafe fn get_block_unchecked_mut(&mut self, local_coord: LocalCoord) -> &mut BlockId {
+    pub unsafe fn get_block_unchecked_mut(&mut self, local_coord: LocalCoordU8) -> &mut BlockId {
         unsafe { self.blocks.get_unchecked_mut(Self::index(local_coord)) }
     }
 }
@@ -155,7 +152,7 @@ impl<'res> ChunkBuilder<'res> {
         for y in 0..32 {
             for x in 0..32 {
                 for z in 0..32 {
-                    let local_coord = LocalCoord::new(y, z, x);
+                    let local_coord = LocalCoordU8::new(y, z, x);
                     let block_id = unsafe { chunk.data.get_block_unchecked(local_coord) };
                     self.build_block(chunk, local_coord, block_id);
                 }
@@ -163,7 +160,7 @@ impl<'res> ChunkBuilder<'res> {
         }
     }
 
-    fn build_block(&mut self, chunk: &mut Chunk, local_position: LocalCoord, block_id: BlockId) {
+    fn build_block(&mut self, chunk: &mut Chunk, local_position: LocalCoordU8, block_id: BlockId) {
         let block_info = self.block_registry.lookup(block_id).unwrap();
         if block_info.transparency == BlockTransparency::Air {
             return;
@@ -205,7 +202,7 @@ impl<'res> ChunkBuilder<'res> {
         }
     }
 
-    fn neighbor_local_coord(local_coord: LocalCoord, direction: BlockFace) -> Option<LocalCoord> {
+    fn neighbor_local_coord(local_coord: LocalCoordU8, direction: BlockFace) -> Option<LocalCoordU8> {
         let mut result = local_coord;
         match direction {
             BlockFace::South => result.z = (result.z + 1).min(31),
@@ -219,7 +216,7 @@ impl<'res> ChunkBuilder<'res> {
     }
 
     fn neighbor_block(
-        local_coord: LocalCoord,
+        local_coord: LocalCoordU8,
         direction: BlockFace,
         chunk: &ChunkData,
     ) -> Option<BlockId> {
