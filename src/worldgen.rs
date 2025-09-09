@@ -1,4 +1,8 @@
-use std::{iter, ops::Range};
+use std::{
+    fmt::{self, Debug},
+    iter,
+    ops::Range,
+};
 
 use noise::{Fbm, MultiFractal, NoiseFn, ScaleBias, ScalePoint, Simplex, SuperSimplex};
 use rand::prelude::*;
@@ -10,6 +14,11 @@ use crate::{
     game::GameResources,
     world::{ChunkId, LocalCoordU8, World, WorldCoordI32},
 };
+
+fn smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 {
+    let x = f64::clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+    x * x * x * (x * (6.0 * x - 15.0) + 10.0)
+}
 
 /// Storage for a "strip" of chunk data - chunks that have the same X and Z component in their ID's.
 /// Used for world gen to pass out a generated strip.
@@ -59,17 +68,17 @@ impl ChunkDataStrip {
     }
 }
 
-#[derive(Debug)]
-pub struct NoiseComponent {}
+type DynNoise = Box<dyn NoiseFn<f64, 2>>;
 
 pub struct WorldGenerator<'res> {
     seed: u64,
-    terrain_noise_components: Vec<Box<dyn NoiseFn<f64, 2>>>,
+    macro_noises: Vec<DynNoise>,
+    micro_noises: Vec<DynNoise>,
     game_blocks: &'res GameBlocks,
 }
 
-impl<'res> std::fmt::Debug for WorldGenerator<'res> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for WorldGenerator<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("WorldGenerator")
             .field("seed", &self.seed)
             .field("game_blocks", &self.game_blocks)
@@ -86,11 +95,12 @@ impl<'res> WorldGenerator<'res> {
             noise: impl NoiseFn<f64, 2> + 'static,
             input_scale: f64,
             output_scale: f64,
-        ) -> Box<dyn NoiseFn<f64, 2>> {
+            bias: f64,
+        ) -> DynNoise {
             let input_scaled = ScalePoint::new(noise).set_scale(input_scale);
             let input_output_scaled = ScaleBias::<_, _, 2>::new(input_scaled)
                 .set_scale(output_scale)
-                .set_bias(0.15 * output_scale);
+                .set_bias(bias);
             Box::new(input_output_scaled)
         }
         let mut simplex = |input_scale, output_scale| {
@@ -99,7 +109,7 @@ impl<'res> WorldGenerator<'res> {
                 _ => &mut rng_simplex_positive,
             };
             let noise = SuperSimplex::new(rng.next_u32());
-            scale(noise, input_scale, output_scale)
+            scale(noise, input_scale, output_scale, 0.15 * output_scale)
         };
         let mut rng_fbm = Xoshiro128StarStar::seed_from_u64(seed);
         let mut fbm = |input_scale, output_scale| {
@@ -112,11 +122,11 @@ impl<'res> WorldGenerator<'res> {
             let noise = Fbm::new(rng_fbm.next_u32())
                 .set_octaves(sources.len())
                 .set_sources(Vec::from(sources));
-            scale(noise, input_scale, output_scale)
+            scale(noise, input_scale, output_scale, 0.0)
         };
         let si = 0.016;
         let so = 10.0;
-        let terrain_noise_components: [Box<dyn NoiseFn<f64, 2>>; _] = [
+        let macro_noises: [DynNoise; _] = [
             simplex(si * 1.5f64.powf(-4.5), so * 0.75f64.powf(-2.0)),
             simplex(si * 1.5f64.powf(-3.0), so * 0.75f64.powf(-1.25)),
             simplex(si * 1.5f64.powf(-1.5), so * 0.75f64.powf(-0.75)),
@@ -124,21 +134,34 @@ impl<'res> WorldGenerator<'res> {
             simplex(si * 1.5f64.powf(1.5), so * 0.75f64.powf(2.5)),
             simplex(si * 1.5f64.powf(3.0), so * 0.75f64.powf(5.0)),
             simplex(si * 1.5f64.powf(4.5), so * 0.75f64.powf(7.5)),
+        ];
+        let micro_noises: [DynNoise; _] = [
             fbm(si, so),
         ];
         Self {
             seed,
-            terrain_noise_components: Vec::from_iter(terrain_noise_components),
+            macro_noises: Vec::from_iter(macro_noises),
+            micro_noises: Vec::from_iter(micro_noises),
             game_blocks: &resources.game_blocks,
         }
     }
 
     pub fn terrain_height_at(&self, x: i32, z: i32) -> i32 {
-        let mut height = 0.;
-        for noise_component in &self.terrain_noise_components {
-            height += noise_component.get([x as f64, z as f64]);
-        }
-        height.round() as i32
+        let macro_noise: f64 = self
+            .macro_noises
+            .iter()
+            .map(|component| component.get([x as f64, z as f64]))
+            .sum();
+        let micro_noise_scale = 0.4 + 0.6 * smoothstep(10.0, 35.0, macro_noise);
+        let micro_noise: f64 = self
+            .macro_noises
+            .iter()
+            .map(|component| component.get([x as f64, z as f64]))
+            .sum();
+        let micro_noise_scaled = micro_noise * micro_noise_scale;
+        // let height = macro_noise + micro_noise_scaled;
+        micro_noise_scaled.round() as i32
+        // height.round() as i32
     }
 
     pub fn generate_strip(

@@ -3,7 +3,8 @@ use std::alloc::Layout;
 use crate::{
     block::{BlockFace, BlockId, BlockRegistry, BlockTextureId, BlockTransparency},
     game::GameResources,
-    mesh::{Quad2, SharedMesh}, world::LocalCoordU8,
+    mesh::{Quad2, SharedMesh},
+    world::LocalCoordU8,
 };
 
 #[derive(Debug)]
@@ -77,13 +78,18 @@ impl ChunkData {
 pub struct BlockVertex {
     pub position: [f32; 3],
     pub uv: [f32; 2],
+    pub normal: [f32; 3],
 }
 
-glium::implement_vertex!(BlockVertex, position, uv);
+glium::implement_vertex!(BlockVertex, position, uv, normal);
 
 impl BlockVertex {
-    pub const fn new(position: [f32; 3], uv: [f32; 2]) -> Self {
-        Self { position, uv }
+    pub const fn new(position: [f32; 3], uv: [f32; 2], normal: [f32; 3]) -> Self {
+        Self {
+            position,
+            uv,
+            normal,
+        }
     }
 }
 
@@ -96,45 +102,45 @@ impl<'res> ChunkBuilder<'res> {
     const CUBE_VERTICES: [[BlockVertex; 4]; 6] = [
         // South
         [
-            BlockVertex::new([0., 0., 1.], [0.0, 1.0]),
-            BlockVertex::new([1., 0., 1.], [1.0, 1.0]),
-            BlockVertex::new([1., 1., 1.], [1.0, 0.0]),
-            BlockVertex::new([0., 1., 1.], [0.0, 0.0]),
+            BlockVertex::new([0., 0., 1.], [0., 1.], [0., 0., 1.]),
+            BlockVertex::new([1., 0., 1.], [1., 1.], [0., 0., 1.]),
+            BlockVertex::new([1., 1., 1.], [1., 0.], [0., 0., 1.]),
+            BlockVertex::new([0., 1., 1.], [0., 0.], [0., 0., 1.]),
         ],
         // North
         [
-            BlockVertex::new([0., 0., 0.], [1.0, 1.0]),
-            BlockVertex::new([0., 1., 0.], [1.0, 0.0]),
-            BlockVertex::new([1., 1., 0.], [0.0, 0.0]),
-            BlockVertex::new([1., 0., 0.], [0.0, 1.0]),
+            BlockVertex::new([0., 0., 0.], [1., 1.], [0., 0., -1.]),
+            BlockVertex::new([0., 1., 0.], [1., 0.], [0., 0., -1.]),
+            BlockVertex::new([1., 1., 0.], [0., 0.], [0., 0., -1.]),
+            BlockVertex::new([1., 0., 0.], [0., 1.], [0., 0., -1.]),
         ],
         // East
         [
-            BlockVertex::new([1., 0., 0.], [1.0, 1.0]),
-            BlockVertex::new([1., 1., 0.], [1.0, 0.0]),
-            BlockVertex::new([1., 1., 1.], [0.0, 0.0]),
-            BlockVertex::new([1., 0., 1.], [0.0, 1.0]),
+            BlockVertex::new([1., 0., 0.], [1., 1.], [1., 0., 0.]),
+            BlockVertex::new([1., 1., 0.], [1., 0.], [1., 0., 0.]),
+            BlockVertex::new([1., 1., 1.], [0., 0.], [1., 0., 0.]),
+            BlockVertex::new([1., 0., 1.], [0., 1.], [1., 0., 0.]),
         ],
         // West
         [
-            BlockVertex::new([0., 1., 0.], [0.0, 0.0]),
-            BlockVertex::new([0., 0., 0.], [0.0, 1.0]),
-            BlockVertex::new([0., 0., 1.], [1.0, 1.0]),
-            BlockVertex::new([0., 1., 1.], [1.0, 0.0]),
+            BlockVertex::new([0., 1., 0.], [0., 0.], [-1., 0., 0.]),
+            BlockVertex::new([0., 0., 0.], [0., 1.], [-1., 0., 0.]),
+            BlockVertex::new([0., 0., 1.], [1., 1.], [-1., 0., 0.]),
+            BlockVertex::new([0., 1., 1.], [1., 0.], [-1., 0., 0.]),
         ],
         // Up
         [
-            BlockVertex::new([1., 1., 0.], [0.0, 1.0]),
-            BlockVertex::new([0., 1., 0.], [1.0, 1.0]),
-            BlockVertex::new([0., 1., 1.], [1.0, 0.0]),
-            BlockVertex::new([1., 1., 1.], [0.0, 0.0]),
+            BlockVertex::new([1., 1., 0.], [0.0, 1.0], [0., 1., 0.]),
+            BlockVertex::new([0., 1., 0.], [1.0, 1.0], [0., 1., 0.]),
+            BlockVertex::new([0., 1., 1.], [1.0, 0.0], [0., 1., 0.]),
+            BlockVertex::new([1., 1., 1.], [0.0, 0.0], [0., 1., 0.]),
         ],
         // Down
         [
-            BlockVertex::new([0., 0., 0.], [0.0, 1.0]),
-            BlockVertex::new([1., 0., 0.], [1.0, 1.0]),
-            BlockVertex::new([1., 0., 1.], [1.0, 0.0]),
-            BlockVertex::new([0., 0., 1.], [0.0, 0.0]),
+            BlockVertex::new([0., 0., 0.], [0.0, 1.0], [0., -1., 0.]),
+            BlockVertex::new([1., 0., 0.], [1.0, 1.0], [0., -1., 0.]),
+            BlockVertex::new([1., 0., 1.], [1.0, 0.0], [0., -1., 0.]),
+            BlockVertex::new([0., 0., 1.], [0.0, 0.0], [0., -1., 0.]),
         ],
     ];
 
@@ -193,6 +199,7 @@ impl<'res> ChunkBuilder<'res> {
                     vertex.uv[0] * texture_coord.right + (1. - vertex.uv[0]) * texture_coord.left,
                     vertex.uv[1] * texture_coord.bottom + (1. - vertex.uv[1]) * texture_coord.top,
                 ],
+                normal: vertex.normal,
             });
             let indices = Self::FACE_INDICIES;
             chunk
@@ -202,7 +209,10 @@ impl<'res> ChunkBuilder<'res> {
         }
     }
 
-    fn neighbor_local_coord(local_coord: LocalCoordU8, direction: BlockFace) -> Option<LocalCoordU8> {
+    fn neighbor_local_coord(
+        local_coord: LocalCoordU8,
+        direction: BlockFace,
+    ) -> Option<LocalCoordU8> {
         let mut result = local_coord;
         match direction {
             BlockFace::South => result.z = (result.z + 1).min(31),

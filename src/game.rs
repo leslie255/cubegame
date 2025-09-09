@@ -432,7 +432,6 @@ impl<'scope, 'res> Game<'scope, 'res> {
         args: ProgramArgs,
     ) -> Self {
         let world = World::new(resources, thread_scope, args);
-        world.generate_initial_area();
         Self {
             thread_scope,
             window,
@@ -456,6 +455,8 @@ impl<'scope, 'res> Game<'scope, 'res> {
     pub fn block_registry(&self) -> &BlockRegistry {
         &self.resources.block_registry
     }
+
+    fn draw_render_test_chunk(&self) {}
 
     fn draw(&mut self) {
         let mut frame = self.display.draw();

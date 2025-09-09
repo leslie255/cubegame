@@ -19,6 +19,7 @@ pub mod text;
 pub mod utils;
 pub mod world;
 pub mod worldgen;
+pub mod features;
 
 use game::{Game, GameResources};
 
