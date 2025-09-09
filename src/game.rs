@@ -432,6 +432,7 @@ impl<'scope, 'res> Game<'scope, 'res> {
         args: ProgramArgs,
     ) -> Self {
         let world = World::new(resources, thread_scope, args);
+        world.generate_initial_area();
         Self {
             thread_scope,
             window,
@@ -539,7 +540,7 @@ impl<'scope, 'res> Game<'scope, 'res> {
         let terrain_height = {
             let x: i32 = self.player_camera.camera.position.x.round() as i32;
             let z: i32 = self.player_camera.camera.position.z.round() as i32;
-            self.world.generator.terrain_height_at(x, z)
+            self.world.worldgen.terrain_height_at(x, z)
         };
         self.info_text
             .set_terrain_height(&self.display, terrain_height);
@@ -579,7 +580,7 @@ impl<'scope, 'res> Game<'scope, 'res> {
 
     fn before_window_event(&mut self, duration_since_last_window_event: Duration) {
         if !self.is_paused {
-            let mut movement = <Vector3<f32>>::zero();
+            let mut movement = vec3(0., 0., 0.);
             if self.input_helper.key_is_down(KeyCode::KeyW) {
                 movement.z += 1.0;
             }

@@ -11,7 +11,7 @@ use cgmath::*;
 use crate::{
     ProgramArgs,
     block::BlockId,
-    chunk::{Chunk, ChunkBuilder, ChunkData, ClientChunk},
+    chunk::{Chunk, ChunkBuilder, ClientChunk},
     game::GameResources,
     utils::*,
     worldgen::WorldGenerator,
@@ -27,15 +27,14 @@ pub type WorldCoordI32 = Point3<i32>;
 
 pub type WorldCoordF32 = Point3<f32>;
 
-/// A task for the chunk-building workers.
+/// A task for the chunk workers.
 #[derive(Debug, Clone)]
 pub enum ChunkBuildingTask {
     Rebuild { chunk_id: ChunkId },
+    Generate { x: i32, z: i32, y_range: Range<i32> },
 }
 
-/// Manages loading an unloading chunks.
-/// Also manages sending chunk building tasks, but not the chunk building workers, those are
-/// managed by `ChunkBuildingWorkers`, which is also a part of `World`.
+/// Manages loading and unloading chunks.
 #[derive(Debug)]
 pub struct ChunkManager {
     chunks: RwLock<HashMap<ChunkId, Arc<Mutex<Chunk>>>>,
@@ -51,17 +50,25 @@ impl ChunkManager {
 
     /// Loop through each loaded chunk.
     pub fn for_each_loaded_chunk(&self, mut f: impl FnMut(ChunkId, &mut Chunk)) {
-        let chunks = self.chunks.read().unwrap();
-        for (&chunk_id, chunk) in chunks.iter() {
+        self.for_each_loaded_chunk_id(|chunk_id| {
+            let chunk = {
+                let chunks = self.chunks.read().unwrap();
+                Arc::clone(chunks.get(&chunk_id).unwrap())
+            };
             f(chunk_id, &mut chunk.lock().unwrap());
-        }
+        });
     }
 
     /// Loop through each loaded chunk's ID but not the chunk.
     pub fn for_each_loaded_chunk_id(&self, mut f: impl FnMut(ChunkId)) {
-        let chunks = self.chunks.read().unwrap();
-        for &chunk_id in chunks.keys() {
-            f(chunk_id);
+        let loaded_chunk_ids: Vec<ChunkId> = {
+            let chunks = self.chunks.read().unwrap();
+            chunks.keys().copied().collect()
+        };
+        for chunk_id in loaded_chunk_ids {
+            if self.chunk_is_loaded(chunk_id) {
+                f(chunk_id);
+            }
         }
     }
 
@@ -88,11 +95,7 @@ impl ChunkManager {
 
     /// Insert a new chunk to the pool of loaded chunks.
     /// Replaces the old chunk if existed one.
-    pub fn insert_chunk(&self, chunk_id: ChunkId, chunk_data: Box<ChunkData>) {
-        let chunk = Chunk {
-            data: chunk_data,
-            client: ClientChunk::new(),
-        };
+    pub fn insert_chunk(&self, chunk_id: ChunkId, chunk: Chunk) {
         self.chunks
             .write()
             .unwrap()
@@ -111,9 +114,9 @@ impl Default for ChunkManager {
     }
 }
 
-/// Manages chunk-building workers.
+/// Manages chunk workers.
 #[derive(Debug)]
-pub struct ChunkBuildingWorkerPool<'scope, 'res>
+pub struct ChunkWorkerPool<'scope, 'res>
 where
     'res: 'scope,
 {
@@ -121,14 +124,14 @@ where
     chunk_builder: ChunkBuilder<'res>,
     thread_scope: &'scope thread::Scope<'scope, 'res>,
     chunks: Arc<ChunkManager>,
-    /// TX for sending chunk-building tasks to the chunk-building workers.
+    /// TX for sending chunk tasks to the chunk workers.
     tasks_tx: mpmc::Sender<ChunkBuildingTask>,
-    /// RX for sending chunk-building workers to receive their tasks.
-    /// This is kept alive chunk manager to create more chunk-building workers.
+    /// RX for sending chunk workers to receive their tasks.
+    /// Kept alive in the worker pool to create more chunk workers.
     tasks_rx: mpmc::Receiver<ChunkBuildingTask>,
 }
 
-impl<'scope, 'res> ChunkBuildingWorkerPool<'scope, 'res>
+impl<'scope, 'res> ChunkWorkerPool<'scope, 'res>
 where
     'res: 'scope,
 {
@@ -136,19 +139,21 @@ where
         resources: &'res GameResources,
         thread_scope: &'scope thread::Scope<'scope, 'res>,
         chunks: Arc<ChunkManager>,
+        worldgen: Arc<WorldGenerator<'res>>,
     ) -> Self {
         let chunk_builder = ChunkBuilder::new(resources);
-        let (tasks_tx, tasks_rx) = mpmc::sync_channel(128);
+        let (tasks_tx, tasks_rx) = mpmc::sync_channel(8);
         Self {
             workers: {
                 let n_threads = num_cpus::get();
                 // let n_threads = 1;
-                println!("[INFO] using {n_threads} chunk building threads");
+                println!("[INFO] using {n_threads} chunk worker threads");
                 vec_with(n_threads, || {
                     let worker = Self::new_worker(
                         tasks_rx.clone(),
                         Arc::clone(&chunks),
                         chunk_builder.clone(),
+                        Arc::clone(&worldgen),
                     );
                     thread_scope.spawn(worker)
                 })
@@ -161,7 +166,7 @@ where
         }
     }
 
-    /// Send a task to the chunk-building workers.
+    /// Send a task to the chunk workers.
     pub fn send_task(&self, task: ChunkBuildingTask) {
         self.tasks_tx.send(task).unwrap();
     }
@@ -170,6 +175,7 @@ where
         tasks_rx: mpmc::Receiver<ChunkBuildingTask>,
         chunk_manager: Arc<ChunkManager>,
         mut chunk_builder: ChunkBuilder<'res>,
+        worldgen: Arc<WorldGenerator<'res>>,
     ) -> impl FnOnce() + 'res {
         move || {
             loop {
@@ -177,7 +183,7 @@ where
                     Ok(task) => task,
                     Err(mpmc::RecvError) => {
                         println!(
-                            "[ERROR] chunk-building worker thread {:?} stopping because main thread seems to be no longer",
+                            "[ERROR] chunk worker thread {:?} stopping because main thread seems to be no longer",
                             thread::current().id()
                         );
                         break;
@@ -187,22 +193,47 @@ where
                     ChunkBuildingTask::Rebuild { chunk_id } => {
                         Self::task_rebuild(&chunk_manager, &mut chunk_builder, chunk_id);
                     }
+                    ChunkBuildingTask::Generate { x, z, y_range } => {
+                        Self::task_generate(
+                            &chunk_manager,
+                            &mut chunk_builder,
+                            &worldgen,
+                            x,
+                            z,
+                            y_range,
+                        );
+                    }
                 }
             }
         }
     }
 
-    fn task_rebuild(
-        chunk_manager: &ChunkManager,
+    fn task_generate(
+        chunks: &ChunkManager,
         chunk_builder: &mut ChunkBuilder,
-        chunk_id: ChunkId,
+        worldgen: &WorldGenerator,
+        x: i32,
+        z: i32,
+        y_range: Range<i32>,
     ) {
-        if let Some(chunk) = chunk_manager.get_loaded_chunk(chunk_id) {
+        let generated = worldgen.generate_strip(x, z, y_range.clone());
+        for (chunk_id, chunk_data) in generated.into_chunks() {
+            let mut chunk = Chunk {
+                data: chunk_data,
+                client: ClientChunk::new(),
+            };
+            chunk_builder.build(&mut chunk);
+            chunks.insert_chunk(chunk_id, chunk);
+        }
+    }
+
+    fn task_rebuild(chunks: &ChunkManager, chunk_builder: &mut ChunkBuilder, chunk_id: ChunkId) {
+        if let Some(chunk) = chunks.get_loaded_chunk(chunk_id) {
             let mut chunk_lock = chunk.lock().unwrap();
             chunk_builder.build(&mut chunk_lock);
         } else {
             println!(
-                "[WARNING] Chunk building worker encountered a task referring to an unloaded chunk (chunk ID: {chunk_id:?})"
+                "[WARNING] Chunk worker encountered a rebuild task referring to an unloaded chunk (chunk ID: {chunk_id:?})"
             );
         };
     }
@@ -216,8 +247,8 @@ where
     world_height: i32,
     view_distance: i32,
     chunks: Arc<ChunkManager>,
-    chunk_building_workers: ChunkBuildingWorkerPool<'scope, 'res>,
-    pub generator: WorldGenerator<'res>,
+    pub worldgen: Arc<WorldGenerator<'res>>,
+    chunk_workers: ChunkWorkerPool<'scope, 'res>,
 }
 
 impl<'scope, 'res> World<'scope, 'res> {
@@ -232,12 +263,19 @@ impl<'scope, 'res> World<'scope, 'res> {
         if world_height % 2 != 0 {
             world_height += 1;
         }
+        let worldgen = Arc::new(WorldGenerator::new(world_seed, resources));
+        let chunk_workers = ChunkWorkerPool::new(
+            resources,
+            thread_scope,
+            Arc::clone(&chunks),
+            Arc::clone(&worldgen),
+        );
         Self {
             world_height,
             view_distance: args.view as i32,
             chunks: Arc::clone(&chunks),
-            chunk_building_workers: ChunkBuildingWorkerPool::new(resources, thread_scope, chunks),
-            generator: WorldGenerator::new(world_seed, resources),
+            chunk_workers,
+            worldgen,
         }
     }
 
@@ -253,19 +291,7 @@ impl<'scope, 'res> World<'scope, 'res> {
 
     /// Generates an area around (0, _, 0).
     pub fn generate_initial_area(&self) {
-        for z in (-self.view_distance)..self.view_distance {
-            for x in (-self.view_distance)..self.view_distance {
-                let distance2 = point2(x as f32, z as f32).distance2(point2(0.0, 0.0));
-                if distance2 > (self.view_distance as f32).powi(2) {
-                    continue;
-                }
-                let generated = self.generator.generate_strip(x, z, self.y_chunk_range());
-                for (chunk_id, chunk_data) in generated.into_chunks() {
-                    self.chunks().insert_chunk(chunk_id, chunk_data);
-                    self.rebuild_chunk(chunk_id);
-                }
-            }
-        }
+        self.load_chunks_in_view_distance(WorldCoordF32::new(0., 0., 0.));
     }
 
     /// Convert world coord to local coord.
@@ -359,18 +385,20 @@ impl<'scope, 'res> World<'scope, 'res> {
     }
 
     pub fn rebuild_chunk(&self, chunk_id: ChunkId) {
-        self.chunk_building_workers
+        self.chunk_workers
             .send_task(ChunkBuildingTask::Rebuild { chunk_id });
     }
 
-    pub fn player_moved(&mut self, old_position: WorldCoordF32, new_position: WorldCoordF32) {
-        // Check if new chunks needs to be generated.
-        let (old_chunk_id, _) = World::world_to_local_coord_f32(old_position);
-        let (chunk_id, _) = World::world_to_local_coord_f32(new_position);
-        let crossed_strip = old_chunk_id.with_y(0) == chunk_id.with_y(0);
-        if !crossed_strip {
-            return;
-        }
+    pub fn generate_strip(&self, x: i32, z: i32) {
+        self.chunk_workers.send_task(ChunkBuildingTask::Generate {
+            x,
+            z,
+            y_range: self.y_chunk_range(),
+        });
+    }
+
+    fn load_chunks_in_view_distance(&self, player_position: WorldCoordF32) {
+        let (chunk_id, _) = World::world_to_local_coord_f32(player_position);
         // Generate new chunks.
         for z in (chunk_id.z - self.view_distance)..(chunk_id.z + self.view_distance) {
             for x in (chunk_id.x - self.view_distance)..(chunk_id.x + self.view_distance) {
@@ -379,28 +407,31 @@ impl<'scope, 'res> World<'scope, 'res> {
                 if distance2 > (self.view_distance as f32).powi(2) {
                     continue;
                 }
-                let chunk_is_loaded = self.chunks().chunk_is_loaded(ChunkId::new(x, 0, z));
-                if !chunk_is_loaded {
-                    let generated = self.generator.generate_strip(x, z, self.y_chunk_range());
-                    for (chunk_id, chunk_data) in generated.into_chunks() {
-                        self.chunks().insert_chunk(chunk_id, chunk_data);
-                        self.rebuild_chunk(chunk_id);
-                    }
+                let is_loaded = self.chunks().chunk_is_loaded(ChunkId::new(x, 0, z));
+                if !is_loaded {
+                    self.generate_strip(x, z);
                 }
             }
         }
-        // Prone old ones.
-        let mut to_be_removed = Vec::<ChunkId>::new();
+    }
+
+    pub fn player_moved(&self, old_position: WorldCoordF32, new_position: WorldCoordF32) {
+        // Check for strip boundary crossing.
+        let (old_chunk_id, _) = World::world_to_local_coord_f32(old_position);
+        let (chunk_id, _) = World::world_to_local_coord_f32(new_position);
+        let crossed_strip = (chunk_id.x != old_chunk_id.x) | (chunk_id.z != old_chunk_id.z);
+        if !crossed_strip {
+            return;
+        }
+        // Prone chunks far away.
         self.chunks().for_each_loaded_chunk_id(|chunk_id_| {
             let chunk_xz = point2(chunk_id_.x as f32, chunk_id_.z as f32);
             let current_chunk_xz = point2(chunk_id.x as f32, chunk_id.z as f32);
             let distance2 = chunk_xz.distance2(current_chunk_xz);
             if distance2 > (self.view_distance as f32).powi(2) + 1.0 {
-                to_be_removed.push(chunk_id_);
+                self.chunks().remove_chunk(chunk_id_);
             }
         });
-        for chunk_id in to_be_removed {
-            self.chunks().remove_chunk(chunk_id);
-        }
+        self.load_chunks_in_view_distance(new_position);
     }
 }
