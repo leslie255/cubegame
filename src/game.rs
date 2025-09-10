@@ -15,7 +15,7 @@ use glium::{
 
 use crate::{
     ProgramArgs,
-    block::{BlockRegistry, GameBlocks},
+    block::{BlockFace, BlockRegistry, GameBlocks},
     input::InputHelper,
     mesh::{self, Color},
     resource::ResourceLoader,
@@ -464,7 +464,7 @@ impl<'scope, 'res> Game<'scope, 'res> {
 
         self.clear_frame(&mut frame);
 
-        self.draw_chunks(&mut frame);
+        self.draw_chunks(&mut frame, self.player_camera.camera);
         self.draw_info_text(&mut frame);
 
         frame.finish().unwrap();
@@ -487,7 +487,8 @@ impl<'scope, 'res> Game<'scope, 'res> {
         frame.clear_color_and_depth(clear_color, 1.);
     }
 
-    fn draw_chunks(&mut self, frame: &mut glium::Frame) {
+    fn draw_chunks(&mut self, frame: &mut glium::Frame, camera: Camera) {
+        let camera_chunk_id = World::world_to_local_coord_f32(camera.position).0;
         let view_matrix = self.player_camera.camera.view_matrix();
         let frame_size = self.window.inner_size();
         let projection_matrix = self.player_camera.camera.projection_matrix(Vector2::new(
@@ -516,16 +517,43 @@ impl<'scope, 'res> Game<'scope, 'res> {
                     (chunk_id.y * 32) as f32,
                     (chunk_id.z * 32) as f32,
                 ));
-                let uniforms = glium::uniform! {
-                    model_view: mesh::matrix4_to_array(view_matrix * model_matrix),
-                    projection: mesh::matrix4_to_array(projection_matrix),
-                    texture_atlas: mesh::texture_sampler(&self.resources.block_atlas),
-                };
-                chunk.client.mesh.update_if_needed(&self.display);
-                chunk
-                    .client
-                    .mesh
-                    .draw(frame, uniforms, shader, draw_parameters);
+                let mut faces_mask = [
+                    true, // south  (+z)
+                    true, // north  (-z)
+                    true, // east   (+x)
+                    true, // west   (-x)
+                    true, // top    (+y)
+                    true, // bottom (-y)
+                ];
+                use BlockFace::*;
+                if camera_chunk_id.z > chunk_id.z {
+                    faces_mask[North.to_usize()] = false;
+                } else if camera_chunk_id.z < chunk_id.z {
+                    faces_mask[South.to_usize()] = false;
+                } else if camera_chunk_id.x > chunk_id.x {
+                    faces_mask[West.to_usize()] = false;
+                } else if camera_chunk_id.x < chunk_id.x {
+                    faces_mask[East.to_usize()] = false;
+                } else if camera_chunk_id.y > chunk_id.y {
+                    faces_mask[Bottom.to_usize()] = false;
+                } else if camera_chunk_id.y < chunk_id.y {
+                    faces_mask[Top.to_usize()] = false;
+                }
+                for (i_face, mesh) in chunk.client.meshes.iter_mut().enumerate() {
+                    if !faces_mask[i_face] {
+                        continue;
+                    }
+                    let face = BlockFace::from_usize(i_face).unwrap();
+                    let normal: [f32; 3] = face.normal_vector().into();
+                    let uniforms = glium::uniform! {
+                        model_view: mesh::matrix4_to_array(view_matrix * model_matrix),
+                        projection: mesh::matrix4_to_array(projection_matrix),
+                        texture_atlas: mesh::texture_sampler(&self.resources.block_atlas),
+                        normal: normal,
+                    };
+                    mesh.update_if_needed(&self.display);
+                    mesh.draw(frame, uniforms, shader, draw_parameters);
+                }
             });
     }
 

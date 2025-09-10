@@ -280,6 +280,12 @@ impl<V: Copy + glium::Vertex, I: Copy + glium::index::Index> SharedMesh<V, I> {
         self.vertices_indices_mut().1
     }
 
+    pub fn clear(&mut self) {
+        let (vertices, indices) = self.vertices_indices_mut();
+        vertices.clear();
+        indices.clear();
+    }
+
     pub fn append(&mut self, vertices: &[V], indices: &[I])
     where
         I: Add<u32, Output = I>,

@@ -78,17 +78,15 @@ impl ChunkData {
 pub struct BlockVertex {
     pub position: [f32; 3],
     pub uv: [f32; 2],
-    pub normal: [f32; 3],
 }
 
-glium::implement_vertex!(BlockVertex, position, uv, normal);
+glium::implement_vertex!(BlockVertex, position, uv);
 
 impl BlockVertex {
-    pub const fn new(position: [f32; 3], uv: [f32; 2], normal: [f32; 3]) -> Self {
+    pub const fn new(position: [f32; 3], uv: [f32; 2]) -> Self {
         Self {
             position,
             uv,
-            normal,
         }
     }
 }
@@ -102,45 +100,45 @@ impl<'res> ChunkBuilder<'res> {
     const CUBE_VERTICES: [[BlockVertex; 4]; 6] = [
         // South
         [
-            BlockVertex::new([0., 0., 1.], [0., 1.], [0., 0., 1.]),
-            BlockVertex::new([1., 0., 1.], [1., 1.], [0., 0., 1.]),
-            BlockVertex::new([1., 1., 1.], [1., 0.], [0., 0., 1.]),
-            BlockVertex::new([0., 1., 1.], [0., 0.], [0., 0., 1.]),
+            BlockVertex::new([0., 0., 1.], [0., 1.]),
+            BlockVertex::new([1., 0., 1.], [1., 1.]),
+            BlockVertex::new([1., 1., 1.], [1., 0.]),
+            BlockVertex::new([0., 1., 1.], [0., 0.]),
         ],
         // North
         [
-            BlockVertex::new([0., 0., 0.], [1., 1.], [0., 0., -1.]),
-            BlockVertex::new([0., 1., 0.], [1., 0.], [0., 0., -1.]),
-            BlockVertex::new([1., 1., 0.], [0., 0.], [0., 0., -1.]),
-            BlockVertex::new([1., 0., 0.], [0., 1.], [0., 0., -1.]),
+            BlockVertex::new([0., 0., 0.], [1., 1.]),
+            BlockVertex::new([0., 1., 0.], [1., 0.]),
+            BlockVertex::new([1., 1., 0.], [0., 0.]),
+            BlockVertex::new([1., 0., 0.], [0., 1.]),
         ],
         // East
         [
-            BlockVertex::new([1., 0., 0.], [1., 1.], [1., 0., 0.]),
-            BlockVertex::new([1., 1., 0.], [1., 0.], [1., 0., 0.]),
-            BlockVertex::new([1., 1., 1.], [0., 0.], [1., 0., 0.]),
-            BlockVertex::new([1., 0., 1.], [0., 1.], [1., 0., 0.]),
+            BlockVertex::new([1., 0., 0.], [1., 1.]),
+            BlockVertex::new([1., 1., 0.], [1., 0.]),
+            BlockVertex::new([1., 1., 1.], [0., 0.]),
+            BlockVertex::new([1., 0., 1.], [0., 1.]),
         ],
         // West
         [
-            BlockVertex::new([0., 1., 0.], [0., 0.], [-1., 0., 0.]),
-            BlockVertex::new([0., 0., 0.], [0., 1.], [-1., 0., 0.]),
-            BlockVertex::new([0., 0., 1.], [1., 1.], [-1., 0., 0.]),
-            BlockVertex::new([0., 1., 1.], [1., 0.], [-1., 0., 0.]),
+            BlockVertex::new([0., 1., 0.], [0., 0.]),
+            BlockVertex::new([0., 0., 0.], [0., 1.]),
+            BlockVertex::new([0., 0., 1.], [1., 1.]),
+            BlockVertex::new([0., 1., 1.], [1., 0.]),
         ],
         // Up
         [
-            BlockVertex::new([1., 1., 0.], [0.0, 1.0], [0., 1., 0.]),
-            BlockVertex::new([0., 1., 0.], [1.0, 1.0], [0., 1., 0.]),
-            BlockVertex::new([0., 1., 1.], [1.0, 0.0], [0., 1., 0.]),
-            BlockVertex::new([1., 1., 1.], [0.0, 0.0], [0., 1., 0.]),
+            BlockVertex::new([1., 1., 0.], [0.0, 1.0]),
+            BlockVertex::new([0., 1., 0.], [1.0, 1.0]),
+            BlockVertex::new([0., 1., 1.], [1.0, 0.0]),
+            BlockVertex::new([1., 1., 1.], [0.0, 0.0]),
         ],
         // Down
         [
-            BlockVertex::new([0., 0., 0.], [0.0, 1.0], [0., -1., 0.]),
-            BlockVertex::new([1., 0., 0.], [1.0, 1.0], [0., -1., 0.]),
-            BlockVertex::new([1., 0., 1.], [1.0, 0.0], [0., -1., 0.]),
-            BlockVertex::new([0., 0., 1.], [0.0, 0.0], [0., -1., 0.]),
+            BlockVertex::new([0., 0., 0.], [0.0, 1.0]),
+            BlockVertex::new([1., 0., 0.], [1.0, 1.0]),
+            BlockVertex::new([1., 0., 1.], [1.0, 0.0]),
+            BlockVertex::new([0., 0., 1.], [0.0, 0.0]),
         ],
     ];
 
@@ -153,8 +151,9 @@ impl<'res> ChunkBuilder<'res> {
     }
 
     pub fn build(&mut self, chunk: &mut Chunk) {
-        chunk.client.mesh.vertices_mut().clear();
-        chunk.client.mesh.indices_mut().clear();
+        for mesh in &mut chunk.client.meshes {
+            mesh.clear();
+        }
         for y in 0..32 {
             for x in 0..32 {
                 for z in 0..32 {
@@ -199,13 +198,10 @@ impl<'res> ChunkBuilder<'res> {
                     vertex.uv[0] * texture_coord.right + (1. - vertex.uv[0]) * texture_coord.left,
                     vertex.uv[1] * texture_coord.bottom + (1. - vertex.uv[1]) * texture_coord.top,
                 ],
-                normal: vertex.normal,
             });
             let indices = Self::FACE_INDICIES;
-            chunk
-                .client
-                .mesh
-                .append(vertices.as_slice(), indices.as_slice());
+            let mesh = chunk.client.mesh_mut(block_face);
+            mesh.append(vertices.as_slice(), indices.as_slice());
         }
     }
 
@@ -250,11 +246,19 @@ impl<'res> ChunkBuilder<'res> {
 
 #[derive(Debug, Default)]
 pub struct ClientChunk {
-    pub mesh: SharedMesh<BlockVertex>,
+    pub meshes: [SharedMesh<BlockVertex>; 6],
 }
 
 impl ClientChunk {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn mesh(&self, face: BlockFace) -> &SharedMesh<BlockVertex> {
+        &self.meshes[face.to_usize()]
+    }
+
+    pub fn mesh_mut(&mut self, face: BlockFace) -> &mut SharedMesh<BlockVertex> {
+        &mut self.meshes[face.to_usize()]
     }
 }

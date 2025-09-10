@@ -142,7 +142,7 @@ where
         worldgen: Arc<WorldGenerator<'res>>,
     ) -> Self {
         let chunk_builder = ChunkBuilder::new(resources);
-        let (tasks_tx, tasks_rx) = mpmc::sync_channel(8);
+        let (tasks_tx, tasks_rx) = mpmc::sync_channel(128);
         Self {
             workers: {
                 let n_threads = num_cpus::get();

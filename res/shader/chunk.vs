@@ -2,10 +2,10 @@
 
 in vec3 position;
 in vec2 uv;
-in vec3 normal;
 
 uniform mat4 model_view;
 uniform mat4 projection;
+uniform vec3 normal;
 
 out vec2 vert_uv;
 out vec3 vert_normal;

@@ -1,3 +1,5 @@
+use cgmath::*;
+
 use index_vec::IndexVec;
 
 #[repr(u8)]
@@ -46,12 +48,23 @@ impl BlockFace {
 
     pub const fn to_usize(self) -> usize {
         match self {
-            BlockFace::South => 0,
-            BlockFace::North => 1,
-            BlockFace::East => 2,
-            BlockFace::West => 3,
-            BlockFace::Top => 4,
-            BlockFace::Bottom => 5,
+            Self::South => 0,
+            Self::North => 1,
+            Self::East => 2,
+            Self::West => 3,
+            Self::Top => 4,
+            Self::Bottom => 5,
+        }
+    }
+
+    pub const fn normal_vector(self) -> Vector3<f32> {
+        match self {
+            Self::South => vec3(0., 0., 1.),
+            Self::North => vec3(0., 0., -1.),
+            Self::East => vec3(1., 0., 0.),
+            Self::West => vec3(-1., 0., 0.),
+            Self::Top => vec3(0., 1., 0.),
+            Self::Bottom => vec3(0., -1., 0.),
         }
     }
 }
@@ -232,10 +245,10 @@ impl GameBlocks {
                 transparency: BlockTransparency::Solid,
                 model: BlockModel {
                     faces: [
-                        BlockTextureId(9), // South
-                        BlockTextureId(9), // North
-                        BlockTextureId(9), // East
-                        BlockTextureId(9), // West
+                        BlockTextureId(9),  // South
+                        BlockTextureId(9),  // North
+                        BlockTextureId(9),  // East
+                        BlockTextureId(9),  // West
                         BlockTextureId(10), // Top
                         BlockTextureId(10), // Bottom
                     ],
