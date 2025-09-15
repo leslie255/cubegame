@@ -1,4 +1,4 @@
-use glium::winit::{event::KeyEvent, keyboard::{KeyCode, PhysicalKey}};
+use winit::{event::KeyEvent, keyboard::{KeyCode, PhysicalKey}};
 
 /// Keeps track of which keys are currently down.
 #[derive(Debug, Clone)]

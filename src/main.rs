@@ -1,27 +1,22 @@
 #![feature(mpmc_channel)]
 #![allow(dead_code, linker_messages)]
 
-use std::{path::PathBuf, thread};
+use std::path::PathBuf;
 
 use clap::Parser;
-use glium::{
-    backend::glutin,
-    winit::{self, dpi::LogicalSize, window::WindowAttributes},
-};
 
 pub mod block;
 pub mod chunk;
 pub mod game;
 pub mod input;
-pub mod mesh;
 pub mod resource;
 pub mod text;
 pub mod utils;
+pub mod wgpu_utils;
 pub mod world;
 pub mod worldgen;
-pub mod features;
 
-use game::{Game, GameResources};
+use crate::game::App;
 
 #[derive(Debug, Clone, clap::Parser)]
 pub struct ProgramArgs {
@@ -35,6 +30,12 @@ pub struct ProgramArgs {
     /// The world height, in chunks.
     #[arg(long, default_value_t = 8)]
     pub height: u16,
+    /// The window width on launch.
+    #[arg(long, default_value_t = 800)]
+    pub wwidth: u32,
+    /// The window height on launch.
+    #[arg(long, default_value_t = 600)]
+    pub wheight: u32,
 }
 
 fn main() {
@@ -46,18 +47,9 @@ fn main() {
 
     let event_loop = winit::event_loop::EventLoop::builder().build().unwrap();
 
-    let window_attributes = WindowAttributes::default()
-        .with_title("Cube Game")
-        .with_inner_size(LogicalSize::new(800, 480));
+    let mut app = App::new(program_args);
 
-    let (window, display) = glutin::SimpleWindowBuilder::new()
-        .set_window_builder(window_attributes)
-        .build(&event_loop);
+    app.run(event_loop);
 
-    let resources = GameResources::load(&display, program_args.res.clone());
-
-    thread::scope(|scope| {
-        let mut game = Game::new(&resources, window, display, scope, program_args);
-        event_loop.run_app(&mut game).unwrap();
-    });
+    // let resources = GameResources::load(&display, program_args.res.clone());
 }

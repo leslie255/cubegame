@@ -111,7 +111,14 @@ impl ResourceLoader {
             self.handle_resource_not_exist(subpath);
         }
         println!("[INFO] loading {path:?}");
-        image::open(&path)
-            .unwrap_or_else(|_| self.handle_malformed_image_encoding(subpath))
+        image::open(&path).unwrap_or_else(|_| self.handle_malformed_image_encoding(subpath))
+    }
+
+    pub fn load_shader(&self, device: &wgpu::Device, subpath: impl AsRef<Path>) -> wgpu::ShaderModule {
+        let source = self.read_to_string(subpath);
+        device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(source.into()),
+        })
     }
 }

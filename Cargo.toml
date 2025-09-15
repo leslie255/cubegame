@@ -7,7 +7,6 @@ edition = "2024"
 debug = true
 
 [dependencies]
-glium = "*"
 cgmath = "0.18"
 index_vec = "*"
 image = "0.25"
@@ -20,3 +19,7 @@ num_cpus = "1"
 clap = { version = "4.5.47", features = ["derive"] }
 getrandom = "0.3.3"
 noise = "0.9.0"
+wgpu = "26.0.1"
+bytemuck = { version = "1.23.2", features = ["derive"] }
+pollster = "0.4.0"
+winit = "0.30.12"
