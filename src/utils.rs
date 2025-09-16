@@ -71,6 +71,9 @@ macro_rules! impl_with_x {
 impl_with_x!(Point1);
 impl_with_x!(Point2);
 impl_with_x!(Point3);
+impl_with_x!(Vector1);
+impl_with_x!(Vector2);
+impl_with_x!(Vector3);
 
 pub trait WithY<S> {
     fn with_y(self, new_y: S) -> Self;
@@ -88,13 +91,22 @@ macro_rules! impl_with_y {
 
 impl_with_y!(Point2);
 impl_with_y!(Point3);
+impl_with_y!(Vector2);
+impl_with_y!(Vector3);
 
 pub trait WithZ<S> {
     fn with_z(self, new_z: S) -> Self;
 }
 
-impl<S> WithZ<S> for Point3<S> {
-    fn with_z(self, new_z: S) -> Self {
-        Self { z: new_z, ..self }
-    }
+macro_rules! impl_with_z {
+    ($t:tt $(,)?) => {
+        impl<S> WithZ<S> for $t<S> {
+            fn with_z(self, new_z: S) -> Self {
+                Self { z: new_z, ..self }
+            }
+        }
+    };
 }
+
+impl_with_z!(Point3);
+impl_with_z!(Vector3);

@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
+use cgmath::*;
+
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent,
+    event::{DeviceEvent, WindowEvent},
     event_loop::EventLoop,
     window::{Window, WindowAttributes},
 };
@@ -70,7 +72,7 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::RedrawRequested => {
-                game.frame();
+                game.frame(&self.input_helper);
                 self.window.as_ref().unwrap().request_redraw();
                 let fps_update = self.fps_counter.frame();
                 if let Some(fps) = fps_update {
@@ -93,6 +95,22 @@ impl ApplicationHandler for App {
                 game.mouse_input(state, button, &self.input_helper);
             }
             WindowEvent::Resized(_) => game.resized(),
+            _ => (),
+        }
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &winit::event_loop::ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: DeviceEvent,
+    ) {
+        let game = self.game.as_mut().unwrap();
+        match event {
+            DeviceEvent::MouseMotion { delta: (x, y) } => {
+                game.cursor_moved(vec2(x as f32, y as f32), &self.input_helper);
+            }
+            DeviceEvent::MouseWheel { delta: _ } => (),
             _ => (),
         }
     }

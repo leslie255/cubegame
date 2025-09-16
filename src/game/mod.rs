@@ -1,11 +1,12 @@
-use std::{fmt::Write as _, sync::Arc};
+use std::{fmt::Write as _, sync::Arc, time::Instant};
 
 use cgmath::*;
 
 use pollster::FutureExt as _;
 use winit::{
     event::{ElementState, KeyEvent, MouseButton},
-    window::Window,
+    keyboard::{KeyCode, PhysicalKey},
+    window::{CursorGrabMode, Window},
 };
 
 use crate::{
@@ -13,6 +14,7 @@ use crate::{
     chunk::{Chunk, ChunkBuilder, ChunkData, ChunkRenderer, ClientChunk},
     input::InputHelper,
     text::{Text, TextRenderer},
+    utils::{BoolToggle, WithY as _},
     world::{ChunkId, LocalCoordU8},
 };
 
@@ -34,7 +36,9 @@ pub struct Game {
     surface: wgpu::Surface<'static>,
     surface_color_format: wgpu::TextureFormat,
     depth_stencil_texture_view: wgpu::TextureView,
+    last_frame_instant: Instant,
     fps: f64,
+    is_paused: bool,
     text_renderer: TextRenderer,
     debug_text: Text,
     debug_text_string: String,
@@ -42,6 +46,7 @@ pub struct Game {
     chunk_renderer: ChunkRenderer,
     chunk: Chunk,
     chunk_builder: ChunkBuilder,
+    player_camera: PlayerCamera,
 }
 
 impl Game {
@@ -95,6 +100,12 @@ impl Game {
 
         let depth_stencil_texture_view = Self::create_depth_stencil_texture(&device, frame_size_u);
 
+        let player_camera = PlayerCamera {
+            position: point3(0., 0., 0.),
+            pitch: 0.,
+            yaw: -90.,
+        };
+
         let mut self_ = Self {
             device,
             queue,
@@ -103,7 +114,9 @@ impl Game {
             surface,
             surface_color_format,
             depth_stencil_texture_view,
+            last_frame_instant: Instant::now(),
             fps: f64::NAN,
+            is_paused: false,
             text_renderer,
             debug_text: text,
             debug_text_needs_updating: true,
@@ -114,6 +127,7 @@ impl Game {
             chunk_renderer,
             chunk,
             chunk_builder,
+            player_camera,
         };
         self_.configure_surface();
         self_
@@ -143,15 +157,36 @@ impl Game {
     }
 
     #[expect(unused_variables)]
-    pub fn keyboard_input(&mut self, event: KeyEvent, input_helper: &InputHelper) {}
+    pub fn keyboard_input(&mut self, event: KeyEvent, input_helper: &InputHelper) {
+        if (!event.repeat)
+            & (event.physical_key == PhysicalKey::Code(KeyCode::Escape))
+            & (event.state.is_pressed())
+        {
+            self.is_paused.toggle();
+            if !self.is_paused {
+                _ = self.window.set_cursor_grab(CursorGrabMode::Locked);
+                self.window.set_cursor_visible(false);
+            } else {
+                _ = self.window.set_cursor_grab(CursorGrabMode::None);
+                self.window.set_cursor_visible(true);
+            }
+        }
+    }
 
     #[expect(unused_variables)]
     pub fn mouse_input(
         &mut self,
         state: ElementState,
         button: MouseButton,
-        intput_helper: &InputHelper,
+        input_helper: &InputHelper,
     ) {
+    }
+
+    #[expect(unused_variables)]
+    pub fn cursor_moved(&mut self, delta: Vector2<f32>, input_helper: &InputHelper) {
+        if !self.is_paused {
+            self.player_camera.cursor_moved(0.1, delta);
+        }
     }
 
     pub fn resized(&mut self) {
@@ -189,7 +224,9 @@ impl Game {
         _ = writeln!(&mut self.debug_text_string, "FPS: {}", self.fps);
     }
 
-    pub fn frame(&mut self) {
+    pub fn frame(&mut self, input_helper: &InputHelper) {
+        self.move_player(input_helper);
+
         let surface_texture = self
             .surface
             .get_current_texture()
@@ -257,15 +294,11 @@ impl Game {
     fn draw_chunks(&self, render_pass: &mut wgpu::RenderPass) {
         render_pass.set_pipeline(&self.chunk_renderer.pipeline);
         render_pass.set_bind_group(0, &self.chunk_renderer.bind_group_0_wgpu, &[]);
-        let projection = cgmath::perspective(
-            Deg(90.0),
-            self.frame_size.x / self.frame_size.y,
-            0.1,
-            1000.0,
-        );
-        let view = Matrix4::from_translation(vec3(-0.5, -0.5, -2.0));
+        let projection = self.player_camera.projection_matrix(self.frame_size);
+        let view = self.player_camera.view_matrix();
         self.chunk_renderer
             .set_view_projection(&self.queue, projection * view);
+        self.chunk_renderer.set_sun(&self.queue, vec3(1., -2., 0.5).normalize());
         for mesh in &self.chunk.client.meshes {
             let Some(mesh) = mesh else {
                 continue;
@@ -278,5 +311,92 @@ impl Game {
             render_pass.set_bind_group(1, &mesh.bind_group_1_wgpu, &[]);
             render_pass.draw_indexed(0..mesh.index_buffer.length(), 0, 0..1);
         }
+    }
+
+    fn move_player(&mut self, input_helper: &InputHelper) {
+        let now = Instant::now();
+        let duration_since_last_frame = now.duration_since(self.last_frame_instant);
+        self.last_frame_instant = now;
+        if self.is_paused {
+            return;
+        }
+        let mut movement = vec3(0., 0., 0.);
+        if input_helper.key_is_down(KeyCode::KeyW) {
+            movement.z += 1.0;
+        }
+        if input_helper.key_is_down(KeyCode::KeyS) {
+            movement.z -= 1.0;
+        }
+        if input_helper.key_is_down(KeyCode::KeyA) {
+            movement.x -= 1.0;
+        }
+        if input_helper.key_is_down(KeyCode::KeyD) {
+            movement.x += 1.0;
+        }
+        if input_helper.key_is_down(KeyCode::Space) {
+            movement.y += 1.0;
+        }
+        if input_helper.key_is_down(KeyCode::KeyR) {
+            movement.y -= 1.0;
+        }
+        movement.normalize();
+        movement *= 4.;
+        if input_helper.key_is_down(KeyCode::F3) {
+            movement *= 32.;
+        } else if input_helper.key_is_down(KeyCode::ControlLeft) {
+            movement *= 4.;
+        }
+        movement *= duration_since_last_frame.as_secs_f32();
+        self.player_camera.move_(movement);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct PlayerCamera {
+    position: Point3<f32>,
+    pitch: f32,
+    yaw: f32,
+}
+
+impl PlayerCamera {
+    /// Move the camera according to cursor movement.
+    /// Assuming up vector is directly up.
+    pub fn cursor_moved(&mut self, sensitivity: f32, delta: Vector2<f32>) {
+        self.yaw += delta.x * sensitivity;
+        self.pitch -= delta.y * sensitivity;
+        self.pitch = self.pitch.clamp(-89.99, 89.99);
+        if self.yaw <= -180. {
+            self.yaw += 360.;
+        } else if self.yaw >= 180. {
+            self.yaw -= 360.;
+        }
+    }
+
+    pub fn move_(&mut self, delta: Vector3<f32>) {
+        let direction = self.direction();
+        let forward = direction.with_y(0.).normalize();
+        let up = Vector3::unit_y();
+        let right = forward.cross(up).normalize();
+
+        let forward_scaled = delta.z * forward;
+        let right_scaled = delta.x * right;
+        let up_scaled = delta.y * up;
+        self.position += forward_scaled + right_scaled + up_scaled;
+    }
+
+    pub fn direction(&self) -> Vector3<f32> {
+        Vector3::new(
+            self.yaw.to_radians().cos() * self.pitch.to_radians().cos(),
+            self.pitch.to_radians().sin(),
+            self.yaw.to_radians().sin() * self.pitch.to_radians().cos(),
+        )
+    }
+
+    pub fn view_matrix(self) -> Matrix4<f32> {
+        Matrix4::look_to_rh(self.position, self.direction(), Vector3::unit_y())
+    }
+
+    pub fn projection_matrix(self, frame_size: Vector2<f32>) -> Matrix4<f32> {
+        cgmath::perspective(Deg(90.), frame_size.x / frame_size.y, 0.1, 1000.0)
     }
 }

@@ -29,5 +29,6 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
     let cos_theta = clamp(dot(vertex.normal, sun), 0.0, 1.0);
-    return textureSample(texture, sampler_, vertex.uv) * (1.0 - 0.3 * cos_theta);
+    let sample = textureSample(texture, sampler_, vertex.uv);
+    return vec4<f32>(sample.rgb * (1.0 - 0.3 * cos_theta), sample.a);
 }
