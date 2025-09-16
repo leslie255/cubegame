@@ -6,7 +6,7 @@
 //     thread,
 // };
 // 
-// use cgmath::*;
+use cgmath::*;
 // 
 // use crate::{
 //     ProgramArgs,
@@ -17,15 +17,15 @@
 //     worldgen::WorldGenerator,
 // };
 // 
-// pub type LocalCoordU8 = Point3<u8>;
-// 
-// pub type LocalCoordF32 = Point3<f32>;
-// 
-// pub type ChunkId = Point3<i32>;
-// 
-// pub type WorldCoordI32 = Point3<i32>;
-// 
-// pub type WorldCoordF32 = Point3<f32>;
+pub type LocalCoordU8 = Point3<u8>;
+
+pub type LocalCoordF32 = Point3<f32>;
+
+pub type ChunkId = Point3<i32>;
+
+pub type WorldCoordI32 = Point3<i32>;
+
+pub type WorldCoordF32 = Point3<f32>;
 // 
 // /// A task for the chunk workers.
 // #[derive(Debug, Clone)]

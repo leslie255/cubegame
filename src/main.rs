@@ -9,7 +9,6 @@ pub mod block;
 pub mod chunk;
 pub mod game;
 pub mod input;
-pub mod resource;
 pub mod text;
 pub mod utils;
 pub mod wgpu_utils;
@@ -39,10 +38,6 @@ pub struct ProgramArgs {
 }
 
 fn main() {
-    unsafe {
-        utils::this_thread_is_main_thread_pinky_promise();
-    }
-
     let program_args = ProgramArgs::parse();
 
     let event_loop = winit::event_loop::EventLoop::builder().build().unwrap();
@@ -50,6 +45,4 @@ fn main() {
     let mut app = App::new(program_args);
 
     app.run(event_loop);
-
-    // let resources = GameResources::load(&display, program_args.res.clone());
 }

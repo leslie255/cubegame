@@ -4,8 +4,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use image::DynamicImage;
+use image::{DynamicImage, RgbaImage};
 use serde::de::DeserializeOwned;
+
+use crate::{
+    block::{BlockRegistry, GameBlocks},
+    text::Font,
+};
 
 #[derive(Debug)]
 pub struct ResourceLoader {
@@ -114,11 +119,49 @@ impl ResourceLoader {
         image::open(&path).unwrap_or_else(|_| self.handle_malformed_image_encoding(subpath))
     }
 
-    pub fn load_shader(&self, device: &wgpu::Device, subpath: impl AsRef<Path>) -> wgpu::ShaderModule {
+    pub fn load_shader(
+        &self,
+        device: &wgpu::Device,
+        subpath: impl AsRef<Path>,
+    ) -> wgpu::ShaderModule {
         let source = self.read_to_string(subpath);
         device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(source.into()),
         })
+    }
+
+    pub fn load_font(&self, subpath: impl AsRef<Path>) -> Font {
+        Font::load_from_path(self, subpath)
+    }
+}
+
+#[derive(Debug)]
+pub struct GameResources {
+    pub shader_text: wgpu::ShaderModule,
+    pub shader_chunk: wgpu::ShaderModule,
+    pub font: Font,
+    pub block_atlas_image: RgbaImage,
+    pub block_registry: BlockRegistry,
+    pub game_blocks: GameBlocks,
+    pub loader: ResourceLoader,
+}
+
+impl GameResources {
+    /// Uses the default resource directory if `res_directory` is `None`.
+    pub fn load(device: &wgpu::Device, res_directory: Option<PathBuf>) -> Self {
+        let res_directory = res_directory.unwrap_or_else(ResourceLoader::default_res_directory);
+        let loader = ResourceLoader::with_res_directory(res_directory.clone())
+            .unwrap_or_else(|| panic!("Cannot find resource directory {res_directory:?}"));
+        let mut block_registry = BlockRegistry::default();
+        Self {
+            shader_text: loader.load_shader(device, "shader/text.wgsl"),
+            shader_chunk: loader.load_shader(device, "shader/chunk.wgsl"),
+            font: loader.load_font("font/big_blue_terminal.json"),
+            block_atlas_image: loader.load_image("texture/block_atlas.png").to_rgba8(),
+            game_blocks: GameBlocks::new(&mut block_registry),
+            block_registry,
+            loader,
+        }
     }
 }

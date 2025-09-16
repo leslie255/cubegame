@@ -1,6 +1,7 @@
-use std::{borrow::Cow, path::Path};
+use std::path::Path;
 
 use std::ops::Range;
+use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 use image::RgbaImage;
@@ -9,30 +10,14 @@ use serde::{Deserialize, Serialize};
 use cgmath::*;
 use wgpu::util::DeviceExt;
 
+use crate::game::GameResources;
+use crate::utils::Quad2d;
 use crate::wgpu_utils::{IndexBuffer, Vertex, Vertex2dUV, VertexBuffer};
 use crate::{
+    game::ResourceLoader,
     impl_as_bind_group,
-    resource::ResourceLoader,
     wgpu_utils::{self, UniformBuffer},
 };
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Quad2d {
-    pub left: f32,
-    pub right: f32,
-    pub bottom: f32,
-    pub top: f32,
-}
-
-impl Quad2d {
-    pub fn width(self) -> f32 {
-        (self.right - self.left).abs()
-    }
-
-    pub fn height(self) -> f32 {
-        (self.top - self.bottom).abs()
-    }
-}
 
 fn normalize_coord_in_texture(texture_size: Vector2<u32>, coord: Vector2<u32>) -> Vector2<f32> {
     let texture_size_f = texture_size.map(|x| x as f32);
@@ -197,28 +182,23 @@ impl Text {
 
 #[derive(Debug, Clone)]
 pub struct TextRenderer {
-    pub pipeline: wgpu::RenderPipeline,
-    pub bind_group_layout: wgpu::BindGroupLayout,
-    pub texture_view: wgpu::TextureView,
-    pub sampler: wgpu::Sampler,
-    pub font: Font,
-    pub vertex_buffer: VertexBuffer<Vertex2dUV>,
-    pub index_buffer: IndexBuffer<u16>,
+    pipeline: wgpu::RenderPipeline,
+    bind_group_layout: wgpu::BindGroupLayout,
+    texture_view: wgpu::TextureView,
+    resources: Arc<GameResources>,
+    sampler: wgpu::Sampler,
+    vertex_buffer: VertexBuffer<Vertex2dUV>,
+    index_buffer: IndexBuffer<u16>,
 }
 
 impl TextRenderer {
     pub fn create(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        font: Font,
-        resource_loader: &ResourceLoader,
+        resources: Arc<GameResources>,
         surface_color_format: wgpu::TextureFormat,
+        depth_stencil_format: Option<wgpu::TextureFormat>,
     ) -> Self {
-        let shader_source = resource_loader.read_to_string("shader/text.wgsl");
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader_source)),
-        });
         let bind_group_layout = wgpu_utils::create_bind_group_layout::<TextBindGroup>(device);
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
@@ -229,13 +209,13 @@ impl TextRenderer {
             label: None,
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
+                module: &resources.shader_text,
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
                 buffers: &[Vertex2dUV::LAYOUT, TextInstance::LAYOUT],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
+                module: &resources.shader_text,
                 entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
@@ -252,12 +232,18 @@ impl TextRenderer {
                 })],
             }),
             primitive: Default::default(),
-            depth_stencil: None,
+            depth_stencil: depth_stencil_format.map(|format| wgpu::DepthStencilState {
+                format,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
             multisample: Default::default(),
             multiview: None,
             cache: None,
         });
-        let atlas_image = font.atlas_image();
+        let atlas_image = resources.font.atlas_image();
         let texture = device.create_texture_with_data(
             queue,
             &wgpu::TextureDescriptor {
@@ -294,14 +280,17 @@ impl TextRenderer {
         });
 
         // Vertex buffer.
-        let (atlas_width, atlas_height) = font.atlas_image().dimensions();
-        let glyph_size_pixels = font.glyph_size();
+        let (atlas_width, atlas_height) = resources.font.atlas_image().dimensions();
+        let glyph_size_pixels = resources.font.glyph_size();
         let glyph_width = glyph_size_pixels.x as f32 / atlas_width as f32;
         let glyph_height = glyph_size_pixels.y as f32 / atlas_height as f32;
         let vertices_data = &[
             Vertex2dUV::new([0., 0.], [0., 0.]),
-            Vertex2dUV::new([font.glyph_aspect_ratio(), 0.], [glyph_width, 0.]),
-            Vertex2dUV::new([font.glyph_aspect_ratio(), 1.], [glyph_width, glyph_height]),
+            Vertex2dUV::new([resources.font.glyph_aspect_ratio(), 0.], [glyph_width, 0.]),
+            Vertex2dUV::new(
+                [resources.font.glyph_aspect_ratio(), 1.],
+                [glyph_width, glyph_height],
+            ),
             Vertex2dUV::new([0., 1.], [0., glyph_height]),
         ];
         let vertex_buffer = VertexBuffer::create_init(device, vertices_data);
@@ -314,8 +303,8 @@ impl TextRenderer {
             bind_group_layout,
             pipeline,
             texture_view,
+            resources,
             sampler,
-            font,
             vertex_buffer,
             index_buffer,
         }
@@ -372,12 +361,15 @@ impl TextRenderer {
             } else if char == '\r' {
                 column = 0;
                 continue;
-            } else if !self.font.has_glyph(char) {
+            } else if !self.resources.font.has_glyph(char) {
                 continue;
             }
-            let quad = self.font.quad(char);
+            let quad = self.resources.font.quad(char);
             instances.push(TextInstance {
-                position_offset: [column as f32 * self.font.glyph_aspect_ratio(), row as f32],
+                position_offset: [
+                    column as f32 * self.resources.font.glyph_aspect_ratio(),
+                    row as f32,
+                ],
                 uv_offset: [quad.left, quad.top],
             });
             column += 1;

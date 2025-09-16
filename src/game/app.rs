@@ -1,8 +1,18 @@
 use std::sync::Arc;
 
-use winit::{application::ApplicationHandler, dpi::LogicalSize, event::WindowEvent, event_loop::EventLoop, window::{Window, WindowAttributes}};
+use winit::{
+    application::ApplicationHandler,
+    dpi::LogicalSize,
+    event::WindowEvent,
+    event_loop::EventLoop,
+    window::{Window, WindowAttributes},
+};
 
-use crate::{game::{fps_counter::FpsCounter, Game}, input::InputHelper, ProgramArgs};
+use crate::{
+    ProgramArgs,
+    game::{Game, fps_counter::FpsCounter},
+    input::InputHelper,
+};
 
 #[derive(Debug)]
 pub struct App {
@@ -45,7 +55,7 @@ impl ApplicationHandler for App {
                     .unwrap();
                 let arc_window = Arc::new(window);
                 self.window = Some(arc_window.clone());
-                self.game = Some(Game::new(arc_window.clone()));
+                self.game = Some(Game::new(arc_window.clone(), &self.program_args));
             }
         }
     }
@@ -87,5 +97,3 @@ impl ApplicationHandler for App {
         }
     }
 }
-
-

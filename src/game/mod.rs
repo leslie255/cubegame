@@ -9,34 +9,43 @@ use winit::{
 };
 
 use crate::{
+    ProgramArgs,
+    chunk::{Chunk, ChunkBuilder, ChunkData, ChunkRenderer, ClientChunk},
     input::InputHelper,
-    resource::ResourceLoader,
-    text::{Font, Text, TextRenderer},
+    text::{Text, TextRenderer},
+    world::{ChunkId, LocalCoordU8},
 };
 
 mod app;
 mod fps_counter;
+mod resource;
 
 pub use app::*;
+pub use resource::*;
 
 #[derive(Debug)]
 pub struct Game {
     device: wgpu::Device,
     queue: wgpu::Queue,
     window: Arc<Window>,
+    resources: Arc<GameResources>,
     frame_size_u: Vector2<u32>,
     frame_size: Vector2<f32>,
     surface: wgpu::Surface<'static>,
-    surface_format: wgpu::TextureFormat,
+    surface_color_format: wgpu::TextureFormat,
+    depth_stencil_texture_view: wgpu::TextureView,
     fps: f64,
     text_renderer: TextRenderer,
     debug_text: Text,
     debug_text_string: String,
     debug_text_needs_updating: bool,
+    chunk_renderer: ChunkRenderer,
+    chunk: Chunk,
+    chunk_builder: ChunkBuilder,
 }
 
 impl Game {
-    pub fn new(window: Arc<Window>) -> Self {
+    pub fn new(window: Arc<Window>, program_args: &ProgramArgs) -> Self {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions::default())
@@ -49,31 +58,88 @@ impl Game {
 
         let surface = instance.create_surface(Arc::clone(&window)).unwrap();
         let surface_capabilities = surface.get_capabilities(&adapter);
-        let surface_format = surface_capabilities.formats[0];
+        let surface_color_format = surface_capabilities.formats[0];
 
-        let resource_loader = ResourceLoader::with_default_res_directory().unwrap();
-        let font = Font::load_from_path(&resource_loader, "font/big_blue_terminal.json");
-        let text_renderer =
-            TextRenderer::create(&device, &queue, font, &resource_loader, surface_format);
+        let resources = Arc::new(GameResources::load(
+            &device,
+            program_args.res.as_ref().cloned(),
+        ));
+
+        let text_renderer = TextRenderer::create(
+            &device,
+            &queue,
+            Arc::clone(&resources),
+            surface_color_format,
+            Some(Self::DEPTH_STENCIL_FORMAT),
+        );
         let text = text_renderer.create_text(&device, "CUBE GAME v0.0.0");
+
+        let chunk_renderer = ChunkRenderer::new(
+            &device,
+            &queue,
+            Arc::clone(&resources),
+            surface_color_format,
+            Some(Self::DEPTH_STENCIL_FORMAT),
+        );
+        let mut chunk = Chunk {
+            data: ChunkData::new_boxed(),
+            client: ClientChunk::new(),
+        };
+        *chunk.data.get_block_mut(LocalCoordU8::new(0, 0, 0)) = resources.game_blocks.grass;
+        let mut chunk_builder = ChunkBuilder::new(Arc::clone(&resources));
+        chunk_builder.build(&device, ChunkId::new(0, 0, 0), &mut chunk);
+
+        let physical_size = window.inner_size();
+        let frame_size_u = vec2(physical_size.width, physical_size.height);
+        let frame_size = frame_size_u.map(|u| u as f32);
+
+        let depth_stencil_texture_view = Self::create_depth_stencil_texture(&device, frame_size_u);
 
         let mut self_ = Self {
             device,
             queue,
             window,
+            resources,
             surface,
-            surface_format,
+            surface_color_format,
+            depth_stencil_texture_view,
             fps: f64::NAN,
             text_renderer,
             debug_text: text,
             debug_text_needs_updating: true,
             debug_text_string: String::new(),
             // Would be updated later immediately in the `resized` call.
-            frame_size_u: vec2(0, 0),
-            frame_size: vec2(0., 0.),
+            frame_size_u,
+            frame_size,
+            chunk_renderer,
+            chunk,
+            chunk_builder,
         };
-        self_.resized();
+        self_.configure_surface();
         self_
+    }
+
+    const DEPTH_STENCIL_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+    fn create_depth_stencil_texture(
+        device: &wgpu::Device,
+        size: Vector2<u32>,
+    ) -> wgpu::TextureView {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d {
+                width: size.x,
+                height: size.y,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::DEPTH_STENCIL_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[Self::DEPTH_STENCIL_FORMAT],
+        });
+        texture.create_view(&Default::default())
     }
 
     #[expect(unused_variables)]
@@ -93,17 +159,19 @@ impl Game {
         self.frame_size_u = vec2(physical_size.width, physical_size.height);
         self.frame_size = self.frame_size_u.map(|u| u as f32);
         self.configure_surface();
+        self.depth_stencil_texture_view =
+            Self::create_depth_stencil_texture(&self.device, self.frame_size_u);
     }
 
-    fn configure_surface(&self) {
+    fn configure_surface(&mut self) {
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: self.surface_format,
-            view_formats: vec![self.surface_format.add_srgb_suffix()],
+            format: self.surface_color_format,
+            view_formats: vec![self.surface_color_format.add_srgb_suffix()],
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             width: self.frame_size_u.x,
             height: self.frame_size_u.y,
-            desired_maximum_frame_latency: 2,
+            desired_maximum_frame_latency: 3,
             present_mode: wgpu::PresentMode::AutoVsync,
         };
         self.surface.configure(&self.device, &surface_config);
@@ -129,7 +197,7 @@ impl Game {
         let texture_view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor {
-                format: Some(self.surface_format.add_srgb_suffix()),
+                format: Some(self.surface_color_format.add_srgb_suffix()),
                 ..Default::default()
             });
 
@@ -154,11 +222,19 @@ impl Game {
                     store: wgpu::StoreOp::Store,
                 },
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.depth_stencil_texture_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0f32),
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
             timestamp_writes: None,
             occlusion_query_set: None,
         });
 
+        self.draw_chunks(&mut render_pass);
         self.draw_debug_text(&mut render_pass);
 
         drop(render_pass);
@@ -176,5 +252,31 @@ impl Game {
         let model_view = Matrix4::from_scale(font_size);
         self.debug_text.set_model_view(&self.queue, model_view);
         self.text_renderer.draw_text(render_pass, &self.debug_text);
+    }
+
+    fn draw_chunks(&self, render_pass: &mut wgpu::RenderPass) {
+        render_pass.set_pipeline(&self.chunk_renderer.pipeline);
+        render_pass.set_bind_group(0, &self.chunk_renderer.bind_group_0_wgpu, &[]);
+        let projection = cgmath::perspective(
+            Deg(90.0),
+            self.frame_size.x / self.frame_size.y,
+            0.1,
+            1000.0,
+        );
+        let view = Matrix4::from_translation(vec3(-0.5, -0.5, -2.0));
+        self.chunk_renderer
+            .set_view_projection(&self.queue, projection * view);
+        for mesh in &self.chunk.client.meshes {
+            let Some(mesh) = mesh else {
+                continue;
+            };
+            render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(
+                mesh.index_buffer.slice(..),
+                mesh.index_buffer.index_format(),
+            );
+            render_pass.set_bind_group(1, &mesh.bind_group_1_wgpu, &[]);
+            render_pass.draw_indexed(0..mesh.index_buffer.length(), 0, 0..1);
+        }
     }
 }
