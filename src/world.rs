@@ -187,8 +187,8 @@ where
                 let task = match tasks_rx.recv() {
                     Ok(task) => task,
                     Err(mpmc::RecvError) => {
-                        println!(
-                            "[ERROR] chunk worker thread {:?} stopping because main thread seems to be no longer",
+                        log::error!(
+                            "chunk worker thread {:?} stopping because main thread seems to be dead",
                             thread::current().id()
                         );
                         break;
@@ -244,8 +244,8 @@ where
             let mut chunk_lock = chunk.lock().unwrap();
             chunk_builder.build(device, chunk_id, &mut chunk_lock);
         } else {
-            println!(
-                "[WARNING] Chunk worker encountered a rebuild task referring to an unloaded chunk (chunk ID: {chunk_id:?})"
+            log::warn!(
+                "Chunk worker encountered a rebuild task referring to an unloaded chunk (chunk ID: {chunk_id:?})"
             );
         };
     }

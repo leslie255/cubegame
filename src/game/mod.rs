@@ -13,9 +13,11 @@ use crate::{
     ProgramArgs,
     block::BlockFace,
     chunk::ChunkRenderer,
+    impl_as_bind_group,
     input::InputHelper,
     text::{Text, TextRenderer},
     utils::{BoolToggle, WithY as _},
+    wgpu_utils::{self, DepthTextureView, UniformBuffer},
     world::World,
 };
 
@@ -39,6 +41,23 @@ pub fn initialize_wgpu() -> (wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::
     (instance, adapter, device, queue)
 }
 
+#[derive(Debug, Clone)]
+struct PostprocessBindGroup {
+    color_texture: wgpu::TextureView,
+    depth_texture: DepthTextureView,
+    sampler: wgpu::Sampler,
+    gamma: UniformBuffer<f32>,
+}
+
+impl_as_bind_group! {
+    PostprocessBindGroup {
+        0 => color_texture: wgpu::TextureView,
+        1 => depth_texture: DepthTextureView,
+        2 => sampler: wgpu::Sampler,
+        3 => gamma: UniformBuffer<f32>,
+    }
+}
+
 #[derive(Debug)]
 struct Context {
     device: wgpu::Device,
@@ -57,8 +76,13 @@ where
     resources: &'cx GameResources,
     frame_size_u: Vector2<u32>,
     frame_size: Vector2<f32>,
-    surface: wgpu::Surface<'static>,
-    surface_color_format: wgpu::TextureFormat,
+    window_surface: wgpu::Surface<'static>,
+    window_surface_format: wgpu::TextureFormat,
+    /// The scene before post-processing.
+    scene_texture: wgpu::Texture,
+    /// The scene before post-processing.
+    scene_texture_view: wgpu::TextureView,
+    depth_stencil_texture: wgpu::Texture,
     depth_stencil_texture_view: wgpu::TextureView,
     fps: f64,
     is_paused: bool,
@@ -67,11 +91,19 @@ where
     debug_text_string: String,
     debug_text_needs_updating: bool,
     chunk_renderer: ChunkRenderer,
+    postprocess_pipeline: wgpu::RenderPipeline,
+    postprocess_bind_group: PostprocessBindGroup,
+    postprocess_bind_group_wgpu: wgpu::BindGroup,
+    postprocess_bind_group_layout: wgpu::BindGroupLayout,
     world: World<'scope, 'cx>,
     player_camera: PlayerCamera,
 }
 
 impl<'scope, 'cx> Game<'scope, 'cx> {
+    const DEPTH_STENCIL_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+    const SCENE_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+
     fn new(
         instance: &wgpu::Instance,
         adapter: &wgpu::Adapter,
@@ -80,15 +112,15 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         thread_scope: &'scope thread::Scope<'scope, 'cx>,
         program_args: &ProgramArgs,
     ) -> Self {
-        let surface = instance.create_surface(Arc::clone(&window)).unwrap();
-        let surface_capabilities = surface.get_capabilities(adapter);
-        let surface_color_format = surface_capabilities.formats[0];
+        let window_surface = instance.create_surface(Arc::clone(&window)).unwrap();
+        let surface_capabilities = window_surface.get_capabilities(adapter);
+        let window_surface_format = surface_capabilities.formats[0];
 
         let text_renderer = TextRenderer::create(
             &context.device,
             &context.queue,
             &context.resources,
-            surface_color_format,
+            Self::SCENE_TEXTURE_FORMAT,
             Some(Self::DEPTH_STENCIL_FORMAT),
         );
         let text = text_renderer.create_text(&context.device, "CUBE GAME v0.0.0");
@@ -97,7 +129,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             &context.device,
             &context.queue,
             &context.resources,
-            surface_color_format,
+            Self::SCENE_TEXTURE_FORMAT,
             Some(Self::DEPTH_STENCIL_FORMAT),
         );
         let world = World::new(
@@ -111,8 +143,62 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         let frame_size_u = vec2(physical_size.width, physical_size.height);
         let frame_size = frame_size_u.map(|u| u as f32);
 
-        let depth_stencil_texture_view =
+        let depth_stencil_texture =
             Self::create_depth_stencil_texture(&context.device, frame_size_u);
+        let depth_stencil_texture_view = depth_stencil_texture.create_view(&Default::default());
+
+        let scene_texture = Self::create_scene_texture(&context.device, frame_size_u);
+        let scene_texture_view = scene_texture.create_view(&Default::default());
+
+        let postprocess_bind_group_layout =
+            wgpu_utils::create_bind_group_layout::<PostprocessBindGroup>(&context.device);
+        let postprocess_pipeline = {
+            let pipeline_layout =
+                context
+                    .device
+                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: None,
+                        bind_group_layouts: &[&postprocess_bind_group_layout],
+                        push_constant_ranges: &[],
+                    });
+            context
+                .device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: None,
+                    layout: Some(&pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &context.resources.shader_postprocess,
+                        entry_point: Some("vs_main"),
+                        buffers: &[],
+                        compilation_options: Default::default(),
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &context.resources.shader_postprocess,
+                        entry_point: Some("fs_main"),
+                        compilation_options: Default::default(),
+                        targets: &[Some(window_surface_format.into())],
+                    }),
+                    primitive: wgpu::PrimitiveState::default(),
+                    depth_stencil: None,
+                    multisample: wgpu::MultisampleState::default(),
+                    multiview: None,
+                    cache: None,
+                })
+        };
+
+        let postprocess_bind_group = PostprocessBindGroup {
+            color_texture: scene_texture.create_view(&Default::default()),
+            depth_texture: depth_stencil_texture
+                .create_view(&Default::default())
+                .into(),
+            sampler: context.device.create_sampler(&Default::default()),
+            gamma: UniformBuffer::create_init(&context.device, 2.2),
+        };
+        let postprocess_bind_group_wgpu = wgpu_utils::create_bind_group(
+            &context.device,
+            &postprocess_bind_group_layout,
+            &postprocess_bind_group,
+        );
 
         let player_camera = PlayerCamera {
             position: point3(0., 0., 0.),
@@ -127,8 +213,11 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             queue: &context.queue,
             window,
             resources: &context.resources,
-            surface,
-            surface_color_format,
+            window_surface,
+            window_surface_format,
+            scene_texture,
+            scene_texture_view,
+            depth_stencil_texture,
             depth_stencil_texture_view,
             fps: f64::NAN,
             is_paused: false,
@@ -136,10 +225,13 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             debug_text: text,
             debug_text_needs_updating: true,
             debug_text_string: String::new(),
-            // Would be updated later immediately in the `resized` call.
             frame_size_u,
             frame_size,
             chunk_renderer,
+            postprocess_pipeline,
+            postprocess_bind_group,
+            postprocess_bind_group_wgpu,
+            postprocess_bind_group_layout,
             world,
             player_camera,
         };
@@ -148,13 +240,25 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         self_
     }
 
-    const DEPTH_STENCIL_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+    fn create_scene_texture(device: &wgpu::Device, size: Vector2<u32>) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d {
+                width: size.x,
+                height: size.y,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::SCENE_TEXTURE_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+    }
 
-    fn create_depth_stencil_texture(
-        device: &wgpu::Device,
-        size: Vector2<u32>,
-    ) -> wgpu::TextureView {
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
+    fn create_depth_stencil_texture(device: &wgpu::Device, size: Vector2<u32>) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
                 width: size.x,
@@ -167,8 +271,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             format: Self::DEPTH_STENCIL_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
-        });
-        texture.create_view(&Default::default())
+        })
     }
 
     #[expect(unused_variables)]
@@ -203,22 +306,37 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         self.frame_size_u = vec2(physical_size.width, physical_size.height);
         self.frame_size = self.frame_size_u.map(|u| u as f32);
         self.configure_surface();
-        self.depth_stencil_texture_view =
+        self.depth_stencil_texture =
             Self::create_depth_stencil_texture(self.device, self.frame_size_u);
+        self.depth_stencil_texture_view =
+            self.depth_stencil_texture.create_view(&Default::default());
+        self.scene_texture = Self::create_scene_texture(self.device, self.frame_size_u);
+        self.scene_texture_view = self.scene_texture.create_view(&Default::default());
+        self.postprocess_bind_group.color_texture =
+            self.scene_texture.create_view(&Default::default());
+        self.postprocess_bind_group.depth_texture = self
+            .depth_stencil_texture
+            .create_view(&Default::default())
+            .into();
+        self.postprocess_bind_group_wgpu = wgpu_utils::create_bind_group(
+            self.device,
+            &self.postprocess_bind_group_layout,
+            &self.postprocess_bind_group,
+        );
     }
 
     fn configure_surface(&mut self) {
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: self.surface_color_format,
-            view_formats: vec![self.surface_color_format.add_srgb_suffix()],
+            format: self.window_surface_format,
+            view_formats: vec![self.window_surface_format.add_srgb_suffix()],
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             width: self.frame_size_u.x,
             height: self.frame_size_u.y,
             desired_maximum_frame_latency: 3,
             present_mode: wgpu::PresentMode::AutoVsync,
         };
-        self.surface.configure(self.device, &surface_config);
+        self.window_surface.configure(self.device, &surface_config);
     }
 
     pub fn update_fps(&mut self, fps: f64) {
@@ -231,20 +349,11 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         self.debug_text_string.clear();
         _ = writeln!(&mut self.debug_text_string, "CUBE GAME v0.0.0");
         _ = writeln!(&mut self.debug_text_string, "FPS: {}", self.fps);
+        let p = self.player_camera.position;
+        _ = writeln!(&mut self.debug_text_string, "XYZ: {} {} {}", p.x, p.y, p.z);
     }
 
     pub fn frame(&mut self) {
-        let surface_texture = self
-            .surface
-            .get_current_texture()
-            .expect("failed to acquire next swapchain texture");
-        let texture_view = surface_texture
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor {
-                format: Some(self.surface_color_format.add_srgb_suffix()),
-                ..Default::default()
-            });
-
         if self.debug_text_needs_updating {
             self.update_debug_text();
             self.text_renderer.update_text(
@@ -254,11 +363,12 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             );
         }
 
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: None,
+        // Scene.
+        let mut encoder_scene = self.device.create_command_encoder(&Default::default());
+        let mut render_pass = encoder_scene.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("scene"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &texture_view,
+                view: &self.scene_texture_view,
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
@@ -282,8 +392,45 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         self.draw_debug_text(&mut render_pass);
 
         drop(render_pass);
+        self.queue.submit([encoder_scene.finish()]);
 
-        self.queue.submit([encoder.finish()]);
+        // Postprocess.
+        let surface_texture = self
+            .window_surface
+            .get_current_texture()
+            .expect("failed to acquire next swapchain texture");
+        let surface_texture_view =
+            surface_texture
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor {
+                    format: Some(self.window_surface_format.add_srgb_suffix()),
+                    ..Default::default()
+                });
+
+        let mut encoder_postprocess = self.device.create_command_encoder(&Default::default());
+        let mut render_pass = encoder_postprocess.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("postprocess"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &surface_texture_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+
+        render_pass.set_pipeline(&self.postprocess_pipeline);
+        render_pass.set_bind_group(0, &self.postprocess_bind_group_wgpu, &[]);
+        render_pass.draw(0..6, 0..1);
+
+        drop(render_pass);
+        self.queue.submit([encoder_postprocess.finish()]);
+
         self.window.pre_present_notify();
         surface_texture.present();
     }

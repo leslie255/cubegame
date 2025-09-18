@@ -1,5 +1,7 @@
 use std::any::type_name;
 
+use derive_more::derive::From;
+
 pub trait Bindable {
     fn bind_group_layout_entry(
         binding: u32,
@@ -116,6 +118,42 @@ impl Bindable for wgpu::Sampler {
         wgpu::BindGroupEntry {
             binding,
             resource: wgpu::BindingResource::Sampler(self),
+        }
+    }
+}
+
+#[derive(Debug, Clone, From)]
+pub struct DepthTextureView {
+    pub inner: wgpu::TextureView,
+}
+
+impl DepthTextureView {
+    pub fn new(inner: wgpu::TextureView) -> Self {
+        Self { inner }
+    }
+}
+
+impl Bindable for DepthTextureView {
+    fn bind_group_layout_entry(
+        binding: u32,
+        visibility: wgpu::ShaderStages,
+    ) -> wgpu::BindGroupLayoutEntry {
+        wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Depth,
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        }
+    }
+
+    fn bind_group_entry(&self, binding: u32) -> wgpu::BindGroupEntry<'_> {
+        wgpu::BindGroupEntry {
+            binding,
+            resource: wgpu::BindingResource::TextureView(&self.inner),
         }
     }
 }

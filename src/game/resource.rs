@@ -140,6 +140,7 @@ impl ResourceLoader {
 pub struct GameResources {
     pub shader_text: wgpu::ShaderModule,
     pub shader_chunk: wgpu::ShaderModule,
+    pub shader_postprocess: wgpu::ShaderModule,
     pub font: Font,
     pub block_atlas_image: RgbaImage,
     pub block_registry: BlockRegistry,
@@ -157,6 +158,7 @@ impl GameResources {
         Self {
             shader_text: loader.load_shader(device, "shader/text.wgsl"),
             shader_chunk: loader.load_shader(device, "shader/chunk.wgsl"),
+            shader_postprocess: loader.load_shader(device, "shader/postprocess.wgsl"),
             font: loader.load_font("font/big_blue_terminal.json"),
             block_atlas_image: loader.load_image("texture/block_atlas.png").to_rgba8(),
             game_blocks: GameBlocks::new(&mut block_registry),
