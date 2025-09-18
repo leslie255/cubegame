@@ -191,6 +191,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         };
 
         let fog_start = 1. - 1. / world.view_distance() as f32 / 80.0;
+        log::info!("{fog_start}");
         let postprocess_bind_group = PostprocessBindGroup {
             color_texture: scene_texture.create_view(&Default::default()),
             depth_texture: depth_stencil_texture
