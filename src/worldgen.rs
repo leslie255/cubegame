@@ -87,7 +87,7 @@ impl Debug for WorldGenerator<'_> {
 
 impl<'res> WorldGenerator<'res> {
     pub fn new(seed: u64, resources: &'res GameResources) -> Self {
-        println!("[INFO] seed: {seed}");
+        log::info!("seed: {seed}");
         fn scale(
             noise: impl NoiseFn<f64, 2> + Send + Sync + 'static,
             input_scale: f64,

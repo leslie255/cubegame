@@ -38,6 +38,8 @@ pub struct ProgramArgs {
 }
 
 fn main() {
+    env_logger::init();
+
     let program_args = ProgramArgs::parse();
 
     let event_loop = winit::event_loop::EventLoop::builder().build().unwrap();

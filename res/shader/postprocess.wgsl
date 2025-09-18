@@ -2,6 +2,7 @@
 @group(0) @binding(1) var depth_texture: texture_depth_2d;
 @group(0) @binding(2) var sampler_: sampler;
 @group(0) @binding(3) var<uniform> gamma: f32;
+@group(0) @binding(4) var<uniform> fog_start: f32;
 
 struct VertexInput {
     @builtin(vertex_index) i_vertex: u32,
@@ -40,10 +41,10 @@ fn gamma_correct(v: vec4<f32>) -> vec4<f32> {
 
 @fragment
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
+    let sky_color = vec4<f32>(0.8, 0.95, 1.0, 1.0);
     let depth_sample = textureSample(depth_texture, sampler_, vertex.uv);
-    if (depth_sample == 1.0) {
-        return gamma_correct(vec4<f32>(0.8, 0.95, 1.0, 1.0));
-    }
-    let sample = textureSample(color_texture, sampler_, vertex.uv);
-    return gamma_correct(sample);
+    let color_sample = textureSample(color_texture, sampler_, vertex.uv);
+    let blend_factor = smoothstep(fog_start, 1.0, depth_sample);
+    let result = mix(color_sample, sky_color, blend_factor);
+    return gamma_correct(result);
 }

@@ -47,6 +47,7 @@ struct PostprocessBindGroup {
     depth_texture: DepthTextureView,
     sampler: wgpu::Sampler,
     gamma: UniformBuffer<f32>,
+    fog_start: UniformBuffer<f32>,
 }
 
 impl_as_bind_group! {
@@ -55,6 +56,7 @@ impl_as_bind_group! {
         1 => depth_texture: DepthTextureView,
         2 => sampler: wgpu::Sampler,
         3 => gamma: UniformBuffer<f32>,
+        4 => fog_start: UniformBuffer<f32>,
     }
 }
 
@@ -124,8 +126,8 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             Some(Self::DEPTH_STENCIL_FORMAT),
         );
         let debug_text = text_renderer.create_text(&context.device, "CUBE GAME v0.0.0");
-        debug_text.set_bg_color(&context.queue, vec4(1., 1., 1., 1.0));
-        debug_text.set_fg_color(&context.queue, vec4(0., 0., 0., 1.0));
+        debug_text.set_bg_color(&context.queue, vec4(0.2, 0.2, 0.2, 1.0));
+        debug_text.set_fg_color(&context.queue, vec4(1.0, 1.0, 1.0, 1.0));
 
         let chunk_renderer = ChunkRenderer::new(
             &context.device,
@@ -188,6 +190,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
                 })
         };
 
+        let fog_start = 1. - 1. / world.view_distance() as f32 / 80.0;
         let postprocess_bind_group = PostprocessBindGroup {
             color_texture: scene_texture.create_view(&Default::default()),
             depth_texture: depth_stencil_texture
@@ -195,6 +198,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
                 .into(),
             sampler: context.device.create_sampler(&Default::default()),
             gamma: UniformBuffer::create_init(&context.device, 2.2),
+            fog_start: UniformBuffer::create_init(&context.device, fog_start),
         };
         let postprocess_bind_group_wgpu = wgpu_utils::create_bind_group(
             &context.device,
@@ -352,7 +356,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         _ = writeln!(&mut self.debug_text_string, "CUBE GAME v0.0.0");
         _ = writeln!(&mut self.debug_text_string, "FPS: {}", self.fps);
         let p = self.player_camera.position;
-        _ = writeln!(&mut self.debug_text_string, "XYZ: {} {} {}", p.x, p.y, p.z);
+        _ = writeln!(&mut self.debug_text_string, "XYZ: {:.04} {:.04} {:.04}", p.x, p.y, p.z);
     }
 
     pub fn frame(&mut self) {
@@ -460,7 +464,8 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
     fn draw_chunks(&self, render_pass: &mut wgpu::RenderPass) {
         render_pass.set_pipeline(&self.chunk_renderer.pipeline);
         render_pass.set_bind_group(0, &self.chunk_renderer.bind_group_0_wgpu, &[]);
-        let projection = self.player_camera.projection_matrix(self.frame_size);
+        let far = self.world.view_distance() as f32 * 32.0;
+        let projection = self.player_camera.projection_matrix(far, self.frame_size);
         let view = self.player_camera.view_matrix();
         self.chunk_renderer
             .set_view_projection(self.queue, projection * view);
@@ -598,7 +603,7 @@ impl PlayerCamera {
         Matrix4::look_to_rh(self.position, self.direction(), Vector3::unit_y())
     }
 
-    pub fn projection_matrix(self, frame_size: Vector2<f32>) -> Matrix4<f32> {
-        cgmath::perspective(Deg(90.), frame_size.x / frame_size.y, 0.1, 1000.0)
+    pub fn projection_matrix(self, far: f32, frame_size: Vector2<f32>) -> Matrix4<f32> {
+        cgmath::perspective(Deg(90.), frame_size.x / frame_size.y, 0.1, far)
     }
 }

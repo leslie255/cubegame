@@ -149,7 +149,7 @@ where
             workers: {
                 let n_threads = num_cpus::get();
                 // let n_threads = 1;
-                println!("[INFO] using {n_threads} chunk worker threads");
+                log::info!("using {n_threads} chunk worker threads");
                 vec_with(n_threads, || {
                     let worker = Self::new_worker(
                         device,
@@ -447,5 +447,9 @@ impl<'scope, 'cx> World<'scope, 'cx> {
             }
         });
         self.load_chunks_in_view_distance(new_position);
+    }
+
+    pub fn view_distance(&self) -> i32 {
+        self.view_distance
     }
 }
