@@ -123,7 +123,9 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             Self::SCENE_TEXTURE_FORMAT,
             Some(Self::DEPTH_STENCIL_FORMAT),
         );
-        let text = text_renderer.create_text(&context.device, "CUBE GAME v0.0.0");
+        let debug_text = text_renderer.create_text(&context.device, "CUBE GAME v0.0.0");
+        debug_text.set_bg_color(&context.queue, vec4(1., 1., 1., 1.0));
+        debug_text.set_fg_color(&context.queue, vec4(0., 0., 0., 1.0));
 
         let chunk_renderer = ChunkRenderer::new(
             &context.device,
@@ -222,7 +224,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             fps: f64::NAN,
             is_paused: false,
             text_renderer,
-            debug_text: text,
+            debug_text,
             debug_text_needs_updating: true,
             debug_text_string: String::new(),
             frame_size_u,

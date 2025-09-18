@@ -30,16 +30,20 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     return result;
 }
 
+fn gamma_correct(v: vec4<f32>) -> vec4<f32> {
+    return vec4<f32>(
+        pow(v.r, gamma),
+        pow(v.g, gamma),
+        pow(v.b, gamma),
+        v.a);
+}
+
 @fragment
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
-    let sample = textureSample(color_texture, sampler_, vertex.uv);
     let depth_sample = textureSample(depth_texture, sampler_, vertex.uv);
     if (depth_sample == 1.0) {
-        return vec4<f32>(0.8, 0.95, 1.0, 1.0);
+        return gamma_correct(vec4<f32>(0.8, 0.95, 1.0, 1.0));
     }
-    return vec4<f32>(
-        pow(sample.r, gamma),
-        pow(sample.g, gamma),
-        pow(sample.b, gamma),
-        sample.a);
+    let sample = textureSample(color_texture, sampler_, vertex.uv);
+    return gamma_correct(sample);
 }

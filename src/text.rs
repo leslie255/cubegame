@@ -170,6 +170,10 @@ impl Text {
         self.bind_group.fg_color.write(color.into(), queue);
     }
 
+    pub fn set_bg_color(&self, queue: &wgpu::Queue, color: Vector4<f32>) {
+        self.bind_group.bg_color.write(color.into(), queue);
+    }
+
     pub fn set_model_view(&self, queue: &wgpu::Queue, model_view: Matrix4<f32>) {
         self.bind_group.model_view.write(model_view.into(), queue);
     }
@@ -233,7 +237,7 @@ impl<'ctx> TextRenderer<'ctx> {
             primitive: Default::default(),
             depth_stencil: depth_stencil_format.map(|format| wgpu::DepthStencilState {
                 format,
-                depth_write_enabled: false,
+                depth_write_enabled: true,
                 depth_compare: wgpu::CompareFunction::Always,
                 stencil: Default::default(),
                 bias: Default::default(),
