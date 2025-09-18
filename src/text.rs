@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use std::ops::Range;
-use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 use image::RgbaImage;
@@ -181,21 +180,21 @@ impl Text {
 }
 
 #[derive(Debug, Clone)]
-pub struct TextRenderer {
+pub struct TextRenderer<'ctx> {
     pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     texture_view: wgpu::TextureView,
-    resources: Arc<GameResources>,
+    resources: &'ctx GameResources,
     sampler: wgpu::Sampler,
     vertex_buffer: VertexBuffer<Vertex2dUV>,
     index_buffer: IndexBuffer<u16>,
 }
 
-impl TextRenderer {
+impl<'ctx> TextRenderer<'ctx> {
     pub fn create(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        resources: Arc<GameResources>,
+        resources: &'ctx GameResources,
         surface_color_format: wgpu::TextureFormat,
         depth_stencil_format: Option<wgpu::TextureFormat>,
     ) -> Self {

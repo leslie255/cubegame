@@ -1,7 +1,7 @@
 #![feature(mpmc_channel)]
 #![allow(dead_code, linker_messages)]
 
-use std::path::PathBuf;
+use std::{path::PathBuf, thread};
 
 use clap::Parser;
 
@@ -42,7 +42,10 @@ fn main() {
 
     let event_loop = winit::event_loop::EventLoop::builder().build().unwrap();
 
-    let mut app = App::new(program_args);
-
-    app.run(event_loop);
+    thread::scope(|scope| {
+        let app = App::new(program_args, scope);
+        unsafe {
+            app.run(event_loop);
+        }
+    });
 }

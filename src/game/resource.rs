@@ -46,7 +46,7 @@ impl ResourceLoader {
     }
 
     fn with_res_directory_unchecked(res_directory: PathBuf) -> Self {
-        println!("[INFO] using resource directory {res_directory:?}");
+        log::info!("using resource directory {res_directory:?}");
         Self { res_directory }
     }
 
@@ -93,13 +93,13 @@ impl ResourceLoader {
 
     pub fn read_to_string(&self, subpath: impl AsRef<Path>) -> String {
         let path = self.path_for(subpath);
-        println!("[INFO] loading {path:?}");
+        log::info!("loading {path:?}");
         std::fs::read_to_string(path).unwrap()
     }
 
     pub fn open_file(&self, subpath: impl AsRef<Path>) -> File {
         let path = self.path_for(&subpath);
-        println!("[INFO] loading {path:?}");
+        log::info!("loading {path:?}");
         File::open(&path).unwrap_or_else(|_| self.handle_resource_not_exist(&path))
     }
 
@@ -115,7 +115,7 @@ impl ResourceLoader {
         if !path.is_file() {
             self.handle_resource_not_exist(subpath);
         }
-        println!("[INFO] loading {path:?}");
+        log::info!("loading {path:?}");
         image::open(&path).unwrap_or_else(|_| self.handle_malformed_image_encoding(subpath))
     }
 

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{mem::transmute, sync::Arc, thread, time::Instant};
 
 use cgmath::*;
 
@@ -12,40 +12,53 @@ use winit::{
 
 use crate::{
     ProgramArgs,
-    game::{Game, fps_counter::FpsCounter},
+    game::{self, Context, Game, GameResources, fps_counter::FpsCounter},
     input::InputHelper,
 };
 
 #[derive(Debug)]
-pub struct App {
+pub struct App<'scope, 'self_> {
     program_args: ProgramArgs,
     fps_counter: FpsCounter,
     input_helper: InputHelper,
     window: Option<Arc<Window>>,
-    game: Option<Game>,
+    context: Option<Context>,
+    game: Option<Game<'scope, 'self_>>,
+    thread_scope: &'scope thread::Scope<'scope, 'self_>,
+    previous_window_event: Instant,
 }
 
-impl App {
-    pub fn new(program_args: ProgramArgs) -> Self {
+impl<'scope> App<'scope, 'static> {
+    pub fn new(
+        program_args: ProgramArgs,
+        thread_scope: &'scope thread::Scope<'scope, 'static>,
+    ) -> Self {
         Self {
             program_args,
             fps_counter: FpsCounter::new(),
             input_helper: InputHelper::new(),
             window: None,
+            context: None,
             game: None,
+            thread_scope,
+            previous_window_event: Instant::now(),
         }
     }
 
-    pub fn run(&mut self, event_loop: EventLoop<()>) {
-        event_loop.run_app(self).unwrap();
+    /// # Safety
+    ///
+    /// App is a self-referencing struct, it must not be moved after this call.
+    pub unsafe fn run(mut self, event_loop: EventLoop<()>) {
+        event_loop.run_app(&mut self).unwrap();
     }
 }
 
-impl ApplicationHandler for App {
+impl<'scope, 'self_> ApplicationHandler for App<'scope, 'self_> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         match &mut self.game {
             Some(_) => {}
             None => {
+                log::info!("initializing window and game state");
                 let window_size =
                     LogicalSize::new(self.program_args.wwidth, self.program_args.wheight);
                 let window = event_loop
@@ -55,9 +68,27 @@ impl ApplicationHandler for App {
                             .with_inner_size(window_size),
                     )
                     .unwrap();
-                let arc_window = Arc::new(window);
-                self.window = Some(arc_window.clone());
-                self.game = Some(Game::new(arc_window.clone(), &self.program_args));
+                let window = Arc::new(window);
+                self.window = Some(Arc::clone(&window));
+                let (instance, adapter, device, queue) = game::initialize_wgpu();
+                let resources =
+                    GameResources::load(&device, self.program_args.res.as_ref().cloned());
+                self.context = Some(Context {
+                    device,
+                    queue,
+                    resources,
+                });
+                // SAEFTY: self would not be moved, and context is never set to `None` afterwards.
+                // FIXME: Is *actually*, *rigourously*, safe?
+                let context: &'self_ Context = unsafe { transmute(self.context.as_ref().unwrap()) };
+                self.game = Some(Game::new(
+                    &instance,
+                    &adapter,
+                    context,
+                    window,
+                    self.thread_scope,
+                    &self.program_args,
+                ));
             }
         }
     }
@@ -68,11 +99,15 @@ impl ApplicationHandler for App {
         _window_id: winit::window::WindowId,
         event: WindowEvent,
     ) {
+        let now = Instant::now();
+        let duration_since_last_event = now.duration_since(self.previous_window_event);
+        self.previous_window_event = now;
         let game = self.game.as_mut().unwrap();
+        game.before_window_event(&self.input_helper, duration_since_last_event);
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::RedrawRequested => {
-                game.frame(&self.input_helper);
+                game.frame();
                 self.window.as_ref().unwrap().request_redraw();
                 let fps_update = self.fps_counter.frame();
                 if let Some(fps) = fps_update {
@@ -94,7 +129,7 @@ impl ApplicationHandler for App {
             } => {
                 game.mouse_input(state, button, &self.input_helper);
             }
-            WindowEvent::Resized(_) => game.resized(),
+            WindowEvent::Resized(_) => game.frame_resized(),
             _ => (),
         }
     }

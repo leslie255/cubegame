@@ -1,4 +1,4 @@
-use std::{array, sync::Arc};
+use std::array;
 
 use cgmath::*;
 
@@ -25,12 +25,12 @@ impl ChunkRenderer {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        resources: Arc<GameResources>,
+        resources: &GameResources,
         surface_color_format: wgpu::TextureFormat,
         depth_stencil_format: Option<wgpu::TextureFormat>,
     ) -> Self {
         let (bind_group_0, bind_group_0_layout, bind_group_0_wgpu) =
-            Self::create_bind_group_0(device, queue, &resources);
+            Self::create_bind_group_0(device, queue, resources);
         let bind_group_1_layout =
             wgpu_utils::create_bind_group_layout::<ChunkMeshBindGroup1>(device);
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -189,12 +189,12 @@ pub struct ChunkMeshData {
 }
 
 #[derive(Debug, Clone)]
-pub struct ChunkBuilder {
-    resources: Arc<GameResources>,
+pub struct ChunkBuilder<'cx> {
+    resources: &'cx GameResources,
     mesh_data: [ChunkMeshData; 6],
 }
 
-impl ChunkBuilder {
+impl<'cx> ChunkBuilder<'cx> {
     const CUBE_VERTICES: [[Vertex3dUV; 4]; 6] = [
         // South
         [
@@ -242,7 +242,7 @@ impl ChunkBuilder {
 
     const FACE_INDICIES: [u32; 6] = [0, 1, 2, 2, 3, 0];
 
-    pub fn new(resources: Arc<GameResources>) -> Self {
+    pub fn new(resources: &'cx GameResources) -> Self {
         Self {
             resources,
             mesh_data: array::from_fn(|_| ChunkMeshData::default()),
@@ -328,7 +328,7 @@ impl ChunkBuilder {
                 ],
             });
             let mesh_data = &mut self.mesh_data[block_face.to_usize()];
-            let indices = Self::FACE_INDICIES.map(|i| i + mesh_data.indices.len() as u32);
+            let indices = Self::FACE_INDICIES.map(|i| i + mesh_data.vertices.len() as u32);
             mesh_data.vertices.extend(&vertices[..]);
             mesh_data.indices.extend(&indices[..]);
         }
