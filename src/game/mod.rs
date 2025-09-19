@@ -18,7 +18,7 @@ use crate::{
     text::{Text, TextRenderer},
     utils::{BoolToggle, WithY as _},
     wgpu_utils::{self, DepthTextureView, UniformBuffer},
-    world::World,
+    world::{ChunkId, World},
 };
 
 mod app;
@@ -357,7 +357,11 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         _ = writeln!(&mut self.debug_text_string, "CUBE GAME v0.0.0");
         _ = writeln!(&mut self.debug_text_string, "FPS: {}", self.fps);
         let p = self.player_camera.position;
-        _ = writeln!(&mut self.debug_text_string, "XYZ: {:.04} {:.04} {:.04}", p.x, p.y, p.z);
+        _ = writeln!(
+            &mut self.debug_text_string,
+            "XYZ: {:.04} {:.04} {:.04}",
+            p.x, p.y, p.z
+        );
     }
 
     pub fn frame(&mut self) {
@@ -472,6 +476,20 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             .set_view_projection(self.queue, projection * view);
         self.chunk_renderer
             .set_sun(self.queue, vec3(1., -2., 0.5).normalize());
+        // self.world.chunks().with_loaded_chunk(ChunkId::new(0, 0, 0), |chunk| {
+        //     for mesh in &chunk.client.meshes {
+        //         let Some(mesh) = mesh else {
+        //             continue;
+        //         };
+        //         render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        //         render_pass.set_index_buffer(
+        //             mesh.index_buffer.slice(..),
+        //             mesh.index_buffer.index_format(),
+        //         );
+        //         render_pass.set_bind_group(1, &mesh.bind_group_1_wgpu, &[]);
+        //         render_pass.draw_indexed(0..mesh.index_buffer.length(), 0, 0..1);
+        //     }
+        // });
         let camera_chunk_id = World::world_to_local_coord_f32(self.player_camera.position).0;
         self.world
             .chunks()

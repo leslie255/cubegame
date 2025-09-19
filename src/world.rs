@@ -147,7 +147,7 @@ where
         let (tasks_tx, tasks_rx) = mpmc::sync_channel(128);
         Self {
             workers: {
-                let n_threads = num_cpus::get();
+                let n_threads = num_cpus::get().saturating_sub(3) + 1;
                 // let n_threads = 1;
                 log::info!("using {n_threads} chunk worker threads");
                 vec_with(n_threads, || {

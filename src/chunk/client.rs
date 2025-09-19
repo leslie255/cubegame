@@ -1,5 +1,6 @@
 use std::array;
 
+use bytemuck::{Pod, Zeroable};
 use cgmath::*;
 
 use wgpu::util::DeviceExt as _;
@@ -10,7 +11,7 @@ use crate::{
     game::GameResources,
     impl_as_bind_group,
     utils::Quad2d,
-    wgpu_utils::{self, IndexBuffer, UniformBuffer, Vertex as _, Vertex3dUV, VertexBuffer},
+    wgpu_utils::{self, IndexBuffer, UniformBuffer, Vertex, Vertex3dUV, VertexBuffer},
     world::{ChunkId, LocalCoordU8},
 };
 
@@ -45,7 +46,7 @@ impl ChunkRenderer {
                 module: &resources.shader_chunk,
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
-                buffers: &[Vertex3dUV::LAYOUT],
+                buffers: &[PackedChunkVertex::LAYOUT],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &resources.shader_chunk,
@@ -64,7 +65,10 @@ impl ChunkRenderer {
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
-            primitive: Default::default(),
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
             depth_stencil: depth_stencil_format.map(|format| wgpu::DepthStencilState {
                 format,
                 depth_write_enabled: true,
@@ -174,9 +178,43 @@ impl_as_bind_group! {
     }
 }
 
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+pub struct PackedChunkVertex(pub u32);
+
+impl PackedChunkVertex {
+    pub fn pack(position: Vector3<f32>, uv: Vector2<f32>) -> Self {
+        let pos_packed = {
+            let x_pos = position.x as u32;
+            let y_pos = position.y as u32;
+            let z_pos = position.z as u32;
+            x_pos + 33 * y_pos + 33 * 33 * z_pos
+        };
+        let uv_packed = {
+            let x_uv = (uv.x * 64.).round() as u32;
+            let y_uv = (uv.y * 64.).round() as u32;
+            x_uv + y_uv * 64
+        };
+        let packed = pos_packed | uv_packed << 16;
+        Self(packed)
+    }
+}
+
+impl Vertex for PackedChunkVertex {
+    const LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
+        array_stride: size_of::<Self>() as u64,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &[wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Uint32,
+            offset: 0,
+            shader_location: 0,
+        }],
+    };
+}
+
 #[derive(Debug, Clone)]
 pub struct ChunkMesh {
-    pub vertex_buffer: VertexBuffer<Vertex3dUV>,
+    pub vertex_buffer: VertexBuffer<PackedChunkVertex>,
     pub index_buffer: IndexBuffer<u32>,
     pub bind_group_1: ChunkMeshBindGroup1,
     pub bind_group_1_wgpu: wgpu::BindGroup,
@@ -184,7 +222,7 @@ pub struct ChunkMesh {
 
 #[derive(Debug, Clone, Default)]
 pub struct ChunkMeshData {
-    vertices: Vec<Vertex3dUV>,
+    vertices: Vec<PackedChunkVertex>,
     indices: Vec<u32>,
 }
 
@@ -316,16 +354,17 @@ impl<'cx> ChunkBuilder<'cx> {
             }
             let texture_id = block_info.model.texture_for_face(block_face);
             let texture_coord = self.texture_coord(texture_id);
-            let vertices = Self::CUBE_VERTICES[block_face.to_usize()].map(|vertex| Vertex3dUV {
-                position: [
+            let vertices = Self::CUBE_VERTICES[block_face.to_usize()].map(|vertex| {
+                let position = vec3(
                     vertex.position[0] + local_position.x as f32,
                     vertex.position[1] + local_position.y as f32,
                     vertex.position[2] + local_position.z as f32,
-                ],
-                uv: [
+                );
+                let uv = vec2(
                     vertex.uv[0] * texture_coord.right + (1. - vertex.uv[0]) * texture_coord.left,
                     vertex.uv[1] * texture_coord.bottom + (1. - vertex.uv[1]) * texture_coord.top,
-                ],
+                );
+                PackedChunkVertex::pack(position, uv)
             });
             let mesh_data = &mut self.mesh_data[block_face.to_usize()];
             let indices = Self::FACE_INDICIES.map(|i| i + mesh_data.vertices.len() as u32);
