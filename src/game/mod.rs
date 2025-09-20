@@ -11,14 +11,13 @@ use winit::{
 
 use crate::{
     ProgramArgs,
-    block::BlockFace,
     chunk::ChunkRenderer,
     impl_as_bind_group,
     input::InputHelper,
     text::{Text, TextRenderer},
     utils::{BoolToggle, WithY as _},
     wgpu_utils::{self, DepthTextureView, UniformBuffer},
-    world::{ChunkId, World},
+    world::World,
 };
 
 mod app;
@@ -348,13 +347,16 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
 
     pub fn update_fps(&mut self, fps: f64) {
         self.fps = fps;
-        self.update_debug_text();
         self.debug_text_needs_updating = true;
     }
 
     fn update_debug_text(&mut self) {
         self.debug_text_string.clear();
-        _ = writeln!(&mut self.debug_text_string, "CUBE GAME v0.0.0");
+        if !self.is_paused {
+            _ = writeln!(&mut self.debug_text_string, "CUBE GAME v0.0.0");
+        } else {
+            _ = writeln!(&mut self.debug_text_string, "[ESC] PAUSED");
+        }
         _ = writeln!(&mut self.debug_text_string, "FPS: {}", self.fps);
         let p = self.player_camera.position;
         _ = writeln!(
@@ -362,16 +364,18 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             "XYZ: {:.04} {:.04} {:.04}",
             p.x, p.y, p.z
         );
+        _ = writeln!(
+            &mut self.debug_text_string,
+            "PITCH YAW: {:.04} {:.04}",
+            self.player_camera.pitch, self.player_camera.yaw
+        );
+        self.text_renderer
+            .update_text(self.device, &mut self.debug_text, &self.debug_text_string);
     }
 
     pub fn frame(&mut self) {
         if self.debug_text_needs_updating {
             self.update_debug_text();
-            self.text_renderer.update_text(
-                self.device,
-                &mut self.debug_text,
-                &self.debug_text_string,
-            );
         }
 
         // Scene.
@@ -446,7 +450,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         surface_texture.present();
     }
 
-    fn pause_changed(&self) {
+    fn pause_changed(&mut self) {
         if !self.is_paused {
             _ = self.window.set_cursor_grab(CursorGrabMode::Locked);
             self.window.set_cursor_visible(false);
@@ -454,6 +458,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             _ = self.window.set_cursor_grab(CursorGrabMode::None);
             self.window.set_cursor_visible(true);
         }
+        self.debug_text_needs_updating = true;
     }
 
     fn draw_debug_text(&self, render_pass: &mut wgpu::RenderPass) {
@@ -476,62 +481,18 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             .set_view_projection(self.queue, projection * view);
         self.chunk_renderer
             .set_sun(self.queue, vec3(1., -2., 0.5).normalize());
-        // self.world.chunks().with_loaded_chunk(ChunkId::new(0, 0, 0), |chunk| {
-        //     for mesh in &chunk.client.meshes {
-        //         let Some(mesh) = mesh else {
-        //             continue;
-        //         };
-        //         render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        //         render_pass.set_index_buffer(
-        //             mesh.index_buffer.slice(..),
-        //             mesh.index_buffer.index_format(),
-        //         );
-        //         render_pass.set_bind_group(1, &mesh.bind_group_1_wgpu, &[]);
-        //         render_pass.draw_indexed(0..mesh.index_buffer.length(), 0, 0..1);
-        //     }
-        // });
-        let camera_chunk_id = World::world_to_local_coord_f32(self.player_camera.position).0;
-        self.world
-            .chunks()
-            .for_each_loaded_chunk(|chunk_id, chunk| {
-                let mut faces_mask = [
-                    true, // south  (+z)
-                    true, // north  (-z)
-                    true, // east   (+x)
-                    true, // west   (-x)
-                    true, // top    (+y)
-                    true, // bottom (-y)
-                ];
-                use BlockFace::*;
-                if camera_chunk_id.z > chunk_id.z {
-                    faces_mask[North.to_usize()] = false;
-                } else if camera_chunk_id.z < chunk_id.z {
-                    faces_mask[South.to_usize()] = false;
-                } else if camera_chunk_id.x > chunk_id.x {
-                    faces_mask[West.to_usize()] = false;
-                } else if camera_chunk_id.x < chunk_id.x {
-                    faces_mask[East.to_usize()] = false;
-                } else if camera_chunk_id.y > chunk_id.y {
-                    faces_mask[Bottom.to_usize()] = false;
-                } else if camera_chunk_id.y < chunk_id.y {
-                    faces_mask[Top.to_usize()] = false;
-                }
-                for (i_face, mesh) in chunk.client.meshes.iter().enumerate() {
-                    if !faces_mask[i_face] {
-                        continue;
-                    }
-                    let Some(mesh) = mesh else {
-                        continue;
-                    };
-                    render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                    render_pass.set_index_buffer(
-                        mesh.index_buffer.slice(..),
-                        mesh.index_buffer.index_format(),
-                    );
-                    render_pass.set_bind_group(1, &mesh.bind_group_1_wgpu, &[]);
-                    render_pass.draw_indexed(0..mesh.index_buffer.length(), 0, 0..1);
-                }
-            });
+        self.world.chunks().for_each_loaded_chunk(|_, chunk| {
+            let Some(mesh) = &chunk.client.mesh else {
+                return;
+            };
+            render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(
+                mesh.index_buffer.slice(..),
+                mesh.index_buffer.index_format(),
+            );
+            render_pass.set_bind_group(1, &mesh.bind_group_1_wgpu, &[]);
+            render_pass.draw_indexed(0..mesh.index_buffer.length(), 0, 0..1);
+        });
     }
 
     pub fn before_window_event(

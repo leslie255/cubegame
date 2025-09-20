@@ -1,5 +1,3 @@
-use std::array;
-
 use bytemuck::{Pod, Zeroable};
 use cgmath::*;
 
@@ -183,7 +181,7 @@ impl_as_bind_group! {
 pub struct PackedChunkVertex(pub u32);
 
 impl PackedChunkVertex {
-    pub fn pack(position: Vector3<f32>, uv: Vector2<f32>) -> Self {
+    pub fn pack(position: Vector3<f32>, uv: Vector2<f32>, normal: Vector3<f32>) -> Self {
         let pos_packed = {
             let x_pos = position.x as u32;
             let y_pos = position.y as u32;
@@ -193,9 +191,13 @@ impl PackedChunkVertex {
         let uv_packed = {
             let x_uv = (uv.x * 64.).round() as u32;
             let y_uv = (uv.y * 64.).round() as u32;
-            x_uv + y_uv * 64
+            x_uv + y_uv * 65
         };
-        let packed = pos_packed | uv_packed << 16;
+        let x_normal = (normal.x + 1.) as u32 / 2;
+        let y_normal = (normal.y + 1.) as u32 / 2;
+        let z_normal = (normal.z + 1.) as u32 / 2;
+        let packed =
+            pos_packed | uv_packed << 16 | x_normal << 29 | y_normal << 30 | z_normal << 31;
         Self(packed)
     }
 }
@@ -229,7 +231,7 @@ pub struct ChunkMeshData {
 #[derive(Debug, Clone)]
 pub struct ChunkBuilder<'cx> {
     resources: &'cx GameResources,
-    mesh_data: [ChunkMeshData; 6],
+    mesh_data: ChunkMeshData,
 }
 
 impl<'cx> ChunkBuilder<'cx> {
@@ -283,15 +285,13 @@ impl<'cx> ChunkBuilder<'cx> {
     pub fn new(resources: &'cx GameResources) -> Self {
         Self {
             resources,
-            mesh_data: array::from_fn(|_| ChunkMeshData::default()),
+            mesh_data: ChunkMeshData::default(),
         }
     }
 
     pub fn build(&mut self, device: &wgpu::Device, chunk_id: ChunkId, chunk: &mut Chunk) {
-        for mesh_data in &mut self.mesh_data {
-            mesh_data.vertices.clear();
-            mesh_data.indices.clear();
-        }
+        self.mesh_data.vertices.clear();
+        self.mesh_data.indices.clear();
         for y in 0..32 {
             for x in 0..32 {
                 for z in 0..32 {
@@ -306,28 +306,25 @@ impl<'cx> ChunkBuilder<'cx> {
             chunk_id.y as f32 * 32.0,
             chunk_id.z as f32 * 32.0,
         ));
-        for i_face in 0..6 {
-            let mesh_data = &mut self.mesh_data[i_face];
-            let mesh = &mut chunk.client.meshes[i_face];
-            if mesh_data.vertices.is_empty() {
-                continue;
-            }
-            let normal = BlockFace::from_usize(i_face).unwrap().normal_vector();
-            let bind_group_1 = ChunkMeshBindGroup1 {
-                model: UniformBuffer::create_init(device, model.into()),
-                normal: UniformBuffer::create_init(device, normal.into()),
-            };
-            let bind_group_1_wgpu = {
-                let layout = wgpu_utils::create_bind_group_layout::<ChunkMeshBindGroup1>(device);
-                wgpu_utils::create_bind_group(device, &layout, &bind_group_1)
-            };
-            *mesh = Some(ChunkMesh {
-                vertex_buffer: VertexBuffer::create_init(device, &mesh_data.vertices),
-                index_buffer: IndexBuffer::create_init(device, &mesh_data.indices),
-                bind_group_1_wgpu,
-                bind_group_1,
-            });
+        if self.mesh_data.vertices.is_empty() {
+            return;
         }
+        // let normal = BlockFace::from_usize(i_face).unwrap().normal_vector();
+        let normal = Vector3::new(1.0, 0.0, 0.0);
+        let bind_group_1 = ChunkMeshBindGroup1 {
+            model: UniformBuffer::create_init(device, model.into()),
+            normal: UniformBuffer::create_init(device, normal.into()),
+        };
+        let bind_group_1_wgpu = {
+            let layout = wgpu_utils::create_bind_group_layout::<ChunkMeshBindGroup1>(device);
+            wgpu_utils::create_bind_group(device, &layout, &bind_group_1)
+        };
+        chunk.client.mesh = Some(ChunkMesh {
+            vertex_buffer: VertexBuffer::create_init(device, &self.mesh_data.vertices),
+            index_buffer: IndexBuffer::create_init(device, &self.mesh_data.indices),
+            bind_group_1_wgpu,
+            bind_group_1,
+        });
     }
 
     fn build_block(&mut self, chunk: &mut Chunk, local_position: LocalCoordU8, block_id: BlockId) {
@@ -364,12 +361,12 @@ impl<'cx> ChunkBuilder<'cx> {
                     vertex.uv[0] * texture_coord.right + (1. - vertex.uv[0]) * texture_coord.left,
                     vertex.uv[1] * texture_coord.bottom + (1. - vertex.uv[1]) * texture_coord.top,
                 );
-                PackedChunkVertex::pack(position, uv)
+                let normal = block_face.normal_vector();
+                PackedChunkVertex::pack(position, uv, normal)
             });
-            let mesh_data = &mut self.mesh_data[block_face.to_usize()];
-            let indices = Self::FACE_INDICIES.map(|i| i + mesh_data.vertices.len() as u32);
-            mesh_data.vertices.extend(&vertices[..]);
-            mesh_data.indices.extend(&indices[..]);
+            let indices = Self::FACE_INDICIES.map(|i| i + self.mesh_data.vertices.len() as u32);
+            self.mesh_data.vertices.extend(&vertices[..]);
+            self.mesh_data.indices.extend(&indices[..]);
         }
     }
 
@@ -414,19 +411,11 @@ impl<'cx> ChunkBuilder<'cx> {
 
 #[derive(Debug, Default)]
 pub struct ClientChunk {
-    pub meshes: [Option<ChunkMesh>; 6],
+    pub mesh: Option<ChunkMesh>,
 }
 
 impl ClientChunk {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    pub fn mesh(&self, face: BlockFace) -> Option<&ChunkMesh> {
-        self.meshes[face.to_usize()].as_ref()
-    }
-
-    pub fn mesh_mut(&mut self, face: BlockFace) -> Option<&mut ChunkMesh> {
-        self.meshes[face.to_usize()].as_mut()
     }
 }

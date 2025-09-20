@@ -22,13 +22,16 @@ fn unpack_position(packed: u32) -> vec4<f32> {
 
 fn unpack_uv(packed: u32) -> vec2<f32> {
     let n = (packed & 536805376) >> 16;
-    let u = f32(n % 64) / 64.0;
-    let v = f32(n / 64) / 64.0;
+    let u = f32(n % 65) / 64.0;
+    let v = f32(n / 65) / 64.0;
     return vec2<f32>(u, v);
 }
 
 fn unpack_normal(packed: u32) -> vec3<f32> {
-    return normal;
+    let x = (packed & 536870912) >> 29;
+    let y = (packed & 1073741824) >> 30;
+    let z = (packed & 2147483648) >> 31;
+    return vec3<f32>(f32(x), f32(y), f32(z)) * 2. - vec3<f32>(1.);
 }
 
 @vertex
