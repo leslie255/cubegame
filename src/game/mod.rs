@@ -1,4 +1,10 @@
-use std::{fmt::Write as _, sync::Arc, thread, time::Duration};
+use std::{
+    fmt::{self, Write as _},
+    mem,
+    sync::Arc,
+    thread,
+    time::Duration,
+};
 
 use cgmath::*;
 
@@ -12,6 +18,7 @@ use winit::{
 use crate::{
     ProgramArgs,
     chunk::ChunkRenderer,
+    game::debug_toggles::DebugToggles,
     impl_as_bind_group,
     input::InputHelper,
     text::{Text, TextRenderer},
@@ -21,6 +28,7 @@ use crate::{
 };
 
 mod app;
+mod debug_toggles;
 mod fps_counter;
 mod resource;
 
@@ -34,7 +42,12 @@ pub fn initialize_wgpu() -> (wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::
         .block_on()
         .unwrap();
     let (device, queue) = adapter
-        .request_device(&wgpu::DeviceDescriptor::default())
+        .request_device(&wgpu::DeviceDescriptor {
+            required_features: (wgpu::FeaturesWGPU::POLYGON_MODE_LINE
+                | wgpu::FeaturesWGPU::MULTI_DRAW_INDIRECT)
+                .into(),
+            ..Default::default()
+        })
         .block_on()
         .unwrap();
     (instance, adapter, device, queue)
@@ -73,6 +86,8 @@ where
 {
     device: &'cx wgpu::Device,
     queue: &'cx wgpu::Queue,
+    device_name: String,
+    backend: wgpu::Backend,
     window: Arc<Window>,
     resources: &'cx GameResources,
     frame_size_u: Vector2<u32>,
@@ -88,16 +103,32 @@ where
     fps: f64,
     is_paused: bool,
     text_renderer: TextRenderer<'cx>,
+    debug_toggles: DebugToggles,
     debug_text: Text,
     debug_text_string: String,
     debug_text_needs_updating: bool,
     chunk_renderer: ChunkRenderer,
+    chunk_renderer_wireframe: Option<ChunkRenderer>,
     postprocess_pipeline: wgpu::RenderPipeline,
     postprocess_bind_group: PostprocessBindGroup,
     postprocess_bind_group_wgpu: wgpu::BindGroup,
     postprocess_bind_group_layout: wgpu::BindGroupLayout,
     world: World<'scope, 'cx>,
     player_camera: PlayerCamera,
+}
+
+fn print_features(features: wgpu::Features) {
+    let mut string = String::new();
+    _ = write!(&mut string, "features: ");
+    let mut is_first = true;
+    for (name, _) in features.iter_names() {
+        if !is_first {
+            _ = write!(&mut string, ", ");
+        }
+        is_first = false;
+        _ = write!(&mut string, "{name}");
+    }
+    log::info!("{string}");
 }
 
 impl<'scope, 'cx> Game<'scope, 'cx> {
@@ -113,6 +144,9 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         thread_scope: &'scope thread::Scope<'scope, 'cx>,
         program_args: &ProgramArgs,
     ) -> Self {
+        let features = context.device.features();
+        print_features(features);
+        let adapter_info = adapter.get_info();
         let window_surface = instance.create_surface(Arc::clone(&window)).unwrap();
         let surface_capabilities = window_surface.get_capabilities(adapter);
         let window_surface_format = surface_capabilities.formats[0];
@@ -190,7 +224,6 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         };
 
         let fog_start = 1. - 1. / world.view_distance() as f32 / 80.0;
-        log::info!("{fog_start}");
         let postprocess_bind_group = PostprocessBindGroup {
             color_texture: scene_texture.create_view(&Default::default()),
             depth_texture: depth_stencil_texture
@@ -217,6 +250,8 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         let mut self_ = Self {
             device: &context.device,
             queue: &context.queue,
+            device_name: adapter_info.name,
+            backend: adapter_info.backend,
             window,
             resources: &context.resources,
             window_surface,
@@ -228,12 +263,14 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             fps: f64::NAN,
             is_paused: false,
             text_renderer,
+            debug_toggles: Default::default(),
             debug_text,
             debug_text_needs_updating: true,
             debug_text_string: String::new(),
             frame_size_u,
             frame_size,
             chunk_renderer,
+            chunk_renderer_wireframe: None,
             postprocess_pipeline,
             postprocess_bind_group,
             postprocess_bind_group_wgpu,
@@ -280,15 +317,20 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         })
     }
 
-    #[expect(unused_variables)]
     pub fn keyboard_input(&mut self, event: KeyEvent, input_helper: &InputHelper) {
-        if (!event.repeat)
+        if (event.physical_key == PhysicalKey::Code(KeyCode::F3)) & event.state.is_pressed() {
+            self.debug_toggles.f3_pressed();
+        } else if event.state.is_pressed() && input_helper.key_is_down(KeyCode::F3) {
+            self.debug_toggles.key_pressed_with_f3(event.physical_key);
+        }
+        if !event.repeat
             & (event.physical_key == PhysicalKey::Code(KeyCode::Escape))
-            & (event.state.is_pressed())
+            & event.state.is_pressed()
         {
             self.is_paused.toggle();
             self.pause_changed();
         }
+        self.update_debug_text();
     }
 
     #[expect(unused_variables)]
@@ -350,25 +392,34 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         self.debug_text_needs_updating = true;
     }
 
-    fn update_debug_text(&mut self) {
-        self.debug_text_string.clear();
+    fn debug_overlay_text(&self, out: &mut impl fmt::Write) -> fmt::Result {
         if !self.is_paused {
-            _ = writeln!(&mut self.debug_text_string, "CUBE GAME v0.0.0");
+            writeln!(out, "CUBE GAME v0.0.0")?;
         } else {
-            _ = writeln!(&mut self.debug_text_string, "[ESC] PAUSED");
+            writeln!(out, "[ESC] PAUSED")?;
         }
-        _ = writeln!(&mut self.debug_text_string, "FPS: {}", self.fps);
+        writeln!(out, "Backend: {}, {}", self.backend, self.device_name)?;
+        writeln!(out, "FPS: {}", self.fps)?;
         let p = self.player_camera.position;
-        _ = writeln!(
-            &mut self.debug_text_string,
-            "XYZ: {:.04} {:.04} {:.04}",
-            p.x, p.y, p.z
-        );
-        _ = writeln!(
-            &mut self.debug_text_string,
+        writeln!(out, "XYZ: {:.04} {:.04} {:.04}", p.x, p.y, p.z)?;
+        writeln!(
+            out,
             "PITCH YAW: {:.04} {:.04}",
             self.player_camera.pitch, self.player_camera.yaw
-        );
+        )?;
+        Ok(())
+    }
+
+    fn update_debug_text(&mut self) {
+        let mut debug_text = mem::take(&mut self.debug_text_string);
+        debug_text.clear();
+        if self.debug_toggles.show_debug_overlay {
+            _ = self.debug_overlay_text(&mut debug_text);
+        } else if self.is_paused {
+            _ = writeln!(&mut debug_text, "[ESC] PAUSED");
+        }
+        _ = self.debug_toggles.prompt_text(&mut debug_text);
+        self.debug_text_string = debug_text;
         self.text_renderer
             .update_text(self.device, &mut self.debug_text, &self.debug_text_string);
     }
@@ -471,27 +522,32 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         self.text_renderer.draw_text(render_pass, &self.debug_text);
     }
 
-    fn draw_chunks(&self, render_pass: &mut wgpu::RenderPass) {
-        render_pass.set_pipeline(&self.chunk_renderer.pipeline);
-        render_pass.set_bind_group(0, &self.chunk_renderer.bind_group_0_wgpu, &[]);
+    fn draw_chunks(&mut self, render_pass: &mut wgpu::RenderPass) {
+        let chunk_renderer = if self.debug_toggles.wireframe_mode {
+            self.chunk_renderer_wireframe.get_or_insert_with(|| {
+                ChunkRenderer::new_wireframe_mode(
+                    self.device,
+                    self.queue,
+                    self.resources,
+                    Self::SCENE_TEXTURE_FORMAT,
+                    Some(Self::DEPTH_STENCIL_FORMAT),
+                )
+            })
+        } else {
+            self.chunk_renderer_wireframe = None;
+            &self.chunk_renderer
+        };
         let far = self.world.view_distance() as f32 * 32.0;
         let projection = self.player_camera.projection_matrix(far, self.frame_size);
         let view = self.player_camera.view_matrix();
-        self.chunk_renderer
-            .set_view_projection(self.queue, projection * view);
-        self.chunk_renderer
-            .set_sun(self.queue, vec3(1., -2., 0.5).normalize());
+        chunk_renderer.set_view_projection(self.queue, projection * view);
+        chunk_renderer.set_sun(self.queue, vec3(1., -2., 0.5).normalize());
+        chunk_renderer.begin_drawing(render_pass);
         self.world.chunks().for_each_loaded_chunk(|_, chunk| {
             let Some(mesh) = &chunk.client.mesh else {
                 return;
             };
-            render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(
-                mesh.index_buffer.slice(..),
-                mesh.index_buffer.index_format(),
-            );
-            render_pass.set_bind_group(1, &mesh.bind_group_1_wgpu, &[]);
-            render_pass.draw_indexed(0..mesh.index_buffer.length(), 0, 0..1);
+            chunk_renderer.draw_chunk(render_pass, mesh);
         });
     }
 

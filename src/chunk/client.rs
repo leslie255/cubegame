@@ -28,6 +28,41 @@ impl ChunkRenderer {
         surface_color_format: wgpu::TextureFormat,
         depth_stencil_format: Option<wgpu::TextureFormat>,
     ) -> Self {
+        Self::with_polygon_mode(
+            device,
+            queue,
+            resources,
+            surface_color_format,
+            depth_stencil_format,
+            wgpu::PolygonMode::Fill,
+        )
+    }
+
+    pub fn new_wireframe_mode(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        resources: &GameResources,
+        surface_color_format: wgpu::TextureFormat,
+        depth_stencil_format: Option<wgpu::TextureFormat>,
+    ) -> Self {
+        Self::with_polygon_mode(
+            device,
+            queue,
+            resources,
+            surface_color_format,
+            depth_stencil_format,
+            wgpu::PolygonMode::Line,
+        )
+    }
+
+    fn with_polygon_mode(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        resources: &GameResources,
+        surface_color_format: wgpu::TextureFormat,
+        depth_stencil_format: Option<wgpu::TextureFormat>,
+        polygon_mode: wgpu::PolygonMode,
+    ) -> Self {
         let (bind_group_0, bind_group_0_layout, bind_group_0_wgpu) =
             Self::create_bind_group_0(device, queue, resources);
         let bind_group_1_layout =
@@ -64,6 +99,12 @@ impl ChunkRenderer {
                 })],
             }),
             primitive: wgpu::PrimitiveState {
+                topology: match polygon_mode {
+                    wgpu::PolygonMode::Fill => wgpu::PrimitiveTopology::TriangleList,
+                    wgpu::PolygonMode::Line => wgpu::PrimitiveTopology::LineList,
+                    wgpu::PolygonMode::Point => wgpu::PrimitiveTopology::PointList,
+                },
+                polygon_mode,
                 cull_mode: Some(wgpu::Face::Back),
                 ..Default::default()
             },
@@ -145,6 +186,21 @@ impl ChunkRenderer {
 
     pub fn set_sun(&self, queue: &wgpu::Queue, sun: Vector3<f32>) {
         self.bind_group_0.sun.write(sun.into(), queue);
+    }
+
+    pub fn begin_drawing(&self, render_pass: &mut wgpu::RenderPass) {
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.bind_group_0_wgpu, &[]);
+    }
+
+    pub fn draw_chunk(&self, render_pass: &mut wgpu::RenderPass, mesh: &ChunkMesh) {
+        render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(
+            mesh.index_buffer.slice(..),
+            mesh.index_buffer.index_format(),
+        );
+        render_pass.set_bind_group(1, &mesh.bind_group_1_wgpu, &[]);
+        render_pass.draw_indexed(0..mesh.index_buffer.length(), 0, 0..1);
     }
 }
 
