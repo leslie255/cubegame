@@ -103,7 +103,7 @@ impl<'scope, 'self_> ApplicationHandler for App<'scope, 'self_> {
         let duration_since_last_event = now.duration_since(self.previous_window_event);
         self.previous_window_event = now;
         let game = self.game.as_mut().unwrap();
-        game.before_window_event(&self.input_helper, duration_since_last_event);
+        game.before_handling_window_event(&self.input_helper, duration_since_last_event);
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::RedrawRequested => {

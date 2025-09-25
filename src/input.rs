@@ -13,7 +13,6 @@ impl InputHelper {
     }
 
     fn index_for_key(key_code: KeyCode) -> usize {
-        // This is technically unsafe lol due to KeyCode not being a stable API, but like nah.
         (key_code as u8).into()
     }
 

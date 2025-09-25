@@ -28,12 +28,20 @@ impl DebugToggles {
 
     /// Prompt currently activated debug toggles.
     pub fn prompt_text(&self, out: &mut impl fmt::Write) -> fmt::Result {
-        if self.show_debug_overlay {
-            writeln!(out, "[F3+T] Debug Text Overlay")?;
-        }
-        if self.wireframe_mode {
-            writeln!(out, "[F3+L] Wireframe Mode")?;
+        for (key, enabled, description) in self.keys() {
+            if enabled {
+                let key = key.to_ascii_uppercase();
+                writeln!(out, "[F3+{key}] {description}")?;
+            }
         }
         Ok(())
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = (char, bool, &str)> {
+        [
+            ('t', self.show_debug_overlay, "Debug Text Overlay"),
+            ('l', self.wireframe_mode, "Wireframe Mode"),
+        ]
+        .into_iter()
     }
 }

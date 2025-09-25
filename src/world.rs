@@ -2,7 +2,12 @@ use std::{
     collections::HashMap,
     mem,
     ops::Range,
-    sync::{Arc, Mutex, RwLock, mpmc},
+    process,
+    sync::{
+        Arc, Mutex, RwLock,
+        atomic::{self, AtomicBool},
+        mpmc,
+    },
     thread,
 };
 
@@ -32,6 +37,16 @@ pub type WorldCoordF32 = Point3<f32>;
 pub enum ChunkBuildingTask {
     Rebuild { chunk_id: ChunkId },
     Generate { x: i32, z: i32, y_range: Range<i32> },
+}
+
+#[derive(Debug, Clone)]
+pub enum TaskImportance {
+    /// Try to send the task, discard if queue is currently full.
+    Discardable,
+    /// Try to send the task, block if queue is currently full.
+    Defer,
+    /// Execute the task in the current thread.
+    Immediate,
 }
 
 /// Manages loading and unloading chunks.
@@ -122,7 +137,8 @@ where
 {
     workers: Vec<thread::ScopedJoinHandle<'scope, ()>>,
     device: &'cx wgpu::Device,
-    chunk_builder: ChunkBuilder<'cx>,
+    chunk_builder: Mutex<ChunkBuilder<'cx>>,
+    worldgen: Arc<WorldGenerator<'cx>>,
     thread_scope: &'scope thread::Scope<'scope, 'cx>,
     chunks: Arc<ChunkManager>,
     /// TX for sending chunk tasks to the chunk workers.
@@ -162,7 +178,8 @@ where
                 })
             },
             device,
-            chunk_builder,
+            chunk_builder: Mutex::new(chunk_builder),
+            worldgen,
             thread_scope,
             tasks_tx,
             tasks_rx,
@@ -173,6 +190,41 @@ where
     /// Send a task to the chunk workers.
     pub fn send_task(&self, task: ChunkBuildingTask) {
         self.tasks_tx.send(task).unwrap();
+    }
+
+    /// Try to send a task to the chunk workers, discard if task queue is full.
+    /// Returns `true` if discarded.
+    pub fn try_send_task(&self, task: ChunkBuildingTask) -> bool {
+        match self.tasks_tx.try_send(task) {
+            Err(mpmc::TrySendError::Full(_)) => true,
+            Err(error @ mpmc::TrySendError::Disconnected(_)) => {
+                log::error!("{error}");
+                process::exit(1);
+            }
+            Ok(()) => false,
+        }
+    }
+
+    /// Execute task immediately in the current thread.
+    pub fn execute_task(&self, task: ChunkBuildingTask) {
+        match task {
+            ChunkBuildingTask::Rebuild { chunk_id } => {
+                let mut chunk_builder = self.chunk_builder.lock().unwrap();
+                Self::task_rebuild(self.device, &self.chunks, &mut chunk_builder, chunk_id);
+            }
+            ChunkBuildingTask::Generate { x, z, y_range } => {
+                let mut chunk_builder = self.chunk_builder.lock().unwrap();
+                Self::task_generate(
+                    self.device,
+                    &self.chunks,
+                    &mut chunk_builder,
+                    &self.worldgen,
+                    x,
+                    z,
+                    y_range,
+                );
+            }
+        }
     }
 
     fn new_worker(
@@ -261,6 +313,7 @@ where
     chunks: Arc<ChunkManager>,
     pub worldgen: Arc<WorldGenerator<'cx>>,
     chunk_workers: ChunkWorkerPool<'scope, 'cx>,
+    needs_loading_chunks: AtomicBool,
 }
 
 impl<'scope, 'cx> World<'scope, 'cx> {
@@ -290,6 +343,7 @@ impl<'scope, 'cx> World<'scope, 'cx> {
             chunks: Arc::clone(&chunks),
             chunk_workers,
             worldgen,
+            needs_loading_chunks: AtomicBool::new(false),
         }
     }
 
@@ -398,17 +452,42 @@ impl<'scope, 'cx> World<'scope, 'cx> {
         &self.chunks
     }
 
-    pub fn rebuild_chunk(&self, chunk_id: ChunkId) {
-        self.chunk_workers
-            .send_task(ChunkBuildingTask::Rebuild { chunk_id });
+    /// `true` if task is discarded due to a full queue.
+    /// Always `false` if `importance != TaskImportance::Discardable`.
+    pub fn rebuild_chunk(&self, chunk_id: ChunkId, importance: TaskImportance) -> bool {
+        let task = ChunkBuildingTask::Rebuild { chunk_id };
+        match importance {
+            TaskImportance::Discardable => self.chunk_workers.try_send_task(task),
+            TaskImportance::Defer => {
+                self.chunk_workers.send_task(task);
+                true
+            }
+            TaskImportance::Immediate => {
+                self.chunk_workers.execute_task(task);
+                true
+            }
+        }
     }
 
-    pub fn generate_strip(&self, x: i32, z: i32) {
-        self.chunk_workers.send_task(ChunkBuildingTask::Generate {
+    /// `true` if task is discarded due to a full queue.
+    /// Always `false` if `importance != TaskImportance::Discardable`.
+    pub fn generate_strip(&self, x: i32, z: i32, importance: TaskImportance) -> bool {
+        let task = ChunkBuildingTask::Generate {
             x,
             z,
             y_range: self.y_chunk_range(),
-        });
+        };
+        match importance {
+            TaskImportance::Discardable => self.chunk_workers.try_send_task(task),
+            TaskImportance::Defer => {
+                self.chunk_workers.send_task(task);
+                true
+            }
+            TaskImportance::Immediate => {
+                self.chunk_workers.execute_task(task);
+                true
+            }
+        }
     }
 
     fn load_chunks_in_view_distance(&self, player_position: WorldCoordF32) {
@@ -422,11 +501,19 @@ impl<'scope, 'cx> World<'scope, 'cx> {
                     continue;
                 }
                 let is_loaded = self.chunks().chunk_is_loaded(ChunkId::new(x, 0, z));
-                if !is_loaded {
-                    self.generate_strip(x, z);
+                if is_loaded {
+                    continue;
+                }
+                let is_discarded = self.generate_strip(x, z, TaskImportance::Discardable);
+                if is_discarded {
+                    self.needs_loading_chunks
+                        .store(true, atomic::Ordering::Relaxed);
+                    return;
                 }
             }
         }
+        self.needs_loading_chunks
+            .store(false, atomic::Ordering::Relaxed);
     }
 
     pub fn player_moved(&self, old_position: WorldCoordF32, new_position: WorldCoordF32) {
@@ -446,7 +533,14 @@ impl<'scope, 'cx> World<'scope, 'cx> {
                 self.chunks().remove_chunk(chunk_id_);
             }
         });
-        self.load_chunks_in_view_distance(new_position);
+        self.needs_loading_chunks.store(true, atomic::Ordering::Relaxed);
+    }
+
+    pub fn poll(&self, player_position: WorldCoordF32) {
+        let needs_loading_chunks = self.needs_loading_chunks.load(atomic::Ordering::Relaxed);
+        if needs_loading_chunks {
+            self.load_chunks_in_view_distance(player_position);
+        }
     }
 
     pub fn view_distance(&self) -> i32 {

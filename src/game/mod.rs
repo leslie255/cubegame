@@ -247,6 +247,13 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
 
         world.generate_initial_area();
 
+        let debug_toggles = DebugToggles::default();
+        println!("Tips: Debug keys:");
+        for (key, _enabled, description) in debug_toggles.keys() {
+            let key = key.to_ascii_uppercase();
+            println!("[F3+{key}] {description}");
+        }
+
         let mut self_ = Self {
             device: &context.device,
             queue: &context.queue,
@@ -263,7 +270,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             fps: f64::NAN,
             is_paused: false,
             text_renderer,
-            debug_toggles: Default::default(),
+            debug_toggles,
             debug_text,
             debug_text_needs_updating: true,
             debug_text_string: String::new(),
@@ -425,6 +432,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
     }
 
     pub fn frame(&mut self) {
+        self.world.poll(self.player_camera.position);
         if self.debug_text_needs_updating {
             self.update_debug_text();
         }
@@ -551,7 +559,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         });
     }
 
-    pub fn before_window_event(
+    pub fn before_handling_window_event(
         &mut self,
         input_helper: &InputHelper,
         duration_since_last_event: Duration,
