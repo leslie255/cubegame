@@ -45,9 +45,7 @@ fn main() {
     let event_loop = winit::event_loop::EventLoop::builder().build().unwrap();
 
     thread::scope(|scope| {
-        let app = App::new(program_args, scope);
-        unsafe {
-            app.run(event_loop);
-        }
+        let app = unsafe { App::new(program_args, scope) };
+        app.run(event_loop);
     });
 }

@@ -29,10 +29,15 @@ pub struct App<'scope, 'self_> {
 }
 
 impl<'scope> App<'scope, 'static> {
-    pub fn new(
+    /// # Safety
+    ///
+    /// App is a self-referencing struct, it must not be moved after initialization.
+    pub unsafe fn new(
         program_args: ProgramArgs,
         thread_scope: &'scope thread::Scope<'scope, 'static>,
     ) -> Self {
+        // In reality self-referencing only happens after the initialization of the main window.
+        // But we have off-loaded the unsafty here for sanity sake.
         Self {
             program_args,
             fps_counter: FpsCounter::new(),
@@ -45,10 +50,7 @@ impl<'scope> App<'scope, 'static> {
         }
     }
 
-    /// # Safety
-    ///
-    /// App is a self-referencing struct, it must not be moved after this call.
-    pub unsafe fn run(mut self, event_loop: EventLoop<()>) {
+    pub fn run(mut self, event_loop: EventLoop<()>) {
         event_loop.run_app(&mut self).unwrap();
     }
 }
@@ -78,8 +80,7 @@ impl<'scope, 'self_> ApplicationHandler for App<'scope, 'self_> {
                     queue,
                     resources,
                 });
-                // SAEFTY: self would not be moved, and context is never set to `None` afterwards.
-                // FIXME: Is *actually*, *rigourously*, safe?
+                // SAEFTY: self would not be moved (guaranteed by `unsafe`ness of `App::new`), and context is never set to `None` afterwards.
                 let context: &'self_ Context = unsafe { transmute(self.context.as_ref().unwrap()) };
                 self.game = Some(Game::new(
                     &instance,

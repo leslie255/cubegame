@@ -160,7 +160,7 @@ where
         worldgen: Arc<WorldGenerator<'cx>>,
     ) -> Self {
         let chunk_builder = ChunkBuilder::new(resources);
-        let (tasks_tx, tasks_rx) = mpmc::sync_channel(128);
+        let (tasks_tx, tasks_rx) = mpmc::sync_channel(32);
         Self {
             workers: {
                 let n_threads = num_cpus::get().saturating_sub(3) + 1;
@@ -275,6 +275,9 @@ where
         z: i32,
         y_range: Range<i32>,
     ) {
+        if chunks.chunk_is_loaded(ChunkId::new(x, 0, z)) {
+            return;
+        }
         let generated = worldgen.generate_strip(x, z, y_range.clone());
         for (chunk_id, chunk_data) in generated.into_chunks() {
             let mut chunk = Chunk {
@@ -533,7 +536,8 @@ impl<'scope, 'cx> World<'scope, 'cx> {
                 self.chunks().remove_chunk(chunk_id_);
             }
         });
-        self.needs_loading_chunks.store(true, atomic::Ordering::Relaxed);
+        self.needs_loading_chunks
+            .store(true, atomic::Ordering::Relaxed);
     }
 
     pub fn poll(&self, player_position: WorldCoordF32) {
