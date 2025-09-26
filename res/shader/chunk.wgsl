@@ -2,6 +2,7 @@
 @group(0) @binding(1) var<uniform> sun: vec3<f32>;
 @group(0) @binding(2) var texture: texture_2d<f32>;
 @group(0) @binding(3) var sampler_: sampler;
+@group(0) @binding(4) var<uniform> gray_world: u32;
 
 @group(1) @binding(0) var<uniform> model: mat4x4<f32>;
 @group(1) @binding(1) var<uniform> normal: vec3<f32>;
@@ -45,7 +46,10 @@ fn vs_main(@location(0) packed: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
-    let sample = textureSample(texture, sampler_, vertex.uv);
+    let sample = select(
+        textureSample(texture, sampler_, vertex.uv),
+        vec4<f32>(0.5, 0.5, 0.5, 1.0),
+        bool(gray_world));
     let cos_theta = clamp(dot(vertex.normal, sun), 0.0, 1.0);
     return vec4<f32>(sample.rgb * (1.0 - 0.3 * cos_theta), sample.a);
 }

@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use cgmath::*;
+use cgmath::{num_traits::Float as _, *};
 
 use pollster::FutureExt as _;
 use winit::{
@@ -41,11 +41,10 @@ pub fn initialize_wgpu() -> (wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::
         .request_adapter(&wgpu::RequestAdapterOptions::default())
         .block_on()
         .unwrap();
+    let features = wgpu::FeaturesWGPU::POLYGON_MODE_LINE;
     let (device, queue) = adapter
         .request_device(&wgpu::DeviceDescriptor {
-            required_features: (wgpu::FeaturesWGPU::POLYGON_MODE_LINE
-                | wgpu::FeaturesWGPU::MULTI_DRAW_INDIRECT)
-                .into(),
+            required_features: features.into(),
             ..Default::default()
         })
         .block_on()
@@ -532,15 +531,20 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
 
     fn draw_chunks(&mut self, render_pass: &mut wgpu::RenderPass) {
         let chunk_renderer = if self.debug_toggles.wireframe_mode {
-            self.chunk_renderer_wireframe.get_or_insert_with(|| {
-                ChunkRenderer::new_wireframe_mode(
-                    self.device,
-                    self.queue,
-                    self.resources,
-                    Self::SCENE_TEXTURE_FORMAT,
-                    Some(Self::DEPTH_STENCIL_FORMAT),
-                )
-            })
+            if let Some(chunk_renderer_wireframe) = &self.chunk_renderer_wireframe {
+                chunk_renderer_wireframe
+            } else if let renderer @ Some(_) = ChunkRenderer::new_wireframe_mode(
+                self.device,
+                self.queue,
+                self.resources,
+                Self::SCENE_TEXTURE_FORMAT,
+                Some(Self::DEPTH_STENCIL_FORMAT),
+            ) {
+                self.chunk_renderer_wireframe = renderer;
+                self.chunk_renderer_wireframe.as_ref().unwrap()
+            } else {
+                &self.chunk_renderer
+            }
         } else {
             self.chunk_renderer_wireframe = None;
             &self.chunk_renderer
@@ -550,6 +554,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         let view = self.player_camera.view_matrix();
         chunk_renderer.set_view_projection(self.queue, projection * view);
         chunk_renderer.set_sun(self.queue, vec3(1., -2., 0.5).normalize());
+        chunk_renderer.set_gray_world(self.queue, self.debug_toggles.gray_world);
         chunk_renderer.begin_drawing(render_pass);
         self.world.chunks().for_each_loaded_chunk(|_, chunk| {
             let Some(mesh) = &chunk.client.mesh else {
@@ -569,29 +574,31 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         }
         let mut movement = vec3(0., 0., 0.);
         if input_helper.key_is_down(KeyCode::KeyW) {
-            movement.z += 1.0;
+            movement.z += 1.;
         }
         if input_helper.key_is_down(KeyCode::KeyS) {
-            movement.z -= 1.0;
+            movement.z -= 1.;
         }
         if input_helper.key_is_down(KeyCode::KeyA) {
-            movement.x -= 1.0;
+            movement.x -= 1.;
         }
         if input_helper.key_is_down(KeyCode::KeyD) {
-            movement.x += 1.0;
+            movement.x += 1.;
         }
         if input_helper.key_is_down(KeyCode::Space) {
-            movement.y += 1.0;
+            movement.y += 1.;
         }
         if input_helper.key_is_down(KeyCode::KeyR) {
-            movement.y -= 1.0;
+            movement.y -= 1.;
         }
-        movement.normalize();
-        movement *= 4.;
+        movement = movement.normalize_to(4.);
+        if movement.x.is_nan() | movement.y.is_nan() | movement.z.is_nan() {
+            return;
+        }
         if input_helper.key_is_down(KeyCode::F3) {
-            movement *= 32.;
+            movement *= 64.;
         } else if input_helper.key_is_down(KeyCode::ControlLeft) {
-            movement *= 4.;
+            movement.z *= 4.;
         }
         movement *= duration_since_last_event.as_secs_f32();
 

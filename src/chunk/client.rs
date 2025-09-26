@@ -44,15 +44,20 @@ impl ChunkRenderer {
         resources: &GameResources,
         surface_color_format: wgpu::TextureFormat,
         depth_stencil_format: Option<wgpu::TextureFormat>,
-    ) -> Self {
-        Self::with_polygon_mode(
-            device,
-            queue,
-            resources,
-            surface_color_format,
-            depth_stencil_format,
-            wgpu::PolygonMode::Line,
-        )
+    ) -> Option<Self> {
+        let supports_polygon_line_mode = device
+            .features()
+            .contains(wgpu::FeaturesWGPU::POLYGON_MODE_LINE.into());
+        supports_polygon_line_mode.then(|| {
+            Self::with_polygon_mode(
+                device,
+                queue,
+                resources,
+                surface_color_format,
+                depth_stencil_format,
+                wgpu::PolygonMode::Line,
+            )
+        })
     }
 
     fn with_polygon_mode(
@@ -170,6 +175,7 @@ impl ChunkRenderer {
             sun: UniformBuffer::create_init(device, Vector3::unit_x().into()),
             texture_view,
             sampler,
+            gray_world: UniformBuffer::create_init(device, 0),
         };
         let bind_group_0_layout =
             wgpu_utils::create_bind_group_layout::<ChunkMeshBindGroup0>(device);
@@ -186,6 +192,10 @@ impl ChunkRenderer {
 
     pub fn set_sun(&self, queue: &wgpu::Queue, sun: Vector3<f32>) {
         self.bind_group_0.sun.write(sun.into(), queue);
+    }
+
+    pub fn set_gray_world(&self, queue: &wgpu::Queue, gray_world: bool) {
+        self.bind_group_0.gray_world.write(gray_world.into(), queue);
     }
 
     pub fn begin_drawing(&self, render_pass: &mut wgpu::RenderPass) {
@@ -210,6 +220,7 @@ pub struct ChunkMeshBindGroup0 {
     pub(super) sun: UniformBuffer<[f32; 3]>,
     pub(super) texture_view: wgpu::TextureView,
     pub(super) sampler: wgpu::Sampler,
+    pub(super) gray_world: UniformBuffer<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -224,6 +235,7 @@ impl_as_bind_group! {
         1 => sun: UniformBuffer<[f32; 3]>,
         2 => texture_view: wgpu::TextureView,
         3 => sampler: wgpu::Sampler,
+        4 => gray_world: UniformBuffer<u32>,
     }
 
     ChunkMeshBindGroup1 {

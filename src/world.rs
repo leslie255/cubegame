@@ -34,7 +34,7 @@ pub type WorldCoordF32 = Point3<f32>;
 
 /// A task for the chunk workers.
 #[derive(Debug, Clone)]
-pub enum ChunkBuildingTask {
+pub enum ChunkTask {
     Rebuild { chunk_id: ChunkId },
     Generate { x: i32, z: i32, y_range: Range<i32> },
 }
@@ -142,10 +142,10 @@ where
     thread_scope: &'scope thread::Scope<'scope, 'cx>,
     chunks: Arc<ChunkManager>,
     /// TX for sending chunk tasks to the chunk workers.
-    tasks_tx: mpmc::Sender<ChunkBuildingTask>,
+    tasks_tx: mpmc::Sender<ChunkTask>,
     /// RX for sending chunk workers to receive their tasks.
     /// Kept alive in the worker pool to create more chunk workers.
-    tasks_rx: mpmc::Receiver<ChunkBuildingTask>,
+    tasks_rx: mpmc::Receiver<ChunkTask>,
 }
 
 impl<'scope, 'cx> ChunkWorkerPool<'scope, 'cx>
@@ -159,12 +159,12 @@ where
         chunks: Arc<ChunkManager>,
         worldgen: Arc<WorldGenerator<'cx>>,
     ) -> Self {
+        let n_threads = num_cpus::get().saturating_sub(2).max(1);
+        // let n_threads = 1;
         let chunk_builder = ChunkBuilder::new(resources);
-        let (tasks_tx, tasks_rx) = mpmc::sync_channel(32);
+        let (tasks_tx, tasks_rx) = mpmc::sync_channel(n_threads * 64);
         Self {
             workers: {
-                let n_threads = num_cpus::get().saturating_sub(3) + 1;
-                // let n_threads = 1;
                 log::info!("using {n_threads} chunk worker threads");
                 vec_with(n_threads, || {
                     let worker = Self::new_worker(
@@ -188,13 +188,13 @@ where
     }
 
     /// Send a task to the chunk workers.
-    pub fn send_task(&self, task: ChunkBuildingTask) {
+    pub fn send_task(&self, task: ChunkTask) {
         self.tasks_tx.send(task).unwrap();
     }
 
     /// Try to send a task to the chunk workers, discard if task queue is full.
     /// Returns `true` if discarded.
-    pub fn try_send_task(&self, task: ChunkBuildingTask) -> bool {
+    pub fn try_send_task(&self, task: ChunkTask) -> bool {
         match self.tasks_tx.try_send(task) {
             Err(mpmc::TrySendError::Full(_)) => true,
             Err(error @ mpmc::TrySendError::Disconnected(_)) => {
@@ -206,13 +206,13 @@ where
     }
 
     /// Execute task immediately in the current thread.
-    pub fn execute_task(&self, task: ChunkBuildingTask) {
+    pub fn execute_task(&self, task: ChunkTask) {
         match task {
-            ChunkBuildingTask::Rebuild { chunk_id } => {
+            ChunkTask::Rebuild { chunk_id } => {
                 let mut chunk_builder = self.chunk_builder.lock().unwrap();
                 Self::task_rebuild(self.device, &self.chunks, &mut chunk_builder, chunk_id);
             }
-            ChunkBuildingTask::Generate { x, z, y_range } => {
+            ChunkTask::Generate { x, z, y_range } => {
                 let mut chunk_builder = self.chunk_builder.lock().unwrap();
                 Self::task_generate(
                     self.device,
@@ -227,9 +227,25 @@ where
         }
     }
 
+    /// `true` if task is discarded due to a full queue.
+    /// Always `false` if `importance != TaskImportance::Discardable`.
+    pub fn add_task(&self, importance: TaskImportance, task: ChunkTask) -> bool {
+        match importance {
+            TaskImportance::Discardable => self.try_send_task(task),
+            TaskImportance::Defer => {
+                self.send_task(task);
+                true
+            }
+            TaskImportance::Immediate => {
+                self.execute_task(task);
+                true
+            }
+        }
+    }
+
     fn new_worker(
         device: &'cx wgpu::Device,
-        tasks_rx: mpmc::Receiver<ChunkBuildingTask>,
+        tasks_rx: mpmc::Receiver<ChunkTask>,
         chunk_manager: Arc<ChunkManager>,
         mut chunk_builder: ChunkBuilder<'cx>,
         worldgen: Arc<WorldGenerator<'cx>>,
@@ -247,10 +263,10 @@ where
                     }
                 };
                 match task {
-                    ChunkBuildingTask::Rebuild { chunk_id } => {
+                    ChunkTask::Rebuild { chunk_id } => {
                         Self::task_rebuild(device, &chunk_manager, &mut chunk_builder, chunk_id);
                     }
-                    ChunkBuildingTask::Generate { x, z, y_range } => {
+                    ChunkTask::Generate { x, z, y_range } => {
                         Self::task_generate(
                             device,
                             &chunk_manager,
@@ -457,40 +473,8 @@ impl<'scope, 'cx> World<'scope, 'cx> {
 
     /// `true` if task is discarded due to a full queue.
     /// Always `false` if `importance != TaskImportance::Discardable`.
-    pub fn rebuild_chunk(&self, chunk_id: ChunkId, importance: TaskImportance) -> bool {
-        let task = ChunkBuildingTask::Rebuild { chunk_id };
-        match importance {
-            TaskImportance::Discardable => self.chunk_workers.try_send_task(task),
-            TaskImportance::Defer => {
-                self.chunk_workers.send_task(task);
-                true
-            }
-            TaskImportance::Immediate => {
-                self.chunk_workers.execute_task(task);
-                true
-            }
-        }
-    }
-
-    /// `true` if task is discarded due to a full queue.
-    /// Always `false` if `importance != TaskImportance::Discardable`.
-    pub fn generate_strip(&self, x: i32, z: i32, importance: TaskImportance) -> bool {
-        let task = ChunkBuildingTask::Generate {
-            x,
-            z,
-            y_range: self.y_chunk_range(),
-        };
-        match importance {
-            TaskImportance::Discardable => self.chunk_workers.try_send_task(task),
-            TaskImportance::Defer => {
-                self.chunk_workers.send_task(task);
-                true
-            }
-            TaskImportance::Immediate => {
-                self.chunk_workers.execute_task(task);
-                true
-            }
-        }
+    pub fn add_task(&self, importance: TaskImportance, task: ChunkTask) -> bool {
+        self.chunk_workers.add_task(importance, task)
     }
 
     fn load_chunks_in_view_distance(&self, player_position: WorldCoordF32) {
@@ -507,7 +491,14 @@ impl<'scope, 'cx> World<'scope, 'cx> {
                 if is_loaded {
                     continue;
                 }
-                let is_discarded = self.generate_strip(x, z, TaskImportance::Discardable);
+                let is_discarded = self.add_task(
+                    TaskImportance::Discardable,
+                    ChunkTask::Generate {
+                        x,
+                        z,
+                        y_range: self.y_chunk_range(),
+                    },
+                );
                 if is_discarded {
                     self.needs_loading_chunks
                         .store(true, atomic::Ordering::Relaxed);
