@@ -9,6 +9,7 @@ use std::{
         mpmc,
     },
     thread,
+    time::Duration,
 };
 
 use cgmath::*;
@@ -332,6 +333,7 @@ where
     chunks: Arc<ChunkManager>,
     pub worldgen: Arc<WorldGenerator<'cx>>,
     chunk_workers: ChunkWorkerPool<'scope, 'cx>,
+    player_position: Mutex<Point3<f32>>,
     needs_loading_chunks: AtomicBool,
 }
 
@@ -341,7 +343,7 @@ impl<'scope, 'cx> World<'scope, 'cx> {
         resources: &'cx GameResources,
         thread_scope: &'scope thread::Scope<'scope, 'cx>,
         args: &ProgramArgs,
-    ) -> Self {
+    ) -> Arc<Self> {
         let chunks = Arc::new(ChunkManager::new());
         let world_seed = args.seed.unwrap_or_else(|| getrandom::u64().unwrap_or(255));
         let mut world_height = args.height as i32;
@@ -356,14 +358,36 @@ impl<'scope, 'cx> World<'scope, 'cx> {
             Arc::clone(&chunks),
             Arc::clone(&worldgen),
         );
-        Self {
+        let self_ = Arc::new(Self {
             world_height,
             view_distance: args.view as i32,
             chunks: Arc::clone(&chunks),
             chunk_workers,
             worldgen,
+            player_position: Mutex::new(point3(0., 0., 0.)),
             needs_loading_chunks: AtomicBool::new(false),
-        }
+        });
+        self_.start_polling_chunk_worker();
+        self_
+    }
+
+    pub fn start_polling_chunk_worker(self: &Arc<Self>) {
+        // Use weak reference so when world is dropped thread exits.
+        let weak_self = Arc::downgrade(self);
+        self.chunk_workers.thread_scope.spawn(move || {
+            loop {
+                let Some(self_) = weak_self.upgrade() else {
+                    break;
+                };
+                let needs_loading_chunks =
+                    self_.needs_loading_chunks.load(atomic::Ordering::Relaxed);
+                if needs_loading_chunks {
+                    let player_position = *self_.player_position.lock().unwrap();
+                    self_.load_chunks_in_view_distance(player_position);
+                }
+                thread::park_timeout(Duration::from_millis(8));
+            }
+        });
     }
 
     pub fn y_chunk_range(&self) -> Range<i32> {
@@ -510,7 +534,13 @@ impl<'scope, 'cx> World<'scope, 'cx> {
             .store(false, atomic::Ordering::Relaxed);
     }
 
-    pub fn player_moved(&self, old_position: WorldCoordF32, new_position: WorldCoordF32) {
+    pub fn player_moved(&self, new_position: WorldCoordF32) {
+        let old_position = {
+            let mut player_position = self.player_position.lock().unwrap();
+            let old_position = *player_position;
+            *player_position = new_position;
+            old_position
+        };
         // Check for strip boundary crossing.
         let (old_chunk_id, _) = World::world_to_local_coord_f32(old_position);
         let (chunk_id, _) = World::world_to_local_coord_f32(new_position);
@@ -529,13 +559,6 @@ impl<'scope, 'cx> World<'scope, 'cx> {
         });
         self.needs_loading_chunks
             .store(true, atomic::Ordering::Relaxed);
-    }
-
-    pub fn poll(&self, player_position: WorldCoordF32) {
-        let needs_loading_chunks = self.needs_loading_chunks.load(atomic::Ordering::Relaxed);
-        if needs_loading_chunks {
-            self.load_chunks_in_view_distance(player_position);
-        }
     }
 
     pub fn view_distance(&self) -> i32 {

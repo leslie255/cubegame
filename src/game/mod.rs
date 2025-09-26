@@ -12,7 +12,7 @@ use pollster::FutureExt as _;
 use winit::{
     event::{ElementState, KeyEvent, MouseButton},
     keyboard::{KeyCode, PhysicalKey},
-    window::{CursorGrabMode, Window},
+    window::{CursorGrabMode, Fullscreen, Window},
 };
 
 use crate::{
@@ -112,7 +112,7 @@ where
     postprocess_bind_group: PostprocessBindGroup,
     postprocess_bind_group_wgpu: wgpu::BindGroup,
     postprocess_bind_group_layout: wgpu::BindGroupLayout,
-    world: World<'scope, 'cx>,
+    world: Arc<World<'scope, 'cx>>,
     player_camera: PlayerCamera,
 }
 
@@ -222,7 +222,9 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
                 })
         };
 
-        let fog_start = 1. - 1. / world.view_distance() as f32 / 80.0;
+        let fog_start = 1. - 1. / (world.view_distance() * 2) as f32;
+        log::info!("fog_start = {fog_start}");
+        // let fog_start = 0.99;
         let postprocess_bind_group = PostprocessBindGroup {
             color_texture: scene_texture.create_view(&Default::default()),
             depth_texture: depth_stencil_texture
@@ -324,17 +326,30 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
     }
 
     pub fn keyboard_input(&mut self, event: KeyEvent, input_helper: &InputHelper) {
-        if (event.physical_key == PhysicalKey::Code(KeyCode::F3)) & event.state.is_pressed() {
-            self.debug_toggles.f3_pressed();
-        } else if event.state.is_pressed() && input_helper.key_is_down(KeyCode::F3) {
-            self.debug_toggles.key_pressed_with_f3(event.physical_key);
-        }
-        if !event.repeat
-            & (event.physical_key == PhysicalKey::Code(KeyCode::Escape))
-            & event.state.is_pressed()
-        {
-            self.is_paused.toggle();
-            self.pause_changed();
+        match event.physical_key {
+            PhysicalKey::Code(KeyCode::F3) if event.state.is_pressed() => {
+                self.debug_toggles.f3_pressed();
+            }
+            PhysicalKey::Code(KeyCode::F11) if event.state.is_pressed() & !event.repeat => {
+                let is_fullscreen = self
+                    .window
+                    .fullscreen()
+                    .is_some_and(|fullscreen| matches!(fullscreen, Fullscreen::Borderless(_)));
+                if is_fullscreen {
+                    self.window.set_fullscreen(None);
+                } else {
+                    self.window
+                        .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                }
+            }
+            PhysicalKey::Code(KeyCode::Escape) if event.state.is_pressed() & !event.repeat => {
+                self.is_paused.toggle();
+                self.pause_changed();
+            }
+            key if event.state.is_pressed() & input_helper.key_is_down(KeyCode::F3) => {
+                self.debug_toggles.key_pressed_with_f3(key);
+            }
+            _ => (),
         }
         self.update_debug_text();
     }
@@ -431,14 +446,47 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
     }
 
     pub fn frame(&mut self) {
-        self.world.poll(self.player_camera.position);
         if self.debug_text_needs_updating {
             self.update_debug_text();
         }
 
         // Scene.
-        let mut encoder_scene = self.device.create_command_encoder(&Default::default());
-        let mut render_pass = encoder_scene.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let mut render_pass = self.scene_render_pass(&mut encoder);
+
+        self.draw_chunks(&mut render_pass);
+        self.draw_debug_text(&mut render_pass);
+
+        drop(render_pass);
+
+        // Postprocess.
+        let surface_texture = self
+            .window_surface
+            .get_current_texture()
+            .expect("failed to acquire next swapchain texture");
+        let surface_texture_view =
+            surface_texture
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor {
+                    format: Some(self.window_surface_format.add_srgb_suffix()),
+                    ..Default::default()
+                });
+
+        let mut render_pass = self.postprocess_render_pass(&mut encoder, &surface_texture_view);
+
+        render_pass.set_pipeline(&self.postprocess_pipeline);
+        render_pass.set_bind_group(0, &self.postprocess_bind_group_wgpu, &[]);
+        render_pass.draw(0..6, 0..1);
+
+        drop(render_pass);
+        self.queue.submit([encoder.finish()]);
+
+        self.window.pre_present_notify();
+        surface_texture.present();
+    }
+
+    fn scene_render_pass<'a>(&self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::RenderPass<'a> {
+        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("scene"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &self.scene_texture_view,
@@ -459,32 +507,18 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             }),
             timestamp_writes: None,
             occlusion_query_set: None,
-        });
+        })
+    }
 
-        self.draw_chunks(&mut render_pass);
-        self.draw_debug_text(&mut render_pass);
-
-        drop(render_pass);
-        self.queue.submit([encoder_scene.finish()]);
-
-        // Postprocess.
-        let surface_texture = self
-            .window_surface
-            .get_current_texture()
-            .expect("failed to acquire next swapchain texture");
-        let surface_texture_view =
-            surface_texture
-                .texture
-                .create_view(&wgpu::TextureViewDescriptor {
-                    format: Some(self.window_surface_format.add_srgb_suffix()),
-                    ..Default::default()
-                });
-
-        let mut encoder_postprocess = self.device.create_command_encoder(&Default::default());
-        let mut render_pass = encoder_postprocess.begin_render_pass(&wgpu::RenderPassDescriptor {
+    fn postprocess_render_pass<'a>(
+        &self,
+        encoder: &'a mut wgpu::CommandEncoder,
+        surface_texture_view: &wgpu::TextureView,
+    ) -> wgpu::RenderPass<'a> {
+        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("postprocess"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &surface_texture_view,
+                view: surface_texture_view,
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
@@ -495,28 +529,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
-        });
-
-        render_pass.set_pipeline(&self.postprocess_pipeline);
-        render_pass.set_bind_group(0, &self.postprocess_bind_group_wgpu, &[]);
-        render_pass.draw(0..6, 0..1);
-
-        drop(render_pass);
-        self.queue.submit([encoder_postprocess.finish()]);
-
-        self.window.pre_present_notify();
-        surface_texture.present();
-    }
-
-    fn pause_changed(&mut self) {
-        if !self.is_paused {
-            _ = self.window.set_cursor_grab(CursorGrabMode::Locked);
-            self.window.set_cursor_visible(false);
-        } else {
-            _ = self.window.set_cursor_grab(CursorGrabMode::None);
-            self.window.set_cursor_visible(true);
-        }
-        self.debug_text_needs_updating = true;
+        })
     }
 
     fn draw_debug_text(&self, render_pass: &mut wgpu::RenderPass) {
@@ -556,12 +569,31 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         chunk_renderer.set_sun(self.queue, vec3(1., -2., 0.5).normalize());
         chunk_renderer.set_gray_world(self.queue, self.debug_toggles.gray_world);
         chunk_renderer.begin_drawing(render_pass);
-        self.world.chunks().for_each_loaded_chunk(|_, chunk| {
-            let Some(mesh) = &chunk.client.mesh else {
-                return;
-            };
-            chunk_renderer.draw_chunk(render_pass, mesh);
-        });
+        let (player_chunk_id, _) = World::world_to_local_coord_f32(self.player_camera.position);
+        self.world
+            .chunks()
+            .for_each_loaded_chunk(|chunk_id, chunk| {
+                let distance2 = point2(player_chunk_id.x as f32, player_chunk_id.z as f32)
+                    .distance2(point2(chunk_id.x as f32, chunk_id.z as f32));
+                if distance2 > (self.world.view_distance() as f32).powi(2) {
+                    return;
+                }
+                let Some(mesh) = &chunk.client.mesh else {
+                    return;
+                };
+                chunk_renderer.draw_chunk(render_pass, mesh);
+            });
+    }
+
+    fn pause_changed(&mut self) {
+        if !self.is_paused {
+            _ = self.window.set_cursor_grab(CursorGrabMode::Locked);
+            self.window.set_cursor_visible(false);
+        } else {
+            _ = self.window.set_cursor_grab(CursorGrabMode::None);
+            self.window.set_cursor_visible(true);
+        }
+        self.debug_text_needs_updating = true;
     }
 
     pub fn before_handling_window_event(
@@ -602,10 +634,8 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         }
         movement *= duration_since_last_event.as_secs_f32();
 
-        let old_position = self.player_camera.position;
         self.player_camera.move_(movement);
-        let new_position = self.player_camera.position;
-        self.world.player_moved(old_position, new_position)
+        self.world.player_moved(self.player_camera.position);
     }
 }
 
