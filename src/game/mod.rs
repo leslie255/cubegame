@@ -241,12 +241,12 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         );
 
         let player_camera = PlayerCamera {
-            position: point3(0., 0., 0.),
+            position: point3(0., 0., 10000000.),
             pitch: 0.,
             yaw: -90.,
         };
 
-        world.generate_initial_area();
+        world.generate_initial_area(player_camera.position);
 
         let debug_toggles = DebugToggles::default();
         println!("Tips: Debug keys:");
@@ -564,8 +564,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         };
         let far = self.world.view_distance() as f32 * 32.0;
         let projection = self.player_camera.projection_matrix(far, self.frame_size);
-        let view = self.player_camera.view_matrix();
-        chunk_renderer.set_view_projection(self.queue, projection * view);
+        chunk_renderer.set_projection(self.queue, projection);
         chunk_renderer.set_sun(self.queue, vec3(1., -2., 0.5).normalize());
         chunk_renderer.set_gray_world(self.queue, self.debug_toggles.gray_world);
         chunk_renderer.begin_drawing(render_pass);
@@ -581,6 +580,9 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
                 let Some(mesh) = &chunk.client.mesh else {
                     return;
                 };
+                let translation = chunk_id.to_vec().map(|i| i as f64 * 32.);
+                let model_view = self.player_camera.view_matrix(translation);
+                mesh.set_model_view(self.queue, model_view);
                 chunk_renderer.draw_chunk(render_pass, mesh);
             });
     }
@@ -680,8 +682,26 @@ impl PlayerCamera {
         )
     }
 
-    pub fn view_matrix(self) -> Matrix4<f32> {
-        Matrix4::look_to_rh(self.position, self.direction(), Vector3::unit_y())
+    pub fn direction_f64(self) -> Vector3<f64> {
+        let pitch = self.pitch as f64;
+        let yaw = self.yaw as f64;
+        Vector3::new(
+            yaw.to_radians().cos() * pitch.to_radians().cos(),
+            pitch.to_radians().sin(),
+            yaw.to_radians().sin() * pitch.to_radians().cos(),
+        )
+    }
+
+    pub fn position_f64(self) -> Point3<f64> {
+        self.position.map(|f| f as f64)
+    }
+
+    pub fn view_matrix(self, translation: Vector3<f64>) -> Matrix4<f64> {
+        Matrix4::look_to_rh(
+            self.position_f64() - translation,
+            self.direction_f64(),
+            Vector3::unit_y(),
+        )
     }
 
     pub fn projection_matrix(self, far: f32, frame_size: Vector2<f32>) -> Matrix4<f32> {

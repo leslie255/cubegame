@@ -400,9 +400,8 @@ impl<'scope, 'cx> World<'scope, 'cx> {
             ..World::local_to_world_coord_axis(y_chunk_range.end, 31)
     }
 
-    /// Generates an area around (0, _, 0).
-    pub fn generate_initial_area(&self) {
-        self.load_chunks_in_view_distance(WorldCoordF32::new(0., 0., 0.));
+    pub fn generate_initial_area(&self, around_position: WorldCoordF32) {
+        self.load_chunks_in_view_distance(around_position);
     }
 
     /// Convert world coord to local coord.

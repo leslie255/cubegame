@@ -171,7 +171,7 @@ impl ChunkRenderer {
             border_color: None,
         });
         let bind_group_0 = ChunkMeshBindGroup0 {
-            view_projection: UniformBuffer::create_init(device, Matrix4::identity().into()),
+            projection: UniformBuffer::create_init(device, Matrix4::identity().into()),
             sun: UniformBuffer::create_init(device, Vector3::unit_x().into()),
             texture_view,
             sampler,
@@ -184,10 +184,8 @@ impl ChunkRenderer {
         (bind_group_0, bind_group_0_layout, bind_group_0_wgpu)
     }
 
-    pub fn set_view_projection(&self, queue: &wgpu::Queue, view_projection: Matrix4<f32>) {
-        self.bind_group_0
-            .view_projection
-            .write(view_projection.into(), queue);
+    pub fn set_projection(&self, queue: &wgpu::Queue, projection: Matrix4<f32>) {
+        self.bind_group_0.projection.write(projection.into(), queue);
     }
 
     pub fn set_sun(&self, queue: &wgpu::Queue, sun: Vector3<f32>) {
@@ -216,7 +214,7 @@ impl ChunkRenderer {
 
 #[derive(Debug, Clone)]
 pub struct ChunkMeshBindGroup0 {
-    pub(super) view_projection: UniformBuffer<[[f32; 4]; 4]>,
+    pub(super) projection: UniformBuffer<[[f32; 4]; 4]>,
     pub(super) sun: UniformBuffer<[f32; 3]>,
     pub(super) texture_view: wgpu::TextureView,
     pub(super) sampler: wgpu::Sampler,
@@ -225,13 +223,13 @@ pub struct ChunkMeshBindGroup0 {
 
 #[derive(Debug, Clone)]
 pub struct ChunkMeshBindGroup1 {
-    pub(super) model: UniformBuffer<[[f32; 4]; 4]>,
+    pub(super) model_view: UniformBuffer<[[f32; 4]; 4]>,
     pub(super) normal: UniformBuffer<[f32; 3]>,
 }
 
 impl_as_bind_group! {
     ChunkMeshBindGroup0 {
-        0 => view_projection: UniformBuffer<[[f32; 4]; 4]>,
+        0 => projection: UniformBuffer<[[f32; 4]; 4]>,
         1 => sun: UniformBuffer<[f32; 3]>,
         2 => texture_view: wgpu::TextureView,
         3 => sampler: wgpu::Sampler,
@@ -239,7 +237,7 @@ impl_as_bind_group! {
     }
 
     ChunkMeshBindGroup1 {
-        0 => model: UniformBuffer<[[f32; 4]; 4]>,
+        0 => model_view: UniformBuffer<[[f32; 4]; 4]>,
         1 => normal: UniformBuffer<[f32; 3]>,
     }
 }
@@ -288,6 +286,18 @@ pub struct ChunkMesh {
     pub index_buffer: IndexBuffer<u32>,
     pub bind_group_1: ChunkMeshBindGroup1,
     pub bind_group_1_wgpu: wgpu::BindGroup,
+}
+
+impl ChunkMesh {
+    pub fn set_model_view(&self, queue: &wgpu::Queue, model_view: Matrix4<f64>) {
+        let model_view_f32 = Matrix4 {
+            x: model_view.x.map(|f| f as f32),
+            y: model_view.y.map(|f| f as f32),
+            z: model_view.z.map(|f| f as f32),
+            w: model_view.w.map(|f| f as f32),
+        };
+        self.bind_group_1.model_view.write(model_view_f32.into(), queue);
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -357,7 +367,7 @@ impl<'cx> ChunkBuilder<'cx> {
         }
     }
 
-    pub fn build(&mut self, device: &wgpu::Device, chunk_id: ChunkId, chunk: &mut Chunk) {
+    pub fn build(&mut self, device: &wgpu::Device, _chunk_id: ChunkId, chunk: &mut Chunk) {
         self.mesh_data.vertices.clear();
         self.mesh_data.indices.clear();
         for y in 0..32 {
@@ -369,18 +379,13 @@ impl<'cx> ChunkBuilder<'cx> {
                 }
             }
         }
-        let model = Matrix4::from_translation(vec3(
-            chunk_id.x as f32 * 32.0,
-            chunk_id.y as f32 * 32.0,
-            chunk_id.z as f32 * 32.0,
-        ));
         if self.mesh_data.vertices.is_empty() {
             return;
         }
         // let normal = BlockFace::from_usize(i_face).unwrap().normal_vector();
         let normal = Vector3::new(1.0, 0.0, 0.0);
         let bind_group_1 = ChunkMeshBindGroup1 {
-            model: UniformBuffer::create_init(device, model.into()),
+            model_view: UniformBuffer::create_init(device, Matrix4::identity().into()),
             normal: UniformBuffer::create_init(device, normal.into()),
         };
         let bind_group_1_wgpu = {

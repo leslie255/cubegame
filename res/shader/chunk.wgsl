@@ -1,10 +1,10 @@
-@group(0) @binding(0) var<uniform> view_projection: mat4x4<f32>;
+@group(0) @binding(0) var<uniform> projection: mat4x4<f32>;
 @group(0) @binding(1) var<uniform> sun: vec3<f32>;
 @group(0) @binding(2) var texture: texture_2d<f32>;
 @group(0) @binding(3) var sampler_: sampler;
 @group(0) @binding(4) var<uniform> gray_world: u32;
 
-@group(1) @binding(0) var<uniform> model: mat4x4<f32>;
+@group(1) @binding(0) var<uniform> model_view: mat4x4<f32>;
 @group(1) @binding(1) var<uniform> normal: vec3<f32>;
 
 struct VertexOutput {
@@ -38,7 +38,7 @@ fn unpack_normal(packed: u32) -> vec3<f32> {
 @vertex
 fn vs_main(@location(0) packed: u32) -> VertexOutput {
     var output: VertexOutput;
-    output.position = view_projection * model * unpack_position(packed);
+    output.position = projection * model_view * unpack_position(packed);
     output.uv = unpack_uv(packed);
     output.normal = unpack_normal(packed);
     return output;
