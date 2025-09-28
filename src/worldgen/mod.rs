@@ -2,7 +2,7 @@ use std::{fmt::Debug, iter, ops::Range};
 
 use noise::{Fbm, MultiFractal, NoiseFn, ScaleBias, ScalePoint, SuperSimplex};
 use rand::prelude::*;
-use rand_xoshiro::{Xoshiro128Plus, Xoshiro128StarStar};
+use rand_xoshiro::{Xoshiro128Plus, Xoshiro128StarStar, Xoshiro512Plus};
 
 use crate::{
     block::GameBlocks,
@@ -119,8 +119,10 @@ impl<'cx> WorldGenerator<'cx> {
 
         let game_blocks = &resources.game_blocks;
 
-        let surface_features: [DynSurfaceFeatureGenerator<'cx>; _] =
-            [Box::new(TreeFeature::new(game_blocks))];
+        let surface_features: [DynSurfaceFeatureGenerator<'cx>; _] = [
+            Box::new(TreeFeature::new(game_blocks)),
+            Box::new(CherryTreeFeature::new(game_blocks)),
+        ];
 
         Self {
             seed,
@@ -170,12 +172,14 @@ impl<'cx> WorldGenerator<'cx> {
         }
 
         // Features.
+        let mut rng_salt = Xoshiro512Plus::seed_from_u64(self.seed);
         for surface_feature in &self.surface_features {
+            let salt = rng_salt.next_u64();
             for dx in (-1)..=1 {
                 for dz in (-1)..=1 {
                     let x_chunk = x_chunk + dx;
                     let z_chunk = z_chunk + dz;
-                    self.generate_feature(x_chunk, z_chunk, &mut column, &surface_feature);
+                    self.generate_feature(x_chunk, z_chunk, salt, &mut column, &surface_feature);
                 }
             }
         }
@@ -187,16 +191,19 @@ impl<'cx> WorldGenerator<'cx> {
         &self,
         x_chunk: i32,
         z_chunk: i32,
+        salt: u64,
         column: &mut ColumnData,
         surface_feature: &dyn SurfaceFeature,
     ) {
         let local_seed = {
             let mut seed = [0u8; 16];
-            let (a, bc) = seed.split_at_mut(8);
-            let (b, c) = bc.split_at_mut(4);
-            a.copy_from_slice(&self.seed.to_le_bytes());
-            b.copy_from_slice(&x_chunk.to_le_bytes());
-            c.copy_from_slice(&z_chunk.to_le_bytes());
+            let salt_higher: i32 = bytemuck::cast((salt & 0xFFFFFFFF) as u32);
+            let salt_lower: i32 = bytemuck::cast(((salt >> 16) & 0xFFFFFFFF) as u32);
+            let (ab, c) = seed.split_at_mut(8);
+            let (a, b) = ab.split_at_mut(4);
+            a.copy_from_slice(&(x_chunk + salt_higher).to_le_bytes());
+            b.copy_from_slice(&(z_chunk + salt_lower).to_le_bytes());
+            c.copy_from_slice(&self.seed.to_le_bytes());
             seed
         };
         let mut rng = Xoshiro128Plus::from_seed(local_seed);

@@ -102,11 +102,11 @@ impl<'cx> TreeFeature<'cx> {
 
 impl SurfaceFeature for TreeFeature<'_> {
     fn rolls(&self) -> u32 {
-        8
+        30
     }
 
     fn chance(&self) -> f32 {
-        0.1
+        0.2
     }
 
     fn generate(&self, origin: WorldCoordI32, rng: &mut dyn RngCore, mut target: GenerationTarget) {
@@ -132,6 +132,79 @@ impl SurfaceFeature for TreeFeature<'_> {
             target.with_block(coord, |block| {
                 if *block == self.game_blocks.air {
                     *block = self.game_blocks.leaves;
+                }
+            });
+        };
+
+        // Leaves.
+        for y in (origin.y + height + 1)..=(origin.y + height + 3) {
+            for dz in (-2)..=2i32 {
+                for dx in (-2)..=2i32 {
+                    if dz.abs() >= 2 && dx.abs() >= 2 {
+                        continue;
+                    }
+                    let coord = WorldCoordI32::new(origin.x + dx, y, origin.z + dz);
+                    place_leave(&mut target, coord);
+                }
+            }
+        }
+        for y in (origin.y + height + 4)..=(origin.y + height + 5) {
+            for dz in (-1)..=1i32 {
+                for dx in (-1)..=1i32 {
+                    if dz.abs() == 1 && dx.abs() == 1 {
+                        continue;
+                    }
+                    let coord = WorldCoordI32::new(origin.x + dx, y, origin.z + dz);
+                    place_leave(&mut target, coord);
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CherryTreeFeature<'cx> {
+    game_blocks: &'cx GameBlocks,
+}
+
+impl<'cx> CherryTreeFeature<'cx> {
+    pub fn new(game_blocks: &'cx GameBlocks) -> Self {
+        Self { game_blocks }
+    }
+}
+
+impl SurfaceFeature for CherryTreeFeature<'_> {
+    fn rolls(&self) -> u32 {
+        8
+    }
+
+    fn chance(&self) -> f32 {
+        0.0125
+    }
+
+    fn generate(&self, origin: WorldCoordI32, rng: &mut dyn RngCore, mut target: GenerationTarget) {
+        // The dirt block below.
+        target.set_block(origin, self.game_blocks.dirt);
+
+        let height = rng.random_range(1..=3i32);
+
+        // Trunk.
+        for y in (origin.y + 1)..=(origin.y + height + 2) {
+            let coord = origin.with_y(y);
+            target.with_block(coord, |block| {
+                if *block == self.game_blocks.air
+                    || *block == self.game_blocks.leaves
+                    || *block == self.game_blocks.cherry_leaves
+                {
+                    *block = self.game_blocks.cherry_log;
+                }
+            });
+        }
+
+        let place_leave = |target: &mut GenerationTarget, coord: WorldCoordI32| {
+            target.with_block(coord, |block| {
+                if *block == self.game_blocks.air {
+                    *block = self.game_blocks.cherry_leaves;
                 }
             });
         };

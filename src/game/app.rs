@@ -131,6 +131,9 @@ impl<'scope, 'self_> ApplicationHandler for App<'scope, 'self_> {
                 game.mouse_input(state, button, &self.input_helper);
             }
             WindowEvent::Resized(_) => game.frame_resized(),
+            WindowEvent::Focused(false) => {
+                self.input_helper.reset();
+            }
             _ => (),
         }
     }

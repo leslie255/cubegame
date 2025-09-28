@@ -31,6 +31,10 @@ impl InputHelper {
         let index = Self::index_for_key(key_code);
         self.downed_keys[index] = key_event.state.is_pressed();
     }
+
+    pub fn reset(&mut self) {
+        self.downed_keys = vec![false; 256];
+    }
 }
 
 impl Default for InputHelper {
