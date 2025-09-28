@@ -77,6 +77,15 @@ pub enum BlockTransparency {
     Air,
 }
 
+impl BlockTransparency {
+    /// Returns `true` if the block transparency is [`Solid`].
+    ///
+    /// [`Solid`]: BlockTransparency::Solid
+    pub fn is_solid(&self) -> bool {
+        matches!(self, Self::Solid)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockModel {
     pub faces: [BlockTextureId; 6],

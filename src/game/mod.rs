@@ -24,7 +24,7 @@ use crate::{
     text::{Text, TextRenderer},
     utils::{BoolToggle, WithY as _},
     wgpu_utils::{self, DepthTextureView, UniformBuffer},
-    world::World,
+    world::{ChunkIterOrder, World},
 };
 
 mod app;
@@ -500,7 +500,12 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.8,
+                        g: 0.95,
+                        b: 1.0,
+                        a: 1.0,
+                    }),
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -576,22 +581,27 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         chunk_renderer.set_gray_world(self.queue, self.debug_toggles.gray_world);
         chunk_renderer.begin_drawing(render_pass);
         let (player_chunk_id, _) = World::world_to_local_coord_f32(self.player_camera.position);
-        self.world
-            .chunks()
-            .for_each_loaded_chunk(|chunk_id, chunk| {
+        self.world.chunks().for_each_loaded_chunk_by_distance(
+            player_chunk_id,
+            ChunkIterOrder::FarToNear,
+            |chunk_id, chunk| {
                 let distance2 = point2(player_chunk_id.x as f32, player_chunk_id.z as f32)
                     .distance2(point2(chunk_id.x as f32, chunk_id.z as f32));
                 if distance2 > (self.world.view_distance() as f32).powi(2) {
                     return;
                 }
-                let Some(mesh) = &chunk.client.mesh else {
-                    return;
-                };
                 let translation = chunk_id.to_vec().map(|i| i as f64 * 32.);
                 let model_view = self.player_camera.view_matrix(translation);
-                mesh.set_model_view(self.queue, model_view);
-                chunk_renderer.draw_chunk(render_pass, mesh);
-            });
+                if let Some(mesh) = &chunk.client.mesh_opaque {
+                    mesh.set_model_view(self.queue, model_view);
+                    chunk_renderer.draw_chunk(render_pass, mesh);
+                };
+                if let Some(mesh) = &chunk.client.mesh_transparent {
+                    mesh.set_model_view(self.queue, model_view);
+                    chunk_renderer.draw_chunk(render_pass, mesh);
+                };
+            },
+        );
     }
 
     fn pause_changed(&mut self) {
@@ -636,10 +646,11 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         if movement.x.is_nan() | movement.y.is_nan() | movement.z.is_nan() {
             return;
         }
+        if input_helper.key_is_down(KeyCode::ControlLeft) {
+            movement.z *= 2.;
+        }
         if input_helper.key_is_down(KeyCode::F3) {
-            movement *= 64.;
-        } else if input_helper.key_is_down(KeyCode::ControlLeft) {
-            movement.z *= 4.;
+            movement *= 32.;
         }
         movement *= duration_since_last_event.as_secs_f32();
 

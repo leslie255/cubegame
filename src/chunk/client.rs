@@ -224,7 +224,7 @@ pub struct ChunkMeshBindGroup0 {
 #[derive(Debug, Clone)]
 pub struct ChunkMeshBindGroup1 {
     pub(super) model_view: UniformBuffer<[[f32; 4]; 4]>,
-    pub(super) normal: UniformBuffer<[f32; 3]>,
+    pub(super) _normal: UniformBuffer<[f32; 3]>,
 }
 
 impl_as_bind_group! {
@@ -238,7 +238,7 @@ impl_as_bind_group! {
 
     ChunkMeshBindGroup1 {
         0 => model_view: UniformBuffer<[[f32; 4]; 4]>,
-        1 => normal: UniformBuffer<[f32; 3]>,
+        1 => _normal: UniformBuffer<[f32; 3]>,
     }
 }
 
@@ -296,7 +296,9 @@ impl ChunkMesh {
             z: model_view.z.map(|f| f as f32),
             w: model_view.w.map(|f| f as f32),
         };
-        self.bind_group_1.model_view.write(model_view_f32.into(), queue);
+        self.bind_group_1
+            .model_view
+            .write(model_view_f32.into(), queue);
     }
 }
 
@@ -309,7 +311,8 @@ pub struct ChunkMeshData {
 #[derive(Debug, Clone)]
 pub struct ChunkBuilder<'cx> {
     resources: &'cx GameResources,
-    mesh_data: ChunkMeshData,
+    mesh_data_opaque: ChunkMeshData,
+    mesh_data_transparent: ChunkMeshData,
 }
 
 impl<'cx> ChunkBuilder<'cx> {
@@ -363,13 +366,16 @@ impl<'cx> ChunkBuilder<'cx> {
     pub fn new(resources: &'cx GameResources) -> Self {
         Self {
             resources,
-            mesh_data: ChunkMeshData::default(),
+            mesh_data_opaque: ChunkMeshData::default(),
+            mesh_data_transparent: ChunkMeshData::default(),
         }
     }
 
     pub fn build(&mut self, device: &wgpu::Device, _chunk_id: ChunkId, chunk: &mut Chunk) {
-        self.mesh_data.vertices.clear();
-        self.mesh_data.indices.clear();
+        self.mesh_data_opaque.vertices.clear();
+        self.mesh_data_opaque.indices.clear();
+        self.mesh_data_transparent.vertices.clear();
+        self.mesh_data_transparent.indices.clear();
         for y in 0..32 {
             for x in 0..32 {
                 for z in 0..32 {
@@ -379,25 +385,38 @@ impl<'cx> ChunkBuilder<'cx> {
                 }
             }
         }
-        if self.mesh_data.vertices.is_empty() {
-            return;
+        if !self.mesh_data_opaque.vertices.is_empty() {
+            let bind_group_1 = ChunkMeshBindGroup1 {
+                model_view: UniformBuffer::create_init(device, Matrix4::identity().into()),
+                _normal: UniformBuffer::create_init(device, Vector3::unit_y().into()),
+            };
+            let bind_group_1_wgpu = {
+                let layout = wgpu_utils::create_bind_group_layout::<ChunkMeshBindGroup1>(device);
+                wgpu_utils::create_bind_group(device, &layout, &bind_group_1)
+            };
+            chunk.client.mesh_opaque = Some(ChunkMesh {
+                vertex_buffer: VertexBuffer::create_init(device, &self.mesh_data_opaque.vertices),
+                index_buffer: IndexBuffer::create_init(device, &self.mesh_data_opaque.indices),
+                bind_group_1_wgpu,
+                bind_group_1,
+            });
         }
-        // let normal = BlockFace::from_usize(i_face).unwrap().normal_vector();
-        let normal = Vector3::new(1.0, 0.0, 0.0);
-        let bind_group_1 = ChunkMeshBindGroup1 {
-            model_view: UniformBuffer::create_init(device, Matrix4::identity().into()),
-            normal: UniformBuffer::create_init(device, normal.into()),
-        };
-        let bind_group_1_wgpu = {
-            let layout = wgpu_utils::create_bind_group_layout::<ChunkMeshBindGroup1>(device);
-            wgpu_utils::create_bind_group(device, &layout, &bind_group_1)
-        };
-        chunk.client.mesh = Some(ChunkMesh {
-            vertex_buffer: VertexBuffer::create_init(device, &self.mesh_data.vertices),
-            index_buffer: IndexBuffer::create_init(device, &self.mesh_data.indices),
-            bind_group_1_wgpu,
-            bind_group_1,
-        });
+        if !self.mesh_data_transparent.vertices.is_empty() {
+            let bind_group_1 = ChunkMeshBindGroup1 {
+                model_view: UniformBuffer::create_init(device, Matrix4::identity().into()),
+                _normal: UniformBuffer::create_init(device, Vector3::unit_y().into()),
+            };
+            let bind_group_1_wgpu = {
+                let layout = wgpu_utils::create_bind_group_layout::<ChunkMeshBindGroup1>(device);
+                wgpu_utils::create_bind_group(device, &layout, &bind_group_1)
+            };
+            chunk.client.mesh_transparent = Some(ChunkMesh {
+                vertex_buffer: VertexBuffer::create_init(device, &self.mesh_data_transparent.vertices),
+                index_buffer: IndexBuffer::create_init(device, &self.mesh_data_transparent.indices),
+                bind_group_1_wgpu,
+                bind_group_1,
+            });
+        }
     }
 
     fn build_block(&mut self, chunk: &mut Chunk, local_position: LocalCoordU8, block_id: BlockId) {
@@ -405,11 +424,11 @@ impl<'cx> ChunkBuilder<'cx> {
         if block_info.transparency == BlockTransparency::Air {
             return;
         }
+        let block_transparency = block_info.transparency;
         for block_face in BlockFace::iter() {
             if let Some(neighbor_block_id) =
                 Self::neighbor_block(local_position, block_face, &chunk.data)
             {
-                let block_transparency = block_info.transparency;
                 let neighbor_transparency = self
                     .resources
                     .block_registry
@@ -437,9 +456,17 @@ impl<'cx> ChunkBuilder<'cx> {
                 let normal = block_face.normal_vector();
                 PackedChunkVertex::pack(position, uv, normal)
             });
-            let indices = Self::FACE_INDICIES.map(|i| i + self.mesh_data.vertices.len() as u32);
-            self.mesh_data.vertices.extend(&vertices[..]);
-            self.mesh_data.indices.extend(&indices[..]);
+            if block_transparency.is_solid() {
+                let indices =
+                    Self::FACE_INDICIES.map(|i| i + self.mesh_data_opaque.vertices.len() as u32);
+                self.mesh_data_opaque.vertices.extend(&vertices[..]);
+                self.mesh_data_opaque.indices.extend(&indices[..]);
+            } else {
+                let indices = Self::FACE_INDICIES
+                    .map(|i| i + self.mesh_data_transparent.vertices.len() as u32);
+                self.mesh_data_transparent.vertices.extend(&vertices[..]);
+                self.mesh_data_transparent.indices.extend(&indices[..]);
+            }
         }
     }
 
@@ -484,7 +511,8 @@ impl<'cx> ChunkBuilder<'cx> {
 
 #[derive(Debug, Default)]
 pub struct ClientChunk {
-    pub mesh: Option<ChunkMesh>,
+    pub mesh_opaque: Option<ChunkMesh>,
+    pub mesh_transparent: Option<ChunkMesh>,
 }
 
 impl ClientChunk {

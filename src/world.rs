@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     collections::HashMap,
     mem,
     ops::Range,
@@ -50,6 +51,12 @@ pub enum TaskImportance {
     Immediate,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChunkIterOrder {
+    NearToFar,
+    FarToNear,
+}
+
 /// Manages loading and unloading chunks.
 #[derive(Debug)]
 pub struct ChunkManager {
@@ -85,6 +92,61 @@ impl ChunkManager {
             if self.chunk_is_loaded(chunk_id) {
                 f(chunk_id);
             }
+        }
+    }
+
+    /// Loop through each loaded chunk.
+    pub fn for_each_loaded_chunk_by_distance(
+        &self,
+        center: ChunkId,
+        order: ChunkIterOrder,
+        mut f: impl FnMut(ChunkId, &mut Chunk),
+    ) {
+        self.for_each_loaded_chunk_id_by_distance(center, order, |chunk_id| {
+            let chunk = {
+                let chunks = self.chunks.read().unwrap();
+                Arc::clone(chunks.get(&chunk_id).unwrap())
+            };
+            f(chunk_id, &mut chunk.lock().unwrap());
+        });
+    }
+
+    /// Loop through each loaded chunk's ID but not the chunk, sorted from near to far.
+    pub fn for_each_loaded_chunk_id_by_distance(
+        &self,
+        center: ChunkId,
+        order: ChunkIterOrder,
+        mut f: impl FnMut(ChunkId),
+    ) {
+        let mut loaded_chunk_ids: Vec<ChunkId> = {
+            let chunks = self.chunks.read().unwrap();
+            chunks.keys().copied().collect()
+        };
+        let center_f = center.map(|i| i as f32);
+        loaded_chunk_ids.sort_unstable_by(|&left, &right| {
+            let left_f = left.map(|i| i as f32);
+            let right_f = right.map(|i| i as f32);
+            let distance_left = center_f.distance2(left_f);
+            let distance_right = center_f.distance2(right_f);
+            distance_left
+                .partial_cmp(&distance_right)
+                .unwrap_or(Ordering::Equal)
+        });
+        match order {
+            ChunkIterOrder::NearToFar => {
+                for chunk_id in loaded_chunk_ids {
+                    if self.chunk_is_loaded(chunk_id) {
+                        f(chunk_id);
+                    }
+                }
+            }
+            ChunkIterOrder::FarToNear => {
+                for chunk_id in loaded_chunk_ids.into_iter().rev() {
+                    if self.chunk_is_loaded(chunk_id) {
+                        f(chunk_id);
+                    }
+                }
+            },
         }
     }
 

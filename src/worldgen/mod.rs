@@ -218,7 +218,7 @@ impl<'cx> WorldGenerator<'cx> {
             let terrain_height = self.terrain_height_at(x_world, z_world);
             if terrain_height >= 0 {
                 let origin = WorldCoordI32::new(x_world, terrain_height, z_world);
-                surface_feature.generate(origin, column.into());
+                surface_feature.generate(origin, &mut rng, column.into());
             }
         }
     }

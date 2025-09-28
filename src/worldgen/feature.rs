@@ -1,6 +1,7 @@
 use std::{any::type_name, ops::Deref};
 
 use derive_more::From;
+use rand::{Rng as _, RngCore};
 
 use crate::{
     block::{BlockId, GameBlocks},
@@ -24,7 +25,7 @@ pub trait SurfaceFeature {
     /// Clamped between 0.0 and 1.0.
     fn chance(&self) -> f32;
 
-    fn generate(&self, origin: WorldCoordI32, target: GenerationTarget);
+    fn generate(&self, origin: WorldCoordI32, rng: &mut dyn RngCore, target: GenerationTarget);
 }
 
 impl<T: Deref> SurfaceFeature for T
@@ -43,8 +44,8 @@ where
         self.deref().chance()
     }
 
-    fn generate(&self, origin: WorldCoordI32, target: GenerationTarget) {
-        self.deref().generate(origin, target)
+    fn generate(&self, origin: WorldCoordI32, rng: &mut dyn RngCore, target: GenerationTarget) {
+        self.deref().generate(origin, rng, target)
     }
 }
 
@@ -108,14 +109,14 @@ impl SurfaceFeature for TreeFeature<'_> {
         0.1
     }
 
-    fn generate(&self, origin: WorldCoordI32, mut target: GenerationTarget) {
+    fn generate(&self, origin: WorldCoordI32, rng: &mut dyn RngCore, mut target: GenerationTarget) {
         // The dirt block below.
         target.set_block(origin, self.game_blocks.dirt);
 
-        let height = 2;
+        let height = rng.random_range(1..=3i32);
 
         // Trunk.
-        for y in (origin.y + 1)..=(origin.y + height + 3) {
+        for y in (origin.y + 1)..=(origin.y + height + 2) {
             let coord = origin.with_y(y);
             target.with_block(coord, |block| {
                 if *block == self.game_blocks.air
@@ -136,7 +137,7 @@ impl SurfaceFeature for TreeFeature<'_> {
         };
 
         // Leaves.
-        for y in (origin.y + height + 1)..=(origin.y + height + 4) {
+        for y in (origin.y + height + 1)..=(origin.y + height + 3) {
             for dz in (-2)..=2i32 {
                 for dx in (-2)..=2i32 {
                     if dz.abs() >= 2 && dx.abs() >= 2 {
@@ -147,7 +148,7 @@ impl SurfaceFeature for TreeFeature<'_> {
                 }
             }
         }
-        for y in (origin.y + height + 5)..=(origin.y + height + 6) {
+        for y in (origin.y + height + 4)..=(origin.y + height + 5) {
             for dz in (-1)..=1i32 {
                 for dx in (-1)..=1i32 {
                     if dz.abs() == 1 && dx.abs() == 1 {
