@@ -59,6 +59,7 @@ struct PostprocessBindGroup {
     sampler: wgpu::Sampler,
     gamma: UniformBuffer<f32>,
     fog_start: UniformBuffer<f32>,
+    fog_enabled: UniformBuffer<u32>,
 }
 
 impl_as_bind_group! {
@@ -68,6 +69,7 @@ impl_as_bind_group! {
         2 => sampler: wgpu::Sampler,
         3 => gamma: UniformBuffer<f32>,
         4 => fog_start: UniformBuffer<f32>,
+        5 => fog_enabled: UniformBuffer<u32>,
     }
 }
 
@@ -233,6 +235,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
             sampler: context.device.create_sampler(&Default::default()),
             gamma: UniformBuffer::create_init(&context.device, 2.2),
             fog_start: UniformBuffer::create_init(&context.device, fog_start),
+            fog_enabled: UniformBuffer::create_init(&context.device, true.into()),
         };
         let postprocess_bind_group_wgpu = wgpu_utils::create_bind_group(
             &context.device,
@@ -241,7 +244,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         );
 
         let player_camera = PlayerCamera {
-            position: point3(0., 0., 10000000.),
+            position: point3(0., 0., 0.),
             pitch: 0.,
             yaw: -90.,
         };
@@ -474,6 +477,10 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
 
         let mut render_pass = self.postprocess_render_pass(&mut encoder, &surface_texture_view);
 
+        let fog_enabled = !self.debug_toggles.fog_disabled;
+        self.postprocess_bind_group
+            .fog_enabled
+            .write(fog_enabled.into(), self.queue);
         render_pass.set_pipeline(&self.postprocess_pipeline);
         render_pass.set_bind_group(0, &self.postprocess_bind_group_wgpu, &[]);
         render_pass.draw(0..6, 0..1);

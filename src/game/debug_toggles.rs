@@ -9,6 +9,7 @@ pub struct DebugToggles {
     pub wireframe_mode: bool,
     pub show_debug_overlay: bool,
     pub gray_world: bool,
+    pub fog_disabled: bool,
 }
 
 impl DebugToggles {
@@ -20,6 +21,7 @@ impl DebugToggles {
             PhysicalKey::Code(KeyCode::KeyL) => self.wireframe_mode.toggle(),
             PhysicalKey::Code(KeyCode::KeyT) => self.show_debug_overlay.toggle(),
             PhysicalKey::Code(KeyCode::KeyU) => self.gray_world.toggle(),
+            PhysicalKey::Code(KeyCode::KeyF) => self.fog_disabled.toggle(),
             _ => (),
         }
     }
@@ -44,6 +46,7 @@ impl DebugToggles {
             ('t', self.show_debug_overlay, "Debug Text Overlay"),
             ('l', self.wireframe_mode, "Wireframe Mode"),
             ('u', self.gray_world, "Gray World"),
+            ('f', self.fog_disabled, "Disable Fog"),
         ]
         .into_iter()
     }

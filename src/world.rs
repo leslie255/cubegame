@@ -295,7 +295,7 @@ where
         if chunks.chunk_is_loaded(ChunkId::new(x, 0, z)) {
             return;
         }
-        let generated = worldgen.generate_strip(x, z, y_range.clone());
+        let generated = worldgen.generate_column(x, z, y_range.clone());
         for (chunk_id, chunk_data) in generated.into_chunks() {
             let mut chunk = Chunk {
                 data: chunk_data,
@@ -540,11 +540,11 @@ impl<'scope, 'cx> World<'scope, 'cx> {
             *player_position = new_position;
             old_position
         };
-        // Check for strip boundary crossing.
+        // Check for column boundary crossing.
         let (old_chunk_id, _) = World::world_to_local_coord_f32(old_position);
         let (chunk_id, _) = World::world_to_local_coord_f32(new_position);
-        let crossed_strip = (chunk_id.x != old_chunk_id.x) | (chunk_id.z != old_chunk_id.z);
-        if !crossed_strip {
+        let crossed_column = (chunk_id.x != old_chunk_id.x) | (chunk_id.z != old_chunk_id.z);
+        if !crossed_column {
             return;
         }
         // Prone chunks far away.
@@ -556,6 +556,7 @@ impl<'scope, 'cx> World<'scope, 'cx> {
                 self.chunks().remove_chunk(chunk_id_);
             }
         });
+        // Load new chunks.
         self.needs_loading_chunks
             .store(true, atomic::Ordering::Relaxed);
     }

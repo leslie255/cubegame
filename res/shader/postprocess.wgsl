@@ -3,6 +3,7 @@
 @group(0) @binding(2) var sampler_: sampler;
 @group(0) @binding(3) var<uniform> gamma: f32;
 @group(0) @binding(4) var<uniform> fog_start: f32;
+@group(0) @binding(5) var<uniform> fog_enabled: u32;
 
 struct VertexInput {
     @builtin(vertex_index) i_vertex: u32,
@@ -45,16 +46,8 @@ fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
     let depth = textureSample(depth_texture, sampler_, vertex.uv);
     let scene_color = textureSample(color_texture, sampler_, vertex.uv);
     let fog_factor = clamp((pow(depth, 100.0) - fog_start) / (1.0 - fog_start), 0.0, 1.0);
-    // let result = select(scene_color, sky_color, fog_factor == 1.0);
-    let result = mix(scene_color, sky_color, pow(fog_factor, 1.5));
-    // let result = select(
-    //     vec4<f32>(
-    //         pow(depth, 1000.0),
-    //         pow(depth, 100.0),
-    //         pow(depth, 10.0),
-    //         1.0),
-    //     scene_color,
-    //     depth == 0.0,
-    // );
+    let result_fog = mix(scene_color, sky_color, pow(fog_factor, 1.5));
+    let result_fogless = select(scene_color, sky_color, fog_factor == 1.0);
+    let result = select(result_fogless, result_fog, bool(fog_enabled));
     return gamma_correct(result);
 }
