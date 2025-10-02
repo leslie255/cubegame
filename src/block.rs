@@ -1,5 +1,7 @@
+use bytemuck::{Pod, Zeroable};
 use cgmath::*;
 
+use derive_more::From;
 use index_vec::IndexVec;
 
 #[repr(u8)]
@@ -13,9 +15,9 @@ pub enum BlockFace {
     East,
     /// -X
     West,
-    /// -Y
-    Top,
     /// +Y
+    Top,
+    /// -Y
     Bottom,
 }
 
@@ -30,6 +32,17 @@ impl BlockFace {
 
     pub fn iter() -> impl Iterator<Item = Self> {
         (0..6).map(|i| unsafe { Self::from_usize_unchecked(i) })
+    }
+
+    pub const fn opposite(self) -> Self {
+        match self {
+            BlockFace::South => BlockFace::North,
+            BlockFace::North => BlockFace::South,
+            BlockFace::East => BlockFace::West,
+            BlockFace::West => BlockFace::East,
+            BlockFace::Top => BlockFace::Bottom,
+            BlockFace::Bottom => BlockFace::Top,
+        }
     }
 
     /// # Safety
@@ -69,9 +82,10 @@ impl BlockFace {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Zeroable)]
+#[repr(u8)]
 pub enum BlockTransparency {
-    Solid,
+    Solid = 0,
     Leaves,
     Transparent,
     Air,
@@ -107,7 +121,7 @@ pub struct BlockInfo {
     pub model: BlockModel,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::From)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, From, Pod, Zeroable)]
 #[repr(transparent)]
 pub struct BlockId(pub u16);
 impl index_vec::Idx for BlockId {

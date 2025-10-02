@@ -6,7 +6,7 @@ use std::{
     process,
     sync::{
         Arc, Mutex, RwLock,
-        atomic::{self, AtomicBool},
+        atomic::{self, AtomicBool, AtomicU32},
         mpmc,
     },
     thread,
@@ -17,7 +17,7 @@ use cgmath::*;
 
 use crate::{
     ProgramArgs,
-    block::BlockId,
+    block::{BlockFace, BlockId},
     chunk::{Chunk, ChunkBuilder, ClientChunk},
     game::GameResources,
     utils::*,
@@ -74,11 +74,9 @@ impl ChunkManager {
     /// Loop through each loaded chunk.
     pub fn for_each_loaded_chunk(&self, mut f: impl FnMut(ChunkId, &mut Chunk)) {
         self.for_each_loaded_chunk_id(|chunk_id| {
-            let chunk = {
-                let chunks = self.chunks.read().unwrap();
-                Arc::clone(chunks.get(&chunk_id).unwrap())
-            };
-            f(chunk_id, &mut chunk.lock().unwrap());
+            if let Some(chunk) = self.get_loaded_chunk(chunk_id) {
+                f(chunk_id, &mut chunk.lock().unwrap());
+            }
         });
     }
 
@@ -103,11 +101,9 @@ impl ChunkManager {
         mut f: impl FnMut(ChunkId, &mut Chunk),
     ) {
         self.for_each_loaded_chunk_id_by_distance(center, order, |chunk_id| {
-            let chunk = {
-                let chunks = self.chunks.read().unwrap();
-                Arc::clone(chunks.get(&chunk_id).unwrap())
-            };
-            f(chunk_id, &mut chunk.lock().unwrap());
+            if let Some(chunk) = self.get_loaded_chunk(chunk_id) {
+                f(chunk_id, &mut chunk.lock().unwrap());
+            }
         });
     }
 
@@ -146,7 +142,7 @@ impl ChunkManager {
                         f(chunk_id);
                     }
                 }
-            },
+            }
         }
     }
 
@@ -178,6 +174,13 @@ impl ChunkManager {
             .write()
             .unwrap()
             .insert(chunk_id, arc_mutex(chunk));
+        // Mark neighboring client chunks as unsynced for block face optimizations.
+        for face in BlockFace::iter() {
+            let neighbor_chunk_id = chunk_id + face.normal_vector().map(|f| f as i32);
+            self.with_loaded_chunk(neighbor_chunk_id, |chunk| {
+                chunk.client.is_synced = false;
+            });
+        }
     }
 
     /// NOP if chunk already didn't exist
@@ -222,8 +225,8 @@ where
         chunks: Arc<ChunkManager>,
         worldgen: Arc<WorldGenerator<'cx>>,
     ) -> Self {
-        let n_threads = num_cpus::get().saturating_sub(2).max(1);
-        // let n_threads = 1;
+        // let n_threads = num_cpus::get().saturating_sub(2).max(1);
+        let n_threads = 2;
         let chunk_builder = ChunkBuilder::new(resources);
         let (tasks_tx, tasks_rx) = mpmc::sync_channel(n_threads * 64);
         Self {
@@ -276,16 +279,7 @@ where
                 Self::task_rebuild(self.device, &self.chunks, &mut chunk_builder, chunk_id);
             }
             ChunkTask::Generate { x, z, y_range } => {
-                let mut chunk_builder = self.chunk_builder.lock().unwrap();
-                Self::task_generate(
-                    self.device,
-                    &self.chunks,
-                    &mut chunk_builder,
-                    &self.worldgen,
-                    x,
-                    z,
-                    y_range,
-                );
+                Self::task_generate(&self.chunks, &self.worldgen, x, z, y_range);
             }
         }
     }
@@ -304,6 +298,10 @@ where
                 true
             }
         }
+    }
+
+    pub fn queue_is_full(&self) -> bool {
+        self.tasks_tx.is_full()
     }
 
     fn new_worker(
@@ -330,15 +328,7 @@ where
                         Self::task_rebuild(device, &chunk_manager, &mut chunk_builder, chunk_id);
                     }
                     ChunkTask::Generate { x, z, y_range } => {
-                        Self::task_generate(
-                            device,
-                            &chunk_manager,
-                            &mut chunk_builder,
-                            &worldgen,
-                            x,
-                            z,
-                            y_range,
-                        );
+                        Self::task_generate(&chunk_manager, &worldgen, x, z, y_range);
                     }
                 }
             }
@@ -346,9 +336,7 @@ where
     }
 
     fn task_generate(
-        device: &wgpu::Device,
         chunks: &ChunkManager,
-        chunk_builder: &mut ChunkBuilder,
         worldgen: &WorldGenerator,
         x: i32,
         z: i32,
@@ -359,11 +347,10 @@ where
         }
         let generated = worldgen.generate_column(x, z, y_range.clone());
         for (chunk_id, chunk_data) in generated.into_chunks() {
-            let mut chunk = Chunk {
+            let chunk = Chunk {
                 data: chunk_data,
                 client: ClientChunk::new(),
             };
-            chunk_builder.build(device, chunk_id, &mut chunk);
             chunks.insert_chunk(chunk_id, chunk);
         }
     }
@@ -374,14 +361,7 @@ where
         chunk_builder: &mut ChunkBuilder,
         chunk_id: ChunkId,
     ) {
-        if let Some(chunk) = chunks.get_loaded_chunk(chunk_id) {
-            let mut chunk_lock = chunk.lock().unwrap();
-            chunk_builder.build(device, chunk_id, &mut chunk_lock);
-        } else {
-            log::warn!(
-                "Chunk worker encountered a rebuild task referring to an unloaded chunk (chunk ID: {chunk_id:?})"
-            );
-        };
+        chunk_builder.build(device, chunk_id, chunks);
     }
 }
 
@@ -397,6 +377,7 @@ where
     chunk_workers: ChunkWorkerPool<'scope, 'cx>,
     player_position: Mutex<Point3<f32>>,
     needs_loading_chunks: AtomicBool,
+    poll_counter: AtomicU32,
 }
 
 impl<'scope, 'cx> World<'scope, 'cx> {
@@ -427,7 +408,8 @@ impl<'scope, 'cx> World<'scope, 'cx> {
             chunk_workers,
             worldgen,
             player_position: Mutex::new(point3(0., 0., 0.)),
-            needs_loading_chunks: AtomicBool::new(false),
+            needs_loading_chunks: false.into(),
+            poll_counter: 0.into(),
         });
         self_.start_polling_chunk_worker();
         self_
@@ -441,15 +423,37 @@ impl<'scope, 'cx> World<'scope, 'cx> {
                 let Some(self_) = weak_self.upgrade() else {
                     break;
                 };
-                let needs_loading_chunks =
-                    self_.needs_loading_chunks.load(atomic::Ordering::Relaxed);
-                if needs_loading_chunks {
-                    let player_position = *self_.player_position.lock().unwrap();
-                    self_.load_chunks_in_view_distance(player_position);
-                }
+                self_.poll();
                 thread::park_timeout(Duration::from_millis(8));
             }
         });
+    }
+
+    fn poll(&self) {
+        let poll_counter = self.poll_counter.fetch_add(1, atomic::Ordering::Relaxed);
+        let needs_loading_chunks = self.needs_loading_chunks.load(atomic::Ordering::Relaxed);
+        if poll_counter.is_multiple_of(4) && needs_loading_chunks {
+            let player_position = *self.player_position.lock().unwrap();
+            self.load_chunks_in_view_distance(player_position);
+        } else {
+            let mut counter = 0u32;
+            let player_position = *self.player_position.lock().unwrap();
+            let (player_chunk_id, _) = World::world_to_local_coord_f32(player_position);
+            self.chunks().for_each_loaded_chunk_by_distance(
+                player_chunk_id,
+                ChunkIterOrder::NearToFar,
+                |chunk_id, chunk| {
+                    if !chunk.client.is_synced {
+                        let discarded = self
+                            .add_task(TaskImportance::Discardable, ChunkTask::Rebuild { chunk_id });
+                        if !discarded {
+                            counter += 1;
+                        }
+                    }
+                },
+            );
+            log::debug!("sent {counter} rebuild tasks")
+        }
     }
 
     pub fn y_chunk_range(&self) -> Range<i32> {

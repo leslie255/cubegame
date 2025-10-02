@@ -1,16 +1,18 @@
+use std::array;
+
 use bytemuck::{Pod, Zeroable};
 use cgmath::*;
 
 use wgpu::util::DeviceExt as _;
 
 use crate::{
-    block::{BlockFace, BlockId, BlockTextureId, BlockTransparency},
+    block::{BlockFace, BlockId, BlockRegistry, BlockTextureId, BlockTransparency},
     chunk::{Chunk, ChunkData},
     game::GameResources,
     impl_as_bind_group,
     utils::Quad2d,
     wgpu_utils::{self, IndexBuffer, UniformBuffer, Vertex, Vertex3dUV, VertexBuffer},
-    world::{ChunkId, LocalCoordU8},
+    world::{ChunkId, ChunkManager, LocalCoordU8},
 };
 
 #[derive(Debug)]
@@ -28,13 +30,13 @@ impl ChunkRenderer {
         surface_color_format: wgpu::TextureFormat,
         depth_stencil_format: Option<wgpu::TextureFormat>,
     ) -> Self {
-        Self::with_polygon_mode(
+        Self::new_with_pipeline_descriptor(
             device,
             queue,
             resources,
             surface_color_format,
             depth_stencil_format,
-            wgpu::PolygonMode::Fill,
+            |_| (),
         )
     }
 
@@ -49,24 +51,27 @@ impl ChunkRenderer {
             .features()
             .contains(wgpu::FeaturesWGPU::POLYGON_MODE_LINE.into());
         supports_polygon_line_mode.then(|| {
-            Self::with_polygon_mode(
+            Self::new_with_pipeline_descriptor(
                 device,
                 queue,
                 resources,
                 surface_color_format,
                 depth_stencil_format,
-                wgpu::PolygonMode::Line,
+                |pipeline_layout_descriptor| {
+                    pipeline_layout_descriptor.primitive.polygon_mode = wgpu::PolygonMode::Line;
+                    pipeline_layout_descriptor.primitive.cull_mode = None;
+                }
             )
         })
     }
 
-    fn with_polygon_mode(
+    fn new_with_pipeline_descriptor(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         resources: &GameResources,
         surface_color_format: wgpu::TextureFormat,
         depth_stencil_format: Option<wgpu::TextureFormat>,
-        polygon_mode: wgpu::PolygonMode,
+        f: impl FnOnce(&mut wgpu::RenderPipelineDescriptor),
     ) -> Self {
         let (bind_group_0, bind_group_0_layout, bind_group_0_wgpu) =
             Self::create_bind_group_0(device, queue, resources);
@@ -77,7 +82,7 @@ impl ChunkRenderer {
             bind_group_layouts: &[&bind_group_0_layout, &bind_group_1_layout],
             push_constant_ranges: &[],
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let mut pipeline_descriptor = wgpu::RenderPipelineDescriptor {
             label: None,
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
@@ -104,12 +109,8 @@ impl ChunkRenderer {
                 })],
             }),
             primitive: wgpu::PrimitiveState {
-                topology: match polygon_mode {
-                    wgpu::PolygonMode::Fill => wgpu::PrimitiveTopology::TriangleList,
-                    wgpu::PolygonMode::Line => wgpu::PrimitiveTopology::LineList,
-                    wgpu::PolygonMode::Point => wgpu::PrimitiveTopology::PointList,
-                },
-                polygon_mode,
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                polygon_mode: wgpu::PolygonMode::Fill,
                 cull_mode: Some(wgpu::Face::Back),
                 ..Default::default()
             },
@@ -123,7 +124,9 @@ impl ChunkRenderer {
             multisample: Default::default(),
             multiview: None,
             cache: None,
-        });
+        };
+        f(&mut pipeline_descriptor);
+        let pipeline = device.create_render_pipeline(&pipeline_descriptor);
         Self {
             pipeline,
             bind_group_0,
@@ -259,9 +262,9 @@ impl PackedChunkVertex {
             let y_uv = (uv.y * 64.).round() as u32;
             x_uv + y_uv * 65
         };
-        let x_normal = (normal.x + 1.) as u32 / 2;
-        let y_normal = (normal.y + 1.) as u32 / 2;
-        let z_normal = (normal.z + 1.) as u32 / 2;
+        let x_normal = if normal.x > 0.0 { 1 } else { 0 };
+        let y_normal = if normal.y > 0.0 { 1 } else { 0 };
+        let z_normal = if normal.z > 0.0 { 1 } else { 0 };
         let packed =
             pos_packed | uv_packed << 16 | x_normal << 29 | y_normal << 30 | z_normal << 31;
         Self(packed)
@@ -313,6 +316,7 @@ pub struct ChunkBuilder<'cx> {
     resources: &'cx GameResources,
     mesh_data_opaque: ChunkMeshData,
     mesh_data_transparent: ChunkMeshData,
+    neighbor_chunk_surfaces: [Box<ChunkSurface>; 6],
 }
 
 impl<'cx> ChunkBuilder<'cx> {
@@ -368,55 +372,75 @@ impl<'cx> ChunkBuilder<'cx> {
             resources,
             mesh_data_opaque: ChunkMeshData::default(),
             mesh_data_transparent: ChunkMeshData::default(),
+            neighbor_chunk_surfaces: array::from_fn(|_| ChunkSurface::new_boxed()),
         }
     }
 
-    pub fn build(&mut self, device: &wgpu::Device, _chunk_id: ChunkId, chunk: &mut Chunk) {
+    pub fn build(&mut self, device: &wgpu::Device, chunk_id: ChunkId, chunks: &ChunkManager) {
+        if !chunks.chunk_is_loaded(chunk_id) {
+            return;
+        }
         self.mesh_data_opaque.vertices.clear();
         self.mesh_data_opaque.indices.clear();
         self.mesh_data_transparent.vertices.clear();
         self.mesh_data_transparent.indices.clear();
+        for (i_face, neighbor_surface) in self.neighbor_chunk_surfaces.iter_mut().enumerate() {
+            let face = BlockFace::from_usize(i_face).unwrap();
+            let neighbor_chunk_id = chunk_id + face.normal_vector().map(|f| f as i32);
+            let has_neighbor_chunk = chunks
+                .with_loaded_chunk(neighbor_chunk_id, |neighbor_chunk| {
+                    neighbor_surface.initialize_for_chunk(
+                        face.opposite(),
+                        &self.resources.block_registry,
+                        &neighbor_chunk.data,
+                    );
+                })
+                .is_some();
+            if !has_neighbor_chunk {
+                neighbor_surface.clear();
+            }
+        }
+        let Some(chunk) = chunks.get_loaded_chunk(chunk_id) else {
+            return;
+        };
+        let mut chunk = chunk.lock().unwrap();
         for y in 0..32 {
             for x in 0..32 {
                 for z in 0..32 {
                     let local_coord = LocalCoordU8::new(y, z, x);
                     let block_id = unsafe { chunk.data.get_block_unchecked(local_coord) };
-                    self.build_block(chunk, local_coord, block_id);
+                    self.build_block(&mut chunk, local_coord, block_id);
                 }
             }
         }
+        let bind_group_1 = ChunkMeshBindGroup1 {
+            model_view: UniformBuffer::create_init(device, Matrix4::identity().into()),
+            _normal: UniformBuffer::create_init(device, Vector3::unit_y().into()),
+        };
+        let bind_group_1_wgpu = {
+            let layout = wgpu_utils::create_bind_group_layout::<ChunkMeshBindGroup1>(device);
+            wgpu_utils::create_bind_group(device, &layout, &bind_group_1)
+        };
         if !self.mesh_data_opaque.vertices.is_empty() {
-            let bind_group_1 = ChunkMeshBindGroup1 {
-                model_view: UniformBuffer::create_init(device, Matrix4::identity().into()),
-                _normal: UniformBuffer::create_init(device, Vector3::unit_y().into()),
-            };
-            let bind_group_1_wgpu = {
-                let layout = wgpu_utils::create_bind_group_layout::<ChunkMeshBindGroup1>(device);
-                wgpu_utils::create_bind_group(device, &layout, &bind_group_1)
-            };
             chunk.client.mesh_opaque = Some(ChunkMesh {
                 vertex_buffer: VertexBuffer::create_init(device, &self.mesh_data_opaque.vertices),
                 index_buffer: IndexBuffer::create_init(device, &self.mesh_data_opaque.indices),
-                bind_group_1_wgpu,
-                bind_group_1,
+                bind_group_1_wgpu: bind_group_1_wgpu.clone(),
+                bind_group_1: bind_group_1.clone(),
             });
         }
         if !self.mesh_data_transparent.vertices.is_empty() {
-            let bind_group_1 = ChunkMeshBindGroup1 {
-                model_view: UniformBuffer::create_init(device, Matrix4::identity().into()),
-                _normal: UniformBuffer::create_init(device, Vector3::unit_y().into()),
-            };
-            let bind_group_1_wgpu = {
-                let layout = wgpu_utils::create_bind_group_layout::<ChunkMeshBindGroup1>(device);
-                wgpu_utils::create_bind_group(device, &layout, &bind_group_1)
-            };
             chunk.client.mesh_transparent = Some(ChunkMesh {
-                vertex_buffer: VertexBuffer::create_init(device, &self.mesh_data_transparent.vertices),
+                vertex_buffer: VertexBuffer::create_init(
+                    device,
+                    &self.mesh_data_transparent.vertices,
+                ),
                 index_buffer: IndexBuffer::create_init(device, &self.mesh_data_transparent.indices),
                 bind_group_1_wgpu,
                 bind_group_1,
             });
         }
+        chunk.client.is_synced = true;
     }
 
     fn build_block(&mut self, chunk: &mut Chunk, local_position: LocalCoordU8, block_id: BlockId) {
@@ -426,15 +450,9 @@ impl<'cx> ChunkBuilder<'cx> {
         }
         let block_transparency = block_info.transparency;
         for block_face in BlockFace::iter() {
-            if let Some(neighbor_block_id) =
-                Self::neighbor_block(local_position, block_face, &chunk.data)
+            if let Some(neighbor_transparency) =
+                self.neighbor_transparency(local_position, block_face, &chunk.data)
             {
-                let neighbor_transparency = self
-                    .resources
-                    .block_registry
-                    .lookup(neighbor_block_id)
-                    .unwrap()
-                    .transparency;
                 use BlockTransparency::*;
                 match (block_transparency, neighbor_transparency) {
                     (_, Solid) | (Transparent, Transparent) => continue,
@@ -486,12 +504,35 @@ impl<'cx> ChunkBuilder<'cx> {
         (result != local_coord).then_some(result)
     }
 
-    fn neighbor_block(
+    fn neighbor_transparency(
+        &self,
         local_coord: LocalCoordU8,
         direction: BlockFace,
         chunk: &ChunkData,
-    ) -> Option<BlockId> {
-        chunk.try_get_block(Self::neighbor_local_coord(local_coord, direction)?)
+    ) -> Option<BlockTransparency> {
+        if let Some(neighbor_coord) = Self::neighbor_local_coord(local_coord, direction) {
+            chunk
+                .try_get_block(neighbor_coord)
+                .and_then(|block_id| self.resources.block_registry.lookup(block_id))
+                .map(|block_info| block_info.transparency)
+        } else {
+            let neighbor_chunk_surface = &self.neighbor_chunk_surfaces[direction.to_usize()];
+            if (local_coord.x == 31 && direction == BlockFace::East)
+                || (local_coord.x == 0 && direction == BlockFace::West)
+            {
+                neighbor_chunk_surface.get(local_coord.y, local_coord.z)
+            } else if (local_coord.y == 31 && direction == BlockFace::Top)
+                || (local_coord.y == 0 && direction == BlockFace::Bottom)
+            {
+                neighbor_chunk_surface.get(local_coord.x, local_coord.z)
+            } else if (local_coord.z == 31 && direction == BlockFace::South)
+                || (local_coord.z == 0 && direction == BlockFace::North)
+            {
+                neighbor_chunk_surface.get(local_coord.x, local_coord.y)
+            } else {
+                None
+            }
+        }
     }
 
     /// The normalized texture coord for a block texture ID.
@@ -509,14 +550,82 @@ impl<'cx> ChunkBuilder<'cx> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ClientChunk {
     pub mesh_opaque: Option<ChunkMesh>,
     pub mesh_transparent: Option<ChunkMesh>,
+    /// Whether the mesh is in-sync with the chunk data.
+    pub is_synced: bool,
 }
 
 impl ClientChunk {
     pub fn new() -> Self {
         Self::default()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Zeroable)]
+pub struct ChunkSurface {
+    pub data: [BlockTransparency; 32 * 32],
+}
+
+impl ChunkSurface {
+    pub fn new_boxed() -> Box<Self> {
+        bytemuck::zeroed_box()
+    }
+
+    pub fn clear(&mut self) {
+        bytemuck::write_zeroes(self);
+    }
+
+    pub fn initialize_for_chunk(
+        &mut self,
+        direction: BlockFace,
+        block_registry: &BlockRegistry,
+        chunk: &ChunkData,
+    ) {
+        for i in 0..32u8 {
+            for j in 0..32u8 {
+                let local_coord = match direction {
+                    BlockFace::South => LocalCoordU8::new(i, j, 31),
+                    BlockFace::North => LocalCoordU8::new(i, j, 0),
+                    BlockFace::East => LocalCoordU8::new(31, i, j),
+                    BlockFace::West => LocalCoordU8::new(0, i, j),
+                    BlockFace::Top => LocalCoordU8::new(i, 31, j),
+                    BlockFace::Bottom => LocalCoordU8::new(i, 0, j),
+                };
+                let block_id = unsafe { chunk.get_block_unchecked(local_coord) };
+                let block_transparency = block_registry.lookup(block_id).unwrap().transparency;
+                unsafe {
+                    *self.get_unchecked_mut(i, j) = block_transparency;
+                }
+            }
+        }
+    }
+
+    fn index_for(i: u8, j: u8) -> usize {
+        (i as usize) * 32 + (j as usize)
+    }
+
+    pub fn get(&self, i: u8, j: u8) -> Option<BlockTransparency> {
+        self.data.get(Self::index_for(i, j)).copied()
+    }
+
+    pub fn get_mut(&mut self, i: u8, j: u8) -> Option<&mut BlockTransparency> {
+        self.data.get_mut(Self::index_for(i, j))
+    }
+
+    /// # Safety
+    ///
+    /// `i` and `j` must be in range
+    pub unsafe fn get_unchecked(&self, i: u8, j: u8) -> BlockTransparency {
+        unsafe { *self.data.get_unchecked(Self::index_for(i, j)) }
+    }
+
+    /// # Safety
+    ///
+    /// `i` and `j` must be in range
+    pub unsafe fn get_unchecked_mut(&mut self, i: u8, j: u8) -> &mut BlockTransparency {
+        unsafe { self.data.get_unchecked_mut(Self::index_for(i, j)) }
     }
 }

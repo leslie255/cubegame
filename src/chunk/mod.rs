@@ -1,4 +1,6 @@
-use std::{alloc::Layout};
+use std::alloc::Layout;
+
+use bytemuck::Zeroable;
 
 mod client;
 
@@ -14,7 +16,7 @@ pub struct Chunk {
     pub client: ClientChunk,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Zeroable)]
 pub struct ChunkData {
     blocks: [BlockId; 32 * 32 * 32],
 }

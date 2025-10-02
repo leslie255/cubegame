@@ -244,8 +244,8 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         );
 
         let player_camera = PlayerCamera {
-            position: point3(0., 0., 0.),
-            pitch: 0.,
+            position: point3(0., 20., 0.),
+            pitch: -15.,
             yaw: -90.,
         };
 
@@ -646,7 +646,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         if movement.x.is_nan() | movement.y.is_nan() | movement.z.is_nan() {
             return;
         }
-        if input_helper.key_is_down(KeyCode::ControlLeft) {
+        if input_helper.key_is_down(KeyCode::ControlLeft) && movement.z > 0. {
             movement.z *= 2.;
         }
         if input_helper.key_is_down(KeyCode::F3) {

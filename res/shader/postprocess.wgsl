@@ -42,9 +42,12 @@ fn gamma_correct(v: vec4<f32>) -> vec4<f32> {
 
 @fragment
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
-    let sky_color = vec4<f32>(0.8, 0.95, 1.0, 1.0);
     let depth = textureSample(depth_texture, sampler_, vertex.uv);
     let scene_color = textureSample(color_texture, sampler_, vertex.uv);
+    if depth == 0.0 {
+        return gamma_correct(scene_color);
+    }
+    let sky_color = vec4<f32>(0.8, 0.95, 1.0, 1.0);
     let fog_factor = clamp((pow(depth, 100.0) - fog_start) / (1.0 - fog_start), 0.0, 1.0);
     let result_fog = mix(scene_color, sky_color, pow(fog_factor, 1.5));
     let result_fogless = select(scene_color, sky_color, fog_factor == 1.0);

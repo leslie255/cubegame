@@ -46,10 +46,12 @@ fn vs_main(@location(0) packed: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
-    let sample = select(
-        textureSample(texture, sampler_, vertex.uv),
-        vec4<f32>(0.5, 0.5, 0.5, 1.0),
-        bool(gray_world));
+    let texture_sample = textureSample(texture, sampler_, vertex.uv);
+    let gray = vec4<f32>(0.5, 0.5, 0.5, 1.0);
+    let sample = select(texture_sample, gray, bool(gray_world));
+    if texture_sample.a == 0.0 {
+        discard;
+    }
     let cos_theta = clamp(dot(vertex.normal, sun), 0.0, 1.0);
     return vec4<f32>(sample.rgb * (1.0 - 0.3 * cos_theta), sample.a);
 }

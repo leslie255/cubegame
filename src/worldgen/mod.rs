@@ -223,7 +223,7 @@ impl<'cx> WorldGenerator<'cx> {
             let x_world = World::local_to_world_coord_axis(x_chunk, x_local);
             let z_world = World::local_to_world_coord_axis(z_chunk, z_local);
             let terrain_height = self.terrain_height_at(x_world, z_world);
-            if terrain_height >= 0 {
+            if terrain_height > 0 {
                 let origin = WorldCoordI32::new(x_world, terrain_height, z_world);
                 surface_feature.generate(origin, &mut rng, column.into());
             }
