@@ -72,48 +72,59 @@ impl ChunkManager {
     }
 
     /// Loop through each loaded chunk.
-    pub fn for_each_loaded_chunk(&self, mut f: impl FnMut(ChunkId, &mut Chunk)) {
-        self.for_each_loaded_chunk_id(|chunk_id| {
-            if let Some(chunk) = self.get_loaded_chunk(chunk_id) {
-                f(chunk_id, &mut chunk.lock().unwrap());
-            }
-        });
+    pub fn for_each_loaded_chunk<T>(
+        &self,
+        mut f: impl FnMut(ChunkId, &mut Chunk) -> ControlFlow<T>,
+    ) -> Option<T> {
+        self.for_each_loaded_chunk_id(|chunk_id| match self.get_loaded_chunk(chunk_id) {
+            Some(chunk) => f(chunk_id, &mut chunk.lock().unwrap()),
+            None => ControlFlow::Continue,
+        })
     }
 
     /// Loop through each loaded chunk's ID but not the chunk.
-    pub fn for_each_loaded_chunk_id(&self, mut f: impl FnMut(ChunkId)) {
+    pub fn for_each_loaded_chunk_id<T>(
+        &self,
+        mut f: impl FnMut(ChunkId) -> ControlFlow<T>,
+    ) -> Option<T> {
         let loaded_chunk_ids: Vec<ChunkId> = {
             let chunks = self.chunks.read().unwrap();
             chunks.keys().copied().collect()
         };
         for chunk_id in loaded_chunk_ids {
             if self.chunk_is_loaded(chunk_id) {
-                f(chunk_id);
+                let control_flow = f(chunk_id);
+                match control_flow {
+                    ControlFlow::Continue => continue,
+                    ControlFlow::Break(result) => return Some(result),
+                }
             }
         }
+        None
     }
 
     /// Loop through each loaded chunk.
-    pub fn for_each_loaded_chunk_by_distance(
+    pub fn for_each_loaded_chunk_by_distance<T>(
         &self,
         center: ChunkId,
         order: ChunkIterOrder,
-        mut f: impl FnMut(ChunkId, &mut Chunk),
-    ) {
+        mut f: impl FnMut(ChunkId, &mut Chunk) -> ControlFlow<T>,
+    ) -> Option<T> {
         self.for_each_loaded_chunk_id_by_distance(center, order, |chunk_id| {
-            if let Some(chunk) = self.get_loaded_chunk(chunk_id) {
-                f(chunk_id, &mut chunk.lock().unwrap());
+            match self.get_loaded_chunk(chunk_id) {
+                Some(chunk) => f(chunk_id, &mut chunk.lock().unwrap()),
+                None => ControlFlow::Continue,
             }
-        });
+        })
     }
 
     /// Loop through each loaded chunk's ID but not the chunk, sorted from near to far.
-    pub fn for_each_loaded_chunk_id_by_distance(
+    pub fn for_each_loaded_chunk_id_by_distance<T>(
         &self,
         center: ChunkId,
         order: ChunkIterOrder,
-        mut f: impl FnMut(ChunkId),
-    ) {
+        mut f: impl FnMut(ChunkId) -> ControlFlow<T>,
+    ) -> Option<T> {
         let mut loaded_chunk_ids: Vec<ChunkId> = {
             let chunks = self.chunks.read().unwrap();
             chunks.keys().copied().collect()
@@ -132,18 +143,25 @@ impl ChunkManager {
             ChunkIterOrder::NearToFar => {
                 for chunk_id in loaded_chunk_ids {
                     if self.chunk_is_loaded(chunk_id) {
-                        f(chunk_id);
+                        match f(chunk_id) {
+                            ControlFlow::Continue => continue,
+                            ControlFlow::Break(result) => return Some(result),
+                        }
                     }
                 }
             }
             ChunkIterOrder::FarToNear => {
                 for chunk_id in loaded_chunk_ids.into_iter().rev() {
                     if self.chunk_is_loaded(chunk_id) {
-                        f(chunk_id);
+                        match f(chunk_id) {
+                            ControlFlow::Continue => continue,
+                            ControlFlow::Break(result) => return Some(result),
+                        }
                     }
                 }
             }
         }
+        None
     }
 
     /// Whether a chunk of the provided ID is loaded.
@@ -151,7 +169,7 @@ impl ChunkManager {
         self.chunks.read().unwrap().contains_key(&chunk_id)
     }
 
-    pub fn get_loaded_chunk(&self, chunk_id: ChunkId) -> Option<Arc<Mutex<Chunk>>> {
+    fn get_loaded_chunk(&self, chunk_id: ChunkId) -> Option<Arc<Mutex<Chunk>>> {
         let chunks = self.chunks.read().unwrap();
         chunks.get(&chunk_id).map(Arc::clone)
     }
@@ -225,8 +243,8 @@ where
         chunks: Arc<ChunkManager>,
         worldgen: Arc<WorldGenerator<'cx>>,
     ) -> Self {
-        // let n_threads = num_cpus::get().saturating_sub(2).max(1);
-        let n_threads = 2;
+        let n_threads = (num_cpus::get() / 2).max(1);
+        // let n_threads = 1;
         let chunk_builder = ChunkBuilder::new(resources);
         let (tasks_tx, tasks_rx) = mpmc::sync_channel(n_threads * 64);
         Self {
@@ -436,7 +454,6 @@ impl<'scope, 'cx> World<'scope, 'cx> {
             let player_position = *self.player_position.lock().unwrap();
             self.load_chunks_in_view_distance(player_position);
         } else {
-            let mut counter = 0u32;
             let player_position = *self.player_position.lock().unwrap();
             let (player_chunk_id, _) = World::world_to_local_coord_f32(player_position);
             self.chunks().for_each_loaded_chunk_by_distance(
@@ -446,13 +463,13 @@ impl<'scope, 'cx> World<'scope, 'cx> {
                     if !chunk.client.is_synced {
                         let discarded = self
                             .add_task(TaskImportance::Discardable, ChunkTask::Rebuild { chunk_id });
-                        if !discarded {
-                            counter += 1;
+                        if discarded {
+                            return ControlFlow::Break(());
                         }
                     }
+                    ControlFlow::Continue
                 },
             );
-            log::debug!("sent {counter} rebuild tasks")
         }
     }
 
@@ -614,13 +631,14 @@ impl<'scope, 'cx> World<'scope, 'cx> {
             return;
         }
         // Prone chunks far away.
-        self.chunks().for_each_loaded_chunk_id(|chunk_id_| {
+        self.chunks().for_each_loaded_chunk_id::<()>(|chunk_id_| {
             let chunk_xz = point2(chunk_id_.x as f32, chunk_id_.z as f32);
             let current_chunk_xz = point2(chunk_id.x as f32, chunk_id.z as f32);
             let distance2 = chunk_xz.distance2(current_chunk_xz);
             if distance2 > (self.view_distance as f32).powi(2) + 1.0 {
                 self.chunks().remove_chunk(chunk_id_);
             }
+            ControlFlow::Continue
         });
         // Load new chunks.
         self.needs_loading_chunks

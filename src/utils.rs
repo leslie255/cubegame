@@ -110,3 +110,9 @@ macro_rules! impl_with_z {
 
 impl_with_z!(Point3);
 impl_with_z!(Vector3);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ControlFlow<T> {
+    Continue,
+    Break(T),
+}

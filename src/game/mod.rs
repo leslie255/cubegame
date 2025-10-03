@@ -16,15 +16,7 @@ use winit::{
 };
 
 use crate::{
-    ProgramArgs,
-    chunk::ChunkRenderer,
-    game::debug_toggles::DebugToggles,
-    impl_as_bind_group,
-    input::InputHelper,
-    text::{Text, TextRenderer},
-    utils::{BoolToggle, WithY as _},
-    wgpu_utils::{self, DepthTextureView, UniformBuffer},
-    world::{ChunkIterOrder, World},
+    chunk::ChunkRenderer, game::debug_toggles::DebugToggles, impl_as_bind_group, input::InputHelper, text::{Text, TextRenderer}, utils::{BoolToggle, ControlFlow, WithY as _}, wgpu_utils::{self, DepthTextureView, UniformBuffer}, world::{ChunkIterOrder, World}, ProgramArgs
 };
 
 mod app;
@@ -581,14 +573,14 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         chunk_renderer.set_gray_world(self.queue, self.debug_toggles.gray_world);
         chunk_renderer.begin_drawing(render_pass);
         let (player_chunk_id, _) = World::world_to_local_coord_f32(self.player_camera.position);
-        self.world.chunks().for_each_loaded_chunk_by_distance(
+        self.world.chunks().for_each_loaded_chunk_by_distance::<()>(
             player_chunk_id,
             ChunkIterOrder::FarToNear,
             |chunk_id, chunk| {
                 let distance2 = point2(player_chunk_id.x as f32, player_chunk_id.z as f32)
                     .distance2(point2(chunk_id.x as f32, chunk_id.z as f32));
                 if distance2 > (self.world.view_distance() as f32).powi(2) {
-                    return;
+                    return ControlFlow::Continue;
                 }
                 let translation = chunk_id.to_vec().map(|i| i as f64 * 32.);
                 let model_view = self.player_camera.view_matrix(translation);
@@ -600,6 +592,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
                     mesh.set_model_view(self.queue, model_view);
                     chunk_renderer.draw_chunk(render_pass, mesh);
                 };
+                ControlFlow::Continue
             },
         );
     }
@@ -642,7 +635,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         if input_helper.key_is_down(KeyCode::KeyR) {
             movement.y -= 1.;
         }
-        movement = movement.normalize_to(4.);
+        movement = movement.normalize_to(8.);
         if movement.x.is_nan() | movement.y.is_nan() | movement.z.is_nan() {
             return;
         }

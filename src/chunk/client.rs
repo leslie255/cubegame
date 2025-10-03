@@ -60,7 +60,7 @@ impl ChunkRenderer {
                 |pipeline_layout_descriptor| {
                     pipeline_layout_descriptor.primitive.polygon_mode = wgpu::PolygonMode::Line;
                     pipeline_layout_descriptor.primitive.cull_mode = None;
-                }
+                },
             )
         })
     }
@@ -400,18 +400,8 @@ impl<'cx> ChunkBuilder<'cx> {
                 neighbor_surface.clear();
             }
         }
-        let Some(chunk) = chunks.get_loaded_chunk(chunk_id) else {
+        if !chunks.chunk_is_loaded(chunk_id) {
             return;
-        };
-        let mut chunk = chunk.lock().unwrap();
-        for y in 0..32 {
-            for x in 0..32 {
-                for z in 0..32 {
-                    let local_coord = LocalCoordU8::new(y, z, x);
-                    let block_id = unsafe { chunk.data.get_block_unchecked(local_coord) };
-                    self.build_block(&mut chunk, local_coord, block_id);
-                }
-            }
         }
         let bind_group_1 = ChunkMeshBindGroup1 {
             model_view: UniformBuffer::create_init(device, Matrix4::identity().into()),
@@ -421,26 +411,43 @@ impl<'cx> ChunkBuilder<'cx> {
             let layout = wgpu_utils::create_bind_group_layout::<ChunkMeshBindGroup1>(device);
             wgpu_utils::create_bind_group(device, &layout, &bind_group_1)
         };
-        if !self.mesh_data_opaque.vertices.is_empty() {
-            chunk.client.mesh_opaque = Some(ChunkMesh {
-                vertex_buffer: VertexBuffer::create_init(device, &self.mesh_data_opaque.vertices),
-                index_buffer: IndexBuffer::create_init(device, &self.mesh_data_opaque.indices),
-                bind_group_1_wgpu: bind_group_1_wgpu.clone(),
-                bind_group_1: bind_group_1.clone(),
-            });
-        }
-        if !self.mesh_data_transparent.vertices.is_empty() {
-            chunk.client.mesh_transparent = Some(ChunkMesh {
-                vertex_buffer: VertexBuffer::create_init(
-                    device,
-                    &self.mesh_data_transparent.vertices,
-                ),
-                index_buffer: IndexBuffer::create_init(device, &self.mesh_data_transparent.indices),
-                bind_group_1_wgpu,
-                bind_group_1,
-            });
-        }
-        chunk.client.is_synced = true;
+        chunks.with_loaded_chunk(chunk_id, |chunk| {
+            for y in 0..32 {
+                for x in 0..32 {
+                    for z in 0..32 {
+                        let local_coord = LocalCoordU8::new(y, z, x);
+                        let block_id = unsafe { chunk.data.get_block_unchecked(local_coord) };
+                        self.build_block(chunk, local_coord, block_id);
+                    }
+                }
+            }
+            if !self.mesh_data_opaque.vertices.is_empty() {
+                chunk.client.mesh_opaque = Some(ChunkMesh {
+                    vertex_buffer: VertexBuffer::create_init(
+                        device,
+                        &self.mesh_data_opaque.vertices,
+                    ),
+                    index_buffer: IndexBuffer::create_init(device, &self.mesh_data_opaque.indices),
+                    bind_group_1_wgpu: bind_group_1_wgpu.clone(),
+                    bind_group_1: bind_group_1.clone(),
+                });
+            }
+            if !self.mesh_data_transparent.vertices.is_empty() {
+                chunk.client.mesh_transparent = Some(ChunkMesh {
+                    vertex_buffer: VertexBuffer::create_init(
+                        device,
+                        &self.mesh_data_transparent.vertices,
+                    ),
+                    index_buffer: IndexBuffer::create_init(
+                        device,
+                        &self.mesh_data_transparent.indices,
+                    ),
+                    bind_group_1_wgpu,
+                    bind_group_1,
+                });
+            }
+            chunk.client.is_synced = true;
+        });
     }
 
     fn build_block(&mut self, chunk: &mut Chunk, local_position: LocalCoordU8, block_id: BlockId) {
