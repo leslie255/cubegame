@@ -481,17 +481,13 @@ impl<'cx> ChunkBuilder<'cx> {
                 let normal = block_face.normal_vector();
                 PackedChunkVertex::pack(position, uv, normal)
             });
-            if block_transparency.is_solid() {
-                let indices =
-                    Self::FACE_INDICIES.map(|i| i + self.mesh_data_opaque.vertices.len() as u32);
-                self.mesh_data_opaque.vertices.extend(&vertices[..]);
-                self.mesh_data_opaque.indices.extend(&indices[..]);
-            } else {
-                let indices = Self::FACE_INDICIES
-                    .map(|i| i + self.mesh_data_transparent.vertices.len() as u32);
-                self.mesh_data_transparent.vertices.extend(&vertices[..]);
-                self.mesh_data_transparent.indices.extend(&indices[..]);
-            }
+            let mesh_data = match block_transparency {
+                BlockTransparency::Transparent => &mut self.mesh_data_transparent,
+                _ => &mut self.mesh_data_opaque,
+            };
+            let indices = Self::FACE_INDICIES.map(|i| i + mesh_data.vertices.len() as u32);
+            mesh_data.vertices.extend(&vertices[..]);
+            mesh_data.indices.extend(&indices[..]);
         }
     }
 

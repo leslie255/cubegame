@@ -120,6 +120,7 @@ impl SurfaceFeature for TreeFeature<'_> {
             let coord = origin.with_y(y);
             target.with_block(coord, |block| {
                 if *block == self.game_blocks.air
+                    || *block == self.game_blocks.water
                     || *block == self.game_blocks.leaves
                     || *block == self.game_blocks.cherry_leaves
                 {
@@ -130,7 +131,7 @@ impl SurfaceFeature for TreeFeature<'_> {
 
         let place_leave = |target: &mut GenerationTarget, coord: WorldCoordI32| {
             target.with_block(coord, |block| {
-                if *block == self.game_blocks.air {
+                if *block == self.game_blocks.air || *block == self.game_blocks.water {
                     *block = self.game_blocks.leaves;
                 }
             });
@@ -193,6 +194,7 @@ impl SurfaceFeature for CherryTreeFeature<'_> {
             let coord = origin.with_y(y);
             target.with_block(coord, |block| {
                 if *block == self.game_blocks.air
+                    || *block == self.game_blocks.water
                     || *block == self.game_blocks.leaves
                     || *block == self.game_blocks.cherry_leaves
                 {
@@ -203,7 +205,7 @@ impl SurfaceFeature for CherryTreeFeature<'_> {
 
         let place_leave = |target: &mut GenerationTarget, coord: WorldCoordI32| {
             target.with_block(coord, |block| {
-                if *block == self.game_blocks.air {
+                if *block == self.game_blocks.air || *block == self.game_blocks.water {
                     *block = self.game_blocks.cherry_leaves;
                 }
             });

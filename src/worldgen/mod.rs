@@ -15,10 +15,10 @@ mod feature;
 
 pub use feature::*;
 
-fn smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 {
-    let x = f64::clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
-    x * x * x * (x * (6.0 * x - 15.0) + 10.0)
-}
+// fn smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 {
+//     let x = f64::clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+//     x * x * x * (x * (6.0 * x - 15.0) + 10.0)
+// }
 
 /// Storage for a "column" of chunk data - chunks that have the same X and Z component in their ID's.
 /// Used for world gen to pass out a generated column.
@@ -207,7 +207,9 @@ impl<'cx> WorldGenerator<'cx> {
             seed
         };
         let mut rng = Xoshiro128Plus::from_seed(local_seed);
-        for _ in 0..10 {
+        for _ in 0..20 {
+            // Rinse the RNG a few times before using for good hygiene.
+            // (xoshiro is incensitive to lower bits initially).
             rng.next_u64();
         }
         let chance = surface_feature.chance().clamp(0.0, 1.0);

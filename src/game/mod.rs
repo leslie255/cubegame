@@ -16,7 +16,15 @@ use winit::{
 };
 
 use crate::{
-    chunk::ChunkRenderer, game::debug_toggles::DebugToggles, impl_as_bind_group, input::InputHelper, text::{Text, TextRenderer}, utils::{BoolToggle, ControlFlow, WithY as _}, wgpu_utils::{self, DepthTextureView, UniformBuffer}, world::{ChunkIterOrder, World}, ProgramArgs
+    ProgramArgs,
+    chunk::ChunkRenderer,
+    game::debug_toggles::DebugToggles,
+    impl_as_bind_group,
+    input::InputHelper,
+    text::{Text, TextRenderer},
+    utils::{BoolToggle, ControlFlow, WithY as _},
+    wgpu_utils::{self, DepthTextureView, UniformBuffer},
+    world::{ChunkIterOrder, World},
 };
 
 mod app;
@@ -616,7 +624,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         if self.is_paused {
             return;
         }
-        let mut movement = vec3(0., 0., 0.);
+        let mut movement = Vector3::zero();
         if input_helper.key_is_down(KeyCode::KeyW) {
             movement.z += 1.;
         }
@@ -632,7 +640,7 @@ impl<'scope, 'cx> Game<'scope, 'cx> {
         if input_helper.key_is_down(KeyCode::Space) {
             movement.y += 1.;
         }
-        if input_helper.key_is_down(KeyCode::KeyR) {
+        if input_helper.key_is_down(KeyCode::KeyR) || input_helper.key_is_down(KeyCode::ShiftLeft) {
             movement.y -= 1.;
         }
         movement = movement.normalize_to(8.);
